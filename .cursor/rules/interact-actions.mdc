@@ -1,0 +1,14 @@
+---
+description: 互动玩法加在 Interact 目录，只作用于桌上头像
+alwaysApply: true
+---
+
+# 互动扩展
+
+新互动只加在 `Project/Assets/Scripts/Overlay/Interact/`：
+
+1. 实现 `IOverlayInteractAction`（`Id`、`Label`、`Play`）
+2. 在 `OverlayInteractCatalog` 登记一行
+3. 视觉走 `OverlayInteractFx`，联网走 `OverlayInteractService`（通道 2，不进聊天）
+
+互动按钮和效果只对**拿出来的头像**。对方能看到的前提：对方开着本游戏，且扔的人的头像在对方桌上（不在麻袋）。
