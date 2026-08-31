@@ -1,6 +1,3 @@
-# Local export output, not committed
-/Export/
-
 # This .gitignore is at the repo root. Unity project lives in /Project
 # Based on https://github.com/github/gitignore/blob/main/Unity.gitignore
 
