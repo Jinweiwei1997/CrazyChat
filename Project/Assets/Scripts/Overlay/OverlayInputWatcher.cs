@@ -10,6 +10,7 @@ namespace CrazyChat.Overlay
     public sealed class OverlayInputWatcher : MonoBehaviour
     {
         public event Action Tapped;
+        public event Action<int> InputDown;
         public event Action DoubleControl;
         public event Action NavigateLeft;
         public event Action NavigateRight;
@@ -62,6 +63,7 @@ namespace CrazyChat.Overlay
                 {
                     taps++;
                     OnCommandDown(vk);
+                    InputDown?.Invoke(vk);
                 }
 
                 _down[vk] = pressed;

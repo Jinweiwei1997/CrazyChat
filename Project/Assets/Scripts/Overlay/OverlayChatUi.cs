@@ -73,7 +73,7 @@ namespace CrazyChat.Overlay
 
         public void Open(ulong friendId)
         {
-            if (friendId == 0 || _chat == null || _chat.Store == null)
+            if (friendId == 0 || _chat == null || _chat.Store == null || _view == null || !_view.IsPresent(friendId))
             {
                 return;
             }
@@ -276,6 +276,12 @@ namespace CrazyChat.Overlay
         {
             if (!_open || _chat == null || _input == null)
             {
+                return;
+            }
+
+            if (_view == null || !_view.IsPresent(_friendId))
+            {
+                Hide();
                 return;
             }
 

@@ -24,6 +24,7 @@ namespace CrazyChat.Overlay
         public bool FlipHorizontal { get; private set; }
         public bool AutoStart { get; private set; }
         public OverlayClickEffect ClickEffect { get; private set; } = OverlayClickEffect.Elastic;
+        public bool ShowInputIcons { get; private set; }
 
         public void Load()
         {
@@ -54,6 +55,7 @@ namespace CrazyChat.Overlay
                 ClickEffect = data.clickEffect == (int)OverlayClickEffect.Flip
                     ? OverlayClickEffect.Flip
                     : OverlayClickEffect.Elastic;
+                ShowInputIcons = data.showInputIcons;
             }
             catch (Exception e)
             {
@@ -70,7 +72,8 @@ namespace CrazyChat.Overlay
                 disableDrag = DisableDrag,
                 flipHorizontal = FlipHorizontal,
                 autoStart = AutoStart,
-                clickEffect = (int)ClickEffect
+                clickEffect = (int)ClickEffect,
+                showInputIcons = ShowInputIcons
             }, true);
             WriteLocal(json);
             WriteSteamCloud(json);
@@ -98,6 +101,8 @@ namespace CrazyChat.Overlay
                 ? OverlayClickEffect.Flip
                 : OverlayClickEffect.Elastic;
         }
+
+        public void SetShowInputIcons(bool value) => ShowInputIcons = value;
 
         public void SetAutoStart(bool value)
         {
@@ -175,6 +180,7 @@ namespace CrazyChat.Overlay
             public bool flipHorizontal;
             public bool autoStart;
             public int clickEffect;
+            public bool showInputIcons;
         }
     }
 

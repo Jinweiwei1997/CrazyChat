@@ -30,15 +30,7 @@ namespace CrazyChat.Overlay.Interact
 
         void OnEnable()
         {
-#if !DISABLESTEAMWORKS
-            if (!SteamManager.Initialized)
-            {
-                return;
-            }
-
-            SteamNetworkingUtils.InitRelayNetworkAccess();
-            _sessionCallback = Callback<SteamNetworkingMessagesSessionRequest_t>.Create(OnSessionRequest);
-#endif
+            EnsureSteam();
         }
 
         void OnDisable()
@@ -52,6 +44,7 @@ namespace CrazyChat.Overlay.Interact
         void Update()
         {
 #if !DISABLESTEAMWORKS
+            EnsureSteam();
             if (!SteamManager.Initialized)
             {
                 return;
@@ -89,6 +82,17 @@ namespace CrazyChat.Overlay.Interact
         }
 
 #if !DISABLESTEAMWORKS
+        void EnsureSteam()
+        {
+            if (_sessionCallback != null || !SteamManager.Initialized)
+            {
+                return;
+            }
+
+            SteamNetworkingUtils.InitRelayNetworkAccess();
+            _sessionCallback = Callback<SteamNetworkingMessagesSessionRequest_t>.Create(OnSessionRequest);
+        }
+
         void OnSessionRequest(SteamNetworkingMessagesSessionRequest_t ev)
         {
             var identity = ev.m_identityRemote;

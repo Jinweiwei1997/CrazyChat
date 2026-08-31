@@ -3,7 +3,6 @@
 #endif
 
 using System;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 using UnityEngine;
@@ -14,7 +13,7 @@ using Steamworks;
 namespace CrazyChat.Overlay
 {
     /// <summary>
-    /// 本应用聊天：记录只写本地；发送走 Steam P2P，双方都开着本游戏才能送到。
+    /// 本应用聊天：记录只写本地；发送走 Steam P2P，对方当时没开本游戏就送不到。
     /// </summary>
     public sealed class OverlayChatService : MonoBehaviour
     {
@@ -23,9 +22,7 @@ namespace CrazyChat.Overlay
 
         public OverlayChatStore Store { get; private set; }
 
-        readonly List<PendingSend> _pending = new List<PendingSend>();
         readonly IntPtr[] _receiveBuffer = new IntPtr[16];
-        float _nextRetry;
 
 #if !DISABLESTEAMWORKS
         Callback<SteamNetworkingMessagesSessionRequest_t> _sessionCallback;
@@ -38,15 +35,7 @@ namespace CrazyChat.Overlay
 
         void OnEnable()
         {
-#if !DISABLESTEAMWORKS
-            if (!SteamManager.Initialized)
-            {
-                return;
-            }
-
-            SteamNetworkingUtils.InitRelayNetworkAccess();
-            _sessionCallback = Callback<SteamNetworkingMessagesSessionRequest_t>.Create(OnSessionRequest);
-#endif
+            EnsureSteam();
         }
 
         void OnDisable()
@@ -60,17 +49,13 @@ namespace CrazyChat.Overlay
         void Update()
         {
 #if !DISABLESTEAMWORKS
+            EnsureSteam();
             if (!SteamManager.Initialized)
             {
                 return;
             }
 
             ReceiveP2P();
-            if (Time.unscaledTime >= _nextRetry)
-            {
-                _nextRetry = Time.unscaledTime + 5f;
-                FlushPending();
-            }
 #endif
         }
 
@@ -92,16 +77,25 @@ namespace CrazyChat.Overlay
             Store.Add(friendId, text, true, localId);
 
 #if !DISABLESTEAMWORKS
-            if (!SteamManager.Initialized || SendP2P(friendId, text))
+            if (SteamManager.Initialized)
             {
-                return;
+                SendP2P(friendId, text);
             }
-
-            _pending.Add(new PendingSend { friendId = friendId, text = text });
 #endif
         }
 
 #if !DISABLESTEAMWORKS
+        void EnsureSteam()
+        {
+            if (_sessionCallback != null || !SteamManager.Initialized)
+            {
+                return;
+            }
+
+            SteamNetworkingUtils.InitRelayNetworkAccess();
+            _sessionCallback = Callback<SteamNetworkingMessagesSessionRequest_t>.Create(OnSessionRequest);
+        }
+
         void OnSessionRequest(SteamNetworkingMessagesSessionRequest_t ev)
         {
             var identity = ev.m_identityRemote;
@@ -131,20 +125,19 @@ namespace CrazyChat.Overlay
             }
         }
 
-        static bool SendP2P(ulong friendId, string text)
+        static void SendP2P(ulong friendId, string text)
         {
             var identity = new SteamNetworkingIdentity();
             identity.SetSteamID64(friendId);
             var bytes = Encoding.UTF8.GetBytes(Prefix + text);
             var handle = GCHandle.Alloc(bytes, GCHandleType.Pinned);
-            var result = SteamNetworkingMessages.SendMessageToUser(
+            SteamNetworkingMessages.SendMessageToUser(
                 ref identity,
                 handle.AddrOfPinnedObject(),
                 (uint)bytes.Length,
                 Constants.k_nSteamNetworkingSend_Reliable | Constants.k_nSteamNetworkingSend_AutoRestartBrokenSession,
                 Channel);
             handle.Free();
-            return result == EResult.k_EResultOK;
         }
 
         static string DecodePayload(IntPtr data, int size)
@@ -159,23 +152,6 @@ namespace CrazyChat.Overlay
             var raw = Encoding.UTF8.GetString(bytes);
             return raw.StartsWith(Prefix, StringComparison.Ordinal) ? raw.Substring(Prefix.Length) : raw;
         }
-
-        void FlushPending()
-        {
-            for (var i = _pending.Count - 1; i >= 0; i--)
-            {
-                if (SendP2P(_pending[i].friendId, _pending[i].text))
-                {
-                    _pending.RemoveAt(i);
-                }
-            }
-        }
 #endif
-
-        struct PendingSend
-        {
-            public ulong friendId;
-            public string text;
-        }
     }
 }

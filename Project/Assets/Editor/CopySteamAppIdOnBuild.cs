@@ -29,5 +29,28 @@ public sealed class CopySteamAppIdOnBuild : IPostprocessBuildWithReport
 
         var dest = Path.Combine(Path.GetDirectoryName(report.summary.outputPath), "steam_appid.txt");
         File.Copy(source, dest, true);
+        CopyInputIcons(Path.GetDirectoryName(report.summary.outputPath));
+    }
+
+    static void CopyInputIcons(string outputDir)
+    {
+        var dest = Path.Combine(outputDir, "InputIcons");
+        Directory.CreateDirectory(dest);
+        CopyPngs(Path.Combine(Application.dataPath, "Art/Package/GameInputControllerIconsFree/keyboard/keyboard-outlined"), dest);
+        CopyPngs(Path.Combine(Application.dataPath, "Art/Package/GameInputControllerIconsFree/mouse/mouse-outlined"), dest);
+    }
+
+    static void CopyPngs(string from, string to)
+    {
+        if (!Directory.Exists(from))
+        {
+            return;
+        }
+
+        var files = Directory.GetFiles(from, "*.png");
+        for (var i = 0; i < files.Length; i++)
+        {
+            File.Copy(files[i], Path.Combine(to, Path.GetFileName(files[i])), true);
+        }
     }
 }

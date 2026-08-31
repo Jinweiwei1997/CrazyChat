@@ -28,6 +28,7 @@ namespace CrazyChat.Overlay
         Text _flipText;
         Text _autoStartText;
         Text _clickEffectText;
+        Text _inputIconsText;
         SettingsTab _tab = SettingsTab.Game;
 
         public static OverlaySettingsUi Create(Transform chrome, Transform modal, FriendOverlayView view)
@@ -69,9 +70,9 @@ namespace CrazyChat.Overlay
             _cardRt.anchorMin = new Vector2(0f, 0f);
             _cardRt.anchorMax = new Vector2(0f, 0f);
             _cardRt.pivot = new Vector2(0.5f, 0.5f);
-            _cardRt.sizeDelta = new Vector2(280f, 400f);
+            _cardRt.sizeDelta = new Vector2(280f, 436f);
 
-            PlaceLabel(_cardRt, "设置", 20, Color.white, new Vector2(0f, 168f), new Vector2(180f, 28f));
+            PlaceLabel(_cardRt, "设置", 20, Color.white, new Vector2(0f, 186f), new Vector2(180f, 28f));
 
             var close = CreateImage("Close", _cardRt, new Color(1f, 1f, 1f, 0.12f), OverlaySprites.RoundedRect);
             close.raycastTarget = true;
@@ -83,8 +84,8 @@ namespace CrazyChat.Overlay
             FillLabel(closeRt, "关闭", 13, Color.white);
             close.gameObject.AddComponent<Button>().onClick.AddListener(Hide);
 
-            _gameTabImage = AddTabButton(_cardRt, "游戏", new Vector2(-58f, 128f), () => ShowTab(SettingsTab.Game));
-            _systemTabImage = AddTabButton(_cardRt, "系统", new Vector2(58f, 128f), () => ShowTab(SettingsTab.System));
+            _gameTabImage = AddTabButton(_cardRt, "游戏", new Vector2(-58f, 146f), () => ShowTab(SettingsTab.Game));
+            _systemTabImage = AddTabButton(_cardRt, "系统", new Vector2(58f, 146f), () => ShowTab(SettingsTab.System));
 
             _gamePage = CreatePage(_cardRt, "GamePage");
             _systemPage = CreatePage(_cardRt, "SystemPage");
@@ -95,7 +96,7 @@ namespace CrazyChat.Overlay
 
         void BuildGamePage(Transform parent)
         {
-            var y = 86f;
+            var y = 104f;
             _scaleText = AddScaleRow(parent, ref y);
             _dragText = AddToggleRow(parent, "禁止拖动", ref y, () =>
             {
@@ -112,6 +113,12 @@ namespace CrazyChat.Overlay
             _clickEffectText = AddChoiceRow(parent, "点击效果", ref y, () =>
             {
                 _view.Settings.CycleClickEffect();
+                _view.ApplyUserSettings();
+                RefreshLabels();
+            });
+            _inputIconsText = AddToggleRow(parent, "按键图标", ref y, () =>
+            {
+                _view.Settings.SetShowInputIcons(!_view.Settings.ShowInputIcons);
                 _view.ApplyUserSettings();
                 RefreshLabels();
             });
@@ -323,6 +330,7 @@ namespace CrazyChat.Overlay
             SetToggle(_dragText, settings.DisableDrag);
             SetToggle(_flipText, settings.FlipHorizontal);
             SetToggle(_autoStartText, settings.AutoStart);
+            SetToggle(_inputIconsText, settings.ShowInputIcons);
             if (_clickEffectText != null)
             {
                 _clickEffectText.text = settings.ClickEffect == OverlayClickEffect.Flip ? "反转" : "弹性";

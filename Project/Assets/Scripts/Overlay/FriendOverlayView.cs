@@ -22,6 +22,7 @@ namespace CrazyChat.Overlay
         OverlayInteractService _interact;
         OverlayInteractUi _interactUi;
         OverlayInteractFx _interactFx;
+        OverlayInputPopFx _inputPop;
         RectTransform _layer;
         RectTransform _chromeLayer;
         RectTransform _windowLayer;
@@ -29,6 +30,7 @@ namespace CrazyChat.Overlay
         Text _hint;
         float _nextStatsSave;
         float _nextTapSend;
+        int _pendingVk;
         readonly Dictionary<ulong, FriendAvatarChip> _chips = new Dictionary<ulong, FriendAvatarChip>();
         readonly List<PlayingFriend> _bagged = new List<PlayingFriend>();
         readonly List<ulong> _targets = new List<ulong>();
@@ -110,11 +112,13 @@ namespace CrazyChat.Overlay
             _interact.Received += OnInteractReceived;
             _interactFx = OverlayInteractFx.Create(fxLayer);
             _interactUi = OverlayInteractUi.Create(_chromeLayer, _windowLayer, this, _interact, _interactFx);
+            _inputPop = OverlayInputPopFx.Create(_chromeLayer);
 
             _stats = new OverlayTapStats();
             _stats.Load();
             _input = gameObject.AddComponent<OverlayInputWatcher>();
             _input.Tapped += OnTapped;
+            _input.InputDown += OnInputDown;
             _input.DoubleControl += OnDoubleControl;
             _input.NavigateLeft += () => StepTarget(-1);
             _input.NavigateRight += () => StepTarget(1);
@@ -274,6 +278,7 @@ namespace CrazyChat.Overlay
             if (_input != null)
             {
                 _input.Tapped -= OnTapped;
+                _input.InputDown -= OnInputDown;
                 _input.DoubleControl -= OnDoubleControl;
                 _input.Cancel -= StopTargeting;
             }
@@ -314,9 +319,10 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            if (OverlayTapSync.TryDecode(actionId, out var effect))
+            if (OverlayTapSync.TryDecode(actionId, out var effect, out var vk))
             {
                 fromChip.PlayReaction(effect);
+                PlayInputIcon(fromChip, vk);
                 return;
             }
 
@@ -330,6 +336,11 @@ namespace CrazyChat.Overlay
 
         public void OpenChat(ulong friendId)
         {
+            if (!IsPresent(friendId))
+            {
+                return;
+            }
+
             StopTargeting();
             HideSettings();
             _bag?.ExpandFor(friendId);
@@ -354,6 +365,29 @@ namespace CrazyChat.Overlay
         public bool TryGetChip(ulong friendId, out FriendAvatarChip chip)
         {
             return _chips.TryGetValue(friendId, out chip);
+        }
+
+        public bool IsPresent(ulong friendId)
+        {
+            if (friendId == 0)
+            {
+                return false;
+            }
+
+            if (TryGetChip(friendId, out var chip) && chip != null && !chip.IsLocal)
+            {
+                return true;
+            }
+
+            for (var i = 0; i < _bagged.Count; i++)
+            {
+                if (_bagged[i] != null && _bagged[i].SteamId == friendId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         public void RefreshChatSelection()
@@ -417,10 +451,39 @@ namespace CrazyChat.Overlay
                 LocalChip.PlayReaction();
             }
 
-            BroadcastTap();
+            var vk = _pendingVk;
+            _pendingVk = 0;
+            BroadcastTap(vk);
         }
 
-        void BroadcastTap()
+        void OnInputDown(int vk)
+        {
+            _pendingVk = vk;
+            if (_settings != null && _settings.ShowInputIcons)
+            {
+                PlayInputIcon(LocalChip, vk);
+            }
+        }
+
+        void PlayInputIcon(FriendAvatarChip chip, int vk)
+        {
+            if (vk == 0 || chip == null || _inputPop == null)
+            {
+                return;
+            }
+
+            var icon = OverlayInputIcons.Get(vk);
+            if (icon == null)
+            {
+                return;
+            }
+
+            var scale = _settings != null ? _settings.Scale : 1f;
+            var head = chip.FollowPosition + new Vector2(0f, ChipSize * 0.5f * scale + 6f);
+            _inputPop.Play(head, icon);
+        }
+
+        void BroadcastTap(int vk)
         {
             if (_interact == null || _settings == null || _service == null)
             {
@@ -433,7 +496,8 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            var payload = OverlayTapSync.Encode(_settings.ClickEffect);
+            var sendVk = _settings.ShowInputIcons ? vk : 0;
+            var payload = OverlayTapSync.Encode(_settings.ClickEffect, sendVk);
             var sent = false;
             VisitDesktopFriends(chip =>
             {
@@ -660,6 +724,10 @@ namespace CrazyChat.Overlay
             RefreshChatPreviews();
             RefreshChatSelection();
             _interactUi?.Sync();
+            if (_chatUi != null && _chatUi.IsOpen && !IsPresent(_chatUi.OpenFriendId))
+            {
+                _chatUi.Hide();
+            }
 
             if (friends.Count == 0)
             {
