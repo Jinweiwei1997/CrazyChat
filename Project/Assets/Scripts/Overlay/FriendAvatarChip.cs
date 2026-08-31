@@ -33,6 +33,7 @@ namespace CrazyChat.Overlay
         bool _dragging;
         float _reactionUntil;
         float _tapFlip = 1f;
+        OverlayClickEffect _playedEffect = OverlayClickEffect.Elastic;
         long _tapCount;
         bool _hover;
 
@@ -351,6 +352,12 @@ namespace CrazyChat.Overlay
             var effect = _view != null && _view.Settings != null
                 ? _view.Settings.ClickEffect
                 : OverlayClickEffect.Elastic;
+            PlayReaction(effect);
+        }
+
+        public void PlayReaction(OverlayClickEffect effect)
+        {
+            _playedEffect = effect;
             if (effect == OverlayClickEffect.Flip)
             {
                 _tapFlip = -_tapFlip;
@@ -407,9 +414,9 @@ namespace CrazyChat.Overlay
 
             var bob = Mathf.Sin(Time.unscaledTime * 1.5f + _index * 0.8f) * 4f;
             var press = 0f;
-            var effect = _view != null && _view.Settings != null
+            var effect = IsLocal && _view != null && _view.Settings != null
                 ? _view.Settings.ClickEffect
-                : OverlayClickEffect.Elastic;
+                : _playedEffect;
             var reacting = Time.unscaledTime < _reactionUntil;
             var t = reacting ? 1f - (_reactionUntil - Time.unscaledTime) / ReactionSeconds : 1f;
             if (reacting && effect != OverlayClickEffect.Flip)
@@ -419,9 +426,9 @@ namespace CrazyChat.Overlay
 
             var hover = _hover ? 1.06f : 1f;
             var baseFlip = IsLocal && _view != null && _view.Settings != null && _view.Settings.FlipHorizontal ? -1f : 1f;
-            var tapFlip = IsLocal && effect == OverlayClickEffect.Flip ? _tapFlip : 1f;
+            var tapFlip = effect == OverlayClickEffect.Flip ? _tapFlip : 1f;
             var flipX = baseFlip * tapFlip;
-            if (IsLocal && effect == OverlayClickEffect.Flip && reacting)
+            if (effect == OverlayClickEffect.Flip && reacting)
             {
                 var dest = _tapFlip;
                 var src = -_tapFlip;

@@ -28,6 +28,7 @@ namespace CrazyChat.Overlay
         RectTransform _modalLayer;
         Text _hint;
         float _nextStatsSave;
+        float _nextTapSend;
         readonly Dictionary<ulong, FriendAvatarChip> _chips = new Dictionary<ulong, FriendAvatarChip>();
         readonly List<PlayingFriend> _bagged = new List<PlayingFriend>();
         readonly List<ulong> _targets = new List<ulong>();
@@ -308,12 +309,18 @@ namespace CrazyChat.Overlay
 
         void OnInteractReceived(ulong fromId, string actionId)
         {
-            if (LocalChip == null || !TryGetChip(fromId, out var fromChip) || fromChip == null)
+            if (!TryGetChip(fromId, out var fromChip) || fromChip == null)
             {
                 return;
             }
 
-            if (!OverlayInteractCatalog.TryGet(actionId, out var action))
+            if (OverlayTapSync.TryDecode(actionId, out var effect))
+            {
+                fromChip.PlayReaction(effect);
+                return;
+            }
+
+            if (LocalChip == null || !OverlayInteractCatalog.TryGet(actionId, out var action))
             {
                 return;
             }
@@ -408,6 +415,34 @@ namespace CrazyChat.Overlay
             {
                 LocalChip.SetTapCount(_stats.Count);
                 LocalChip.PlayReaction();
+            }
+
+            BroadcastTap();
+        }
+
+        void BroadcastTap()
+        {
+            if (_interact == null || _settings == null || _service == null)
+            {
+                return;
+            }
+
+            var cooldown = Config != null ? Mathf.Max(0.05f, Config.interactCooldown) : 0.1f;
+            if (Time.unscaledTime < _nextTapSend)
+            {
+                return;
+            }
+
+            var payload = OverlayTapSync.Encode(_settings.ClickEffect);
+            var sent = false;
+            VisitDesktopFriends(chip =>
+            {
+                _interact.Send(chip.SteamId, payload);
+                sent = true;
+            });
+            if (sent)
+            {
+                _nextTapSend = Time.unscaledTime + cooldown;
             }
         }
 
