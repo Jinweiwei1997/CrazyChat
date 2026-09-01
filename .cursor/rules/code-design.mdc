@@ -1,0 +1,14 @@
+---
+description: Overlay 框架约定，避免平行造轮子
+alwaysApply: true
+---
+
+# 框架
+
+详见 [docs/ai-code-guide.md](docs/ai-code-guide.md)
+
+- 先改现有类，不要新 Bootstrap / Manager / 事件总线 / 第二套 UI 或 P2P
+- 装配只在 `FriendOverlayView.Build`；View 只接线
+- UI 用 `Create()` + uGUI `Text`，挂已有层；图和字走 `OverlaySprites`
+- 互动：Catalog 登记 + Fx + 通道 2；聊天通道 1
+- 需求不清时：无房间、只做桌上头像、对方必须开着本游戏
