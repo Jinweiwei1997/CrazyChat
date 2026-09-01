@@ -11,7 +11,6 @@ namespace CrazyChat.Overlay
         PlayingFriendsService _service;
         FriendOverlayView _view;
         PlayingFriend _friend;
-        int _index;
         RectTransform _rect;
         RectTransform _body;
         Image _avatar;
@@ -25,6 +24,7 @@ namespace CrazyChat.Overlay
         Text _bubbleText;
         Image _badge;
         Text _badgeText;
+        Image _nameBg;
         string _bubbleContent = "...";
         int _unread;
         bool _selected;
@@ -50,7 +50,7 @@ namespace CrazyChat.Overlay
             _service = service;
             _view = view;
             _friend = friend;
-            _index = index;
+            _ = index;
             ApplySize(_view != null && _view.Config != null ? _view.Config.chipSize : 128f);
             Apply();
         }
@@ -103,7 +103,7 @@ namespace CrazyChat.Overlay
             _body.sizeDelta = new Vector2(_size, _size);
             _body.anchoredPosition = Vector2.zero;
 
-            var shadow = CreateImage("Shadow", _body, new Color(0f, 0f, 0f, 0.35f), OverlaySprites.Circle);
+            var shadow = CreateImage("Shadow", _body, new Color(0f, 0f, 0f, 0.35f), OverlaySprites.RoundedSquare);
             var shadowRt = shadow.rectTransform;
             shadowRt.anchorMin = Vector2.zero;
             shadowRt.anchorMax = Vector2.one;
@@ -111,11 +111,11 @@ namespace CrazyChat.Overlay
             shadowRt.offsetMax = new Vector2(4f, -6f);
             shadow.raycastTarget = false;
 
-            _ring = CreateImage("Ring", _body, new Color(0.35f, 0.9f, 0.45f, 1f), OverlaySprites.Circle);
+            _ring = CreateImage("Ring", _body, new Color(0.35f, 0.9f, 0.45f, 1f), OverlaySprites.RoundedSquare);
             Stretch(_ring.rectTransform);
             _ring.raycastTarget = false;
 
-            _dash = CreateImage("Dash", _body, new Color(1f, 1f, 1f, 0.95f), OverlaySprites.DashedCircle);
+            _dash = CreateImage("Dash", _body, new Color(1f, 1f, 1f, 0.95f), OverlaySprites.DashedRoundedSquare);
             Stretch(_dash.rectTransform);
             _dash.rectTransform.offsetMin = new Vector2(-6f, -6f);
             _dash.rectTransform.offsetMax = new Vector2(6f, 6f);
@@ -129,21 +129,20 @@ namespace CrazyChat.Overlay
             maskRt.offsetMin = new Vector2(4f, 4f);
             maskRt.offsetMax = new Vector2(-4f, -4f);
             var maskImage = maskGo.GetComponent<Image>();
-            maskImage.sprite = OverlaySprites.Circle;
+            maskImage.sprite = OverlaySprites.RoundedSquare;
             maskImage.raycastTarget = true;
             maskGo.GetComponent<Mask>().showMaskGraphic = false;
 
-            _avatar = CreateImage("Avatar", maskRt, Color.white, OverlaySprites.Circle);
+            _avatar = CreateImage("Avatar", maskRt, Color.white, OverlaySprites.RoundedSquare);
             Stretch(_avatar.rectTransform);
             _avatar.preserveAspect = true;
             _avatar.raycastTarget = false;
 
             _nameRoot = new GameObject("NameTag", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             _nameRoot.transform.SetParent(_rect, false);
-            var nameBg = _nameRoot.GetComponent<Image>();
-            nameBg.sprite = OverlaySprites.RoundedRect;
-            nameBg.color = new Color(0.08f, 0.09f, 0.12f, 0.88f);
-            nameBg.raycastTarget = false;
+            _nameBg = _nameRoot.GetComponent<Image>();
+            OverlaySkin.ApplyButton(_nameBg);
+            _nameBg.raycastTarget = false;
             var nameRt = (RectTransform)_nameRoot.transform;
             nameRt.anchorMin = new Vector2(0f, 0.5f);
             nameRt.anchorMax = new Vector2(0f, 0.5f);
@@ -157,7 +156,7 @@ namespace CrazyChat.Overlay
             _nameText.font = OverlaySprites.UiFont;
             _nameText.fontSize = 14;
             _nameText.alignment = TextAnchor.MiddleCenter;
-            _nameText.color = Color.white;
+            _nameText.color = OverlaySkin.Text;
             _nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
             _nameText.verticalOverflow = VerticalWrapMode.Overflow;
             _nameText.raycastTarget = false;
@@ -172,7 +171,7 @@ namespace CrazyChat.Overlay
             countGo.transform.SetParent(_rect, false);
             _countText = countGo.GetComponent<Text>();
             _countText.font = OverlaySprites.UiFont;
-            _countText.fontSize = 13;
+            _countText.fontSize = 26;
             _countText.alignment = TextAnchor.MiddleCenter;
             _countText.color = new Color(1f, 1f, 1f, 0.9f);
             _countText.raycastTarget = false;
@@ -181,10 +180,11 @@ namespace CrazyChat.Overlay
             countRt.anchorMax = new Vector2(0.5f, 0f);
             countRt.pivot = new Vector2(0.5f, 1f);
             countRt.anchoredPosition = new Vector2(0f, -2f);
-            countRt.sizeDelta = new Vector2(88f, 20f);
+            countRt.sizeDelta = new Vector2(176f, 40f);
             countGo.SetActive(false);
 
-            _bubble = CreateImage("Bubble", _rect, new Color(0.1f, 0.11f, 0.14f, 0.92f), OverlaySprites.RoundedRect);
+            _bubble = CreateImage("Bubble", _rect, OverlaySprites.Panel, OverlaySprites.RoundedRect);
+            OverlaySkin.ApplyButton(_bubble);
             _bubble.raycastTarget = true;
             var bubbleRt = _bubble.rectTransform;
             bubbleRt.anchorMin = new Vector2(0.5f, 1f);
@@ -194,8 +194,7 @@ namespace CrazyChat.Overlay
             bubbleRt.sizeDelta = new Vector2(118f, 28f);
             _bubbleFade = _bubble.gameObject.AddComponent<CanvasGroup>();
             _bubbleFade.blocksRaycasts = true;
-            _bubbleText = FillChipLabel(_bubble.rectTransform, "...", 12, Color.white);
-            _bubble.gameObject.AddComponent<Button>().onClick.AddListener(OpenChat);
+            _bubbleText = FillChipLabel(_bubble.rectTransform, "...", 12, OverlaySkin.Text);
 
             _badge = CreateImage("Badge", _rect, new Color(0.92f, 0.28f, 0.28f, 1f), OverlaySprites.Circle);
             _badge.raycastTarget = false;
@@ -251,7 +250,7 @@ namespace CrazyChat.Overlay
             }
             else
             {
-                _avatar.sprite = OverlaySprites.Circle;
+                _avatar.sprite = OverlaySprites.RoundedSquare;
                 _avatar.color = _friend.IsLocal
                     ? new Color(0.35f, 0.62f, 0.95f)
                     : new Color(0.55f, 0.58f, 0.65f);
@@ -267,6 +266,22 @@ namespace CrazyChat.Overlay
             ((RectTransform)_nameRoot.transform).sizeDelta = new Vector2(width, 28f);
             RefreshCount();
             RefreshChatChrome();
+            ApplySkin();
+        }
+
+        public void ApplySkin()
+        {
+            OverlaySkin.ApplyButton(_nameBg);
+            OverlaySkin.ApplyButton(_bubble);
+            if (_nameText != null)
+            {
+                _nameText.color = OverlaySkin.Text;
+            }
+
+            if (_bubbleText != null)
+            {
+                _bubbleText.color = OverlaySkin.Text;
+            }
         }
 
         public void SetChatPreview(string text, int unread)
@@ -412,7 +427,6 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            var bob = Mathf.Sin(Time.unscaledTime * 1.5f + _index * 0.8f) * 4f;
             var press = 0f;
             var effect = IsLocal && _view != null && _view.Settings != null
                 ? _view.Settings.ClickEffect
@@ -439,7 +453,7 @@ namespace CrazyChat.Overlay
                 }
             }
 
-            _body.anchoredPosition = new Vector2(0f, bob - press * 7f);
+            _body.anchoredPosition = new Vector2(0f, -press * 7f);
             _body.localScale = new Vector3(hover * (1f + press * 0.04f) * flipX, hover * (1f - press * 0.1f), 1f);
             if (_bubbleFade != null && _bubbleFade.alpha < 1f)
             {
@@ -470,27 +484,12 @@ namespace CrazyChat.Overlay
 
         public void OnPointerClick(PointerEventData eventData)
         {
-            if (_friend == null || eventData.dragging)
+            if (_dragging || eventData == null || eventData.button != PointerEventData.InputButton.Left)
             {
                 return;
             }
 
-            if (_friend.IsLocal)
-            {
-                return;
-            }
-
-            OpenChat();
-        }
-
-        void OpenChat()
-        {
-            if (_friend == null || _friend.IsLocal || _dragging)
-            {
-                return;
-            }
-
-            _view?.OpenChat(_friend.SteamId);
+            _view?.OnChipClicked(this);
         }
 
         public void OnBeginDrag(PointerEventData eventData)
@@ -538,6 +537,7 @@ namespace CrazyChat.Overlay
             go.transform.SetParent(parent, false);
             var image = go.GetComponent<Image>();
             image.sprite = sprite;
+            image.type = Image.Type.Sliced;
             image.color = color;
             return image;
         }

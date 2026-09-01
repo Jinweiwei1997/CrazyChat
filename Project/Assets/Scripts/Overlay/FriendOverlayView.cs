@@ -99,6 +99,7 @@ namespace CrazyChat.Overlay
 
             _settings = new OverlayUserSettings();
             _settings.Load();
+            OverlaySkin.Set(_settings.UiSkin);
             _settingsUi = OverlaySettingsUi.Create(_chromeLayer, _modalLayer, this);
 
             _chatStore = new OverlayChatStore();
@@ -138,11 +139,20 @@ namespace CrazyChat.Overlay
                 return;
             }
 
+            OverlaySkin.Set(_settings.UiSkin);
             _settings.Save();
             var window = GetComponent<TransparentOverlayWindow>();
             if (window != null)
             {
                 window.SetAlwaysOnTop(_settings.AlwaysOnTop);
+            }
+
+            _settingsUi?.ApplySkin();
+            _chatUi?.ApplySkin();
+            _interactUi?.ApplySkin();
+            foreach (var pair in _chips)
+            {
+                pair.Value?.ApplySkin();
             }
         }
 
@@ -334,6 +344,23 @@ namespace CrazyChat.Overlay
             action.Play(_interactFx, fromChip.FollowPosition, LocalChip.FollowPosition);
         }
 
+        public void ApplyTomatoTapCost()
+        {
+            if (_stats == null)
+            {
+                return;
+            }
+
+            var cost = Config != null ? Mathf.Max(0, Config.tomatoTapCost) : 1000;
+            if (cost <= 0)
+            {
+                return;
+            }
+
+            _stats.Add(-cost);
+            LocalChip?.SetTapCount(_stats.Count);
+        }
+
         public void OpenChat(ulong friendId)
         {
             if (!IsPresent(friendId))
@@ -345,6 +372,16 @@ namespace CrazyChat.Overlay
             HideSettings();
             _bag?.ExpandFor(friendId);
             _chatUi?.Toggle(friendId);
+        }
+
+        public void OnChipClicked(FriendAvatarChip chip)
+        {
+            if (chip == null || chip.IsLocal || chip.SteamId == 0)
+            {
+                return;
+            }
+
+            OpenChat(chip.SteamId);
         }
 
         public void HideSettings()

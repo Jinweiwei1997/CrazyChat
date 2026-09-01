@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: e14328d16c9457e489e0311b7de03a71
+guid: 45e183bc61c1dc94591aac37f9c02c47
 TextureImporter:
   internalIDToNameTable: []
   externalObjects: {}
@@ -45,11 +45,11 @@ TextureImporter:
   compressionQuality: 50
   spriteMode: 2
   spriteExtrude: 1
-  spriteMeshType: 1
+  spriteMeshType: 0
   alignment: 0
   spritePivot: {x: 0.5, y: 0.5}
   spritePixelsToUnits: 100
-  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteBorder: {x: 28, y: 28, z: 28, w: 28}
   spriteGenerateFallbackPhysicsShape: 0
   alphaUsage: 1
   alphaIsTransparency: 1
@@ -72,7 +72,7 @@ TextureImporter:
     maxTextureSize: 2048
     resizeAlgorithm: 0
     textureFormat: -1
-    textureCompression: 1
+    textureCompression: 0
     compressionQuality: 50
     crunchedCompression: 0
     allowsAlphaSplitting: 0
@@ -85,7 +85,7 @@ TextureImporter:
     maxTextureSize: 2048
     resizeAlgorithm: 0
     textureFormat: -1
-    textureCompression: 1
+    textureCompression: 0
     compressionQuality: 50
     crunchedCompression: 0
     allowsAlphaSplitting: 0
@@ -98,7 +98,7 @@ TextureImporter:
     maxTextureSize: 2048
     resizeAlgorithm: 0
     textureFormat: -1
-    textureCompression: 1
+    textureCompression: 0
     compressionQuality: 50
     crunchedCompression: 0
     allowsAlphaSplitting: 0
@@ -111,7 +111,7 @@ TextureImporter:
     maxTextureSize: 2048
     resizeAlgorithm: 0
     textureFormat: -1
-    textureCompression: 1
+    textureCompression: 0
     compressionQuality: 50
     crunchedCompression: 0
     allowsAlphaSplitting: 0
@@ -123,127 +123,22 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: panel_large
+      name: Chat_Panel_BG_0
       rect:
         serializedVersion: 2
-        x: 45
-        y: 474
-        width: 617
-        height: 495
+        x: 3
+        y: 21
+        width: 236
+        height: 91
       alignment: 0
-      pivot: {x: 0.5, y: 0.5}
-      border: {x: 32, y: 36, z: 81, w: 102}
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
       outline: []
       physicsShape: []
       tessellationDetail: 0
       bones: []
-      spriteID: 8c1a2b3d4e5f6071890a1b2c3d4e5f60
-      internalID: -1458200101
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: panel_medium
-      rect:
-        serializedVersion: 2
-        x: 716
-        y: 479
-        width: 403
-        height: 441
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
-      border: {x: 28, y: 32, z: 28, w: 80}
-      outline: []
-      physicsShape: []
-      tessellationDetail: 0
-      bones: []
-      spriteID: 7b0f1e2d3c4b5a697887766554433221
-      internalID: -1458200102
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: panel_small
-      rect:
-        serializedVersion: 2
-        x: 1174
-        y: 479
-        width: 328
-        height: 387
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
-      border: {x: 24, y: 28, z: 24, w: 72}
-      outline: []
-      physicsShape: []
-      tessellationDetail: 0
-      bones: []
-      spriteID: 6a9e8d7c6b5a4938271605f4e3d2c1b0
-      internalID: -1458200103
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: popup
-      rect:
-        serializedVersion: 2
-        x: 721
-        y: 123
-        width: 379
-        height: 294
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
-      border: {x: 24, y: 28, z: 83, w: 88}
-      outline: []
-      physicsShape: []
-      tessellationDetail: 0
-      bones: []
-      spriteID: 5f4e3d2c1b0a99887766554433221100
-      internalID: -1458200104
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: banner
-      rect:
-        serializedVersion: 2
-        x: 45
-        y: 171
-        width: 624
-        height: 189
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
-      border: {x: 40, y: 40, z: 40, w: 24}
-      outline: []
-      physicsShape: []
-      tessellationDetail: 0
-      bones: []
-      spriteID: 4e3d2c1b0a0918273645f6e7d8c9b0a1
-      internalID: -1458200105
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: bubble
-      rect:
-        serializedVersion: 2
-        x: 1165
-        y: 170
-        width: 328
-        height: 189
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
-      border: {x: 28, y: 48, z: 28, w: 24}
-      outline: []
-      physicsShape: []
-      tessellationDetail: 0
-      bones: []
-      spriteID: 3d2c1b0a09182736455463728190a1b2
-      internalID: -1458200106
+      spriteID: 48cd62d9e558dab4dbee55ad8ef7454d
+      internalID: 1467786171
       vertices: []
       indices: 
       edges: []
@@ -251,20 +146,15 @@ TextureImporter:
     outline: []
     physicsShape: []
     bones: []
-    spriteID: 2c1b0a09182736455463728190a1b2c3
-    internalID: 0
+    spriteID: 5e97eb03825dee720800000000000000
+    internalID: 1537655665
     vertices: []
     indices: 
     edges: []
     weights: []
     secondaryTextures: []
     nameFileIdTable:
-      banner: -1458200105
-      bubble: -1458200106
-      panel_large: -1458200101
-      panel_medium: -1458200102
-      panel_small: -1458200103
-      popup: -1458200104
+      Chat_Panel_BG_0: 1467786171
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

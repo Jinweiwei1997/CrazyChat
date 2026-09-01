@@ -16,12 +16,6 @@ namespace CrazyChat.Overlay
         const float BubbleMaxWidth = 214f;
         const int CompactTake = 12;
 
-        static readonly Color CardColor = new Color(0.12f, 0.13f, 0.16f, 0.96f);
-        static readonly Color BodyColor = new Color(0f, 0f, 0f, 0.22f);
-        static readonly Color MineBubble = new Color(0.28f, 0.48f, 0.86f, 0.95f);
-        static readonly Color TheirBubble = new Color(1f, 1f, 1f, 0.12f);
-        static readonly Color ButtonIdle = new Color(1f, 1f, 1f, 0.12f);
-
         FriendOverlayView _view;
         OverlayChatService _chat;
         RectTransform _cardRt;
@@ -73,6 +67,11 @@ namespace CrazyChat.Overlay
 
         public void Open(ulong friendId)
         {
+            Open(friendId, true);
+        }
+
+        void Open(ulong friendId, bool focusInput)
+        {
             if (friendId == 0 || _chat == null || _chat.Store == null || _view == null || !_view.IsPresent(friendId))
             {
                 return;
@@ -89,7 +88,10 @@ namespace CrazyChat.Overlay
             if (_input != null)
             {
                 _input.text = string.Empty;
-                EventSystem.current?.SetSelectedGameObject(_input.gameObject);
+                if (focusInput)
+                {
+                    EventSystem.current?.SetSelectedGameObject(_input.gameObject);
+                }
             }
 
             _view?.RefreshChatSelection();
@@ -135,7 +137,8 @@ namespace CrazyChat.Overlay
 
         void Build()
         {
-            var card = CreateImage("ChatCard", transform, CardColor, OverlaySprites.RoundedRect);
+            var card = CreateImage("ChatCard", transform, OverlaySprites.Panel, OverlaySprites.RoundedRect);
+            OverlaySkin.ApplyPanel(card);
             card.raycastTarget = true;
             _card = card.gameObject;
             _cardRt = card.rectTransform;
@@ -143,31 +146,36 @@ namespace CrazyChat.Overlay
             _cardRt.pivot = new Vector2(0.5f, 0.5f);
             ApplyCardSize();
             _card.SetActive(false);
+            OverlayHoverRelay.Bind(_card, OnCardPointerEnter, null);
 
-            var header = CreateImage("Header", _cardRt, new Color(1f, 1f, 1f, 0.04f), OverlaySprites.RoundedRect);
+            var header = CreateImage("Header", _cardRt, new Color(1f, 1f, 1f, 0.06f), OverlaySprites.RoundedRect);
             header.raycastTarget = false;
             PinTop(header.rectTransform, HeaderHeight);
 
-            _title = PlaceAnchoredLabel(header.rectTransform, "聊天", 16, Color.white, TextAnchor.MiddleLeft);
+            OverlaySkin.ApplyButton(header, well: true);
+            _title = PlaceAnchoredLabel(header.rectTransform, "聊天", 16, OverlaySkin.Text, TextAnchor.MiddleLeft);
             var titleRt = _title.rectTransform;
             titleRt.anchorMin = new Vector2(0f, 0f);
             titleRt.anchorMax = new Vector2(1f, 1f);
-            titleRt.offsetMin = new Vector2(12f, 0f);
+            titleRt.offsetMin = new Vector2(14f, 0f);
             titleRt.offsetMax = new Vector2(-108f, 0f);
 
-            var close = CreateImage("Close", header.rectTransform, ButtonIdle, OverlaySprites.RoundedRect);
+            var close = CreateImage("Close", header.rectTransform, OverlaySprites.Button, OverlaySprites.RoundedRect);
             close.raycastTarget = true;
             PinTopRight(close.rectTransform, new Vector2(-8f, -8f), new Vector2(44f, 26f));
-            FillLabel(close.rectTransform, "关闭", 12, Color.white);
+            OverlaySkin.ApplyButton(close);
+            FillLabel(close.rectTransform, "关闭", 12, OverlaySkin.Text);
             close.gameObject.AddComponent<Button>().onClick.AddListener(Hide);
 
-            var historyBtn = CreateImage("History", header.rectTransform, ButtonIdle, OverlaySprites.RoundedRect);
+            var historyBtn = CreateImage("History", header.rectTransform, OverlaySprites.Button, OverlaySprites.RoundedRect);
             historyBtn.raycastTarget = true;
             PinTopRight(historyBtn.rectTransform, new Vector2(-56f, -8f), new Vector2(44f, 26f));
-            _historyLabel = FillLabel(historyBtn.rectTransform, "历史", 12, Color.white);
+            OverlaySkin.ApplyButton(historyBtn);
+            _historyLabel = FillLabel(historyBtn.rectTransform, "历史", 12, OverlaySkin.Text);
             historyBtn.gameObject.AddComponent<Button>().onClick.AddListener(ToggleHistory);
 
-            var body = CreateImage("Body", _cardRt, BodyColor, OverlaySprites.RoundedRect);
+            var body = CreateImage("Body", _cardRt, OverlaySprites.Well, OverlaySprites.RoundedRect);
+            OverlaySkin.ApplyButton(body, well: true);
             body.raycastTarget = true;
             var bodyRt = body.rectTransform;
             bodyRt.anchorMin = new Vector2(0f, 0f);
@@ -192,11 +200,11 @@ namespace CrazyChat.Overlay
             _scroll.movementType = ScrollRect.MovementType.Clamped;
             _scroll.scrollSensitivity = 24f;
 
-            _empty = PlaceAnchoredLabel(bodyRt, "还没有消息", 13, new Color(1f, 1f, 1f, 0.4f), TextAnchor.MiddleCenter);
+            _empty = PlaceAnchoredLabel(bodyRt, "还没有消息", 13, OverlaySkin.TextMuted, TextAnchor.MiddleCenter);
             Stretch(_empty.rectTransform);
             _empty.raycastTarget = false;
 
-            _status = PlaceAnchoredLabel(_cardRt, "", 11, new Color(1f, 1f, 1f, 0.4f), TextAnchor.MiddleCenter);
+            _status = PlaceAnchoredLabel(_cardRt, "", 11, OverlaySkin.TextMuted, TextAnchor.MiddleCenter);
             var statusRt = _status.rectTransform;
             statusRt.anchorMin = new Vector2(0f, 0f);
             statusRt.anchorMax = new Vector2(1f, 0f);
@@ -204,7 +212,8 @@ namespace CrazyChat.Overlay
             statusRt.anchoredPosition = new Vector2(0f, ComposerHeight);
             statusRt.sizeDelta = new Vector2(-20f, StatusHeight);
 
-            var inputBg = CreateImage("Input", _cardRt, new Color(1f, 1f, 1f, 0.1f), OverlaySprites.RoundedRect);
+            var inputBg = CreateImage("Input", _cardRt, OverlaySprites.Button, OverlaySprites.RoundedRect);
+            OverlaySkin.ApplyButton(inputBg);
             inputBg.raycastTarget = true;
             var inputRt = inputBg.rectTransform;
             inputRt.anchorMin = new Vector2(0f, 0f);
@@ -213,13 +222,13 @@ namespace CrazyChat.Overlay
             inputRt.anchoredPosition = new Vector2(10f, 10f);
             inputRt.sizeDelta = new Vector2(-82f, 32f);
 
-            var placeholder = PlaceAnchoredLabel(inputRt, "输入消息", 13, new Color(1f, 1f, 1f, 0.35f), TextAnchor.MiddleLeft);
+            var placeholder = PlaceAnchoredLabel(inputRt, "输入消息", 13, OverlaySkin.TextMuted, TextAnchor.MiddleLeft);
             var placeholderRt = placeholder.rectTransform;
             Stretch(placeholderRt);
             placeholderRt.offsetMin = new Vector2(10f, 0f);
             placeholderRt.offsetMax = new Vector2(-10f, 0f);
 
-            var inputText = PlaceAnchoredLabel(inputRt, "", 13, Color.white, TextAnchor.MiddleLeft);
+            var inputText = PlaceAnchoredLabel(inputRt, "", 13, OverlaySkin.Text, TextAnchor.MiddleLeft);
             inputText.supportRichText = false;
             inputText.horizontalOverflow = HorizontalWrapMode.Overflow;
             inputText.verticalOverflow = VerticalWrapMode.Overflow;
@@ -233,15 +242,74 @@ namespace CrazyChat.Overlay
             _input.placeholder = placeholder;
             _input.lineType = InputField.LineType.SingleLine;
             _input.characterLimit = 200;
-            _input.caretColor = Color.white;
+            _input.caretColor = OverlaySkin.Text;
             _input.selectionColor = new Color(0.28f, 0.48f, 0.86f, 0.45f);
             _input.onEndEdit.AddListener(OnEndEdit);
 
-            var send = CreateImage("Send", _cardRt, MineBubble, OverlaySprites.RoundedRect);
+            var send = CreateImage("Send", _cardRt, OverlaySprites.Accent, OverlaySprites.RoundedRect);
+            OverlaySkin.ApplyButton(send, accent: true);
             send.raycastTarget = true;
             PinBottomRight(send.rectTransform, new Vector2(-10f, 10f), new Vector2(52f, 32f));
-            FillLabel(send.rectTransform, "发送", 13, Color.white);
+            FillLabel(send.rectTransform, "发送", 13, OverlaySkin.Text);
             send.gameObject.AddComponent<Button>().onClick.AddListener(Send);
+        }
+
+        public void ApplySkin()
+        {
+            if (_cardRt == null)
+            {
+                return;
+            }
+
+            OverlaySkin.ApplyPanel(_cardRt.GetComponent<Image>());
+            OverlaySkin.ApplyButton(FindChildImage(_cardRt, "Header"), well: true);
+            OverlaySkin.ApplyButton(FindChildImage(_cardRt, "Header/Close"));
+            OverlaySkin.ApplyButton(FindChildImage(_cardRt, "Header/History"));
+            OverlaySkin.ApplyButton(FindChildImage(_cardRt, "Body"), well: true);
+            OverlaySkin.ApplyButton(FindChildImage(_cardRt, "Input"));
+            OverlaySkin.ApplyButton(FindChildImage(_cardRt, "Send"), accent: true);
+            if (_title != null)
+            {
+                _title.color = OverlaySkin.Text;
+            }
+
+            if (_historyLabel != null)
+            {
+                _historyLabel.color = OverlaySkin.Text;
+            }
+
+            if (_status != null)
+            {
+                _status.color = OverlaySkin.TextMuted;
+            }
+
+            if (_empty != null)
+            {
+                _empty.color = OverlaySkin.TextMuted;
+            }
+
+            if (_input != null)
+            {
+                _input.caretColor = OverlaySkin.Text;
+                if (_input.textComponent != null)
+                {
+                    _input.textComponent.color = OverlaySkin.Text;
+                }
+
+                if (_input.placeholder is Text placeholder)
+                {
+                    placeholder.color = OverlaySkin.TextMuted;
+                }
+            }
+
+            PaintLabel(FindChild(_cardRt, "Send"), OverlaySkin.Text);
+            PaintLabel(FindChild(_cardRt, "Header/Close"), OverlaySkin.Text);
+            PaintLabel(FindChild(_cardRt, "Header/History"), OverlaySkin.Text);
+
+            if (_open)
+            {
+                Refresh();
+            }
         }
 
         void ToggleHistory()
@@ -291,14 +359,17 @@ namespace CrazyChat.Overlay
             EventSystem.current?.SetSelectedGameObject(_input.gameObject);
         }
 
+        void OnCardPointerEnter()
+        {
+            if (_input != null)
+            {
+                EventSystem.current?.SetSelectedGameObject(_input.gameObject);
+            }
+        }
+
         void Update()
         {
-            if (!_open)
-            {
-                return;
-            }
-
-            if (Input.GetKeyDown(KeyCode.Escape))
+            if (_open && Input.GetKeyDown(KeyCode.Escape))
             {
                 Hide();
             }
@@ -404,7 +475,7 @@ namespace CrazyChat.Overlay
             rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(0.5f, 1f);
 
-            var bubble = CreateImage("Bubble", rt, TheirBubble, OverlaySprites.RoundedRect);
+            var bubble = CreateImage("Bubble", rt, OverlaySprites.Button, OverlaySprites.RoundedRect);
             bubble.raycastTarget = false;
             var bubbleRt = bubble.rectTransform;
             bubbleRt.anchorMin = bubbleRt.anchorMax = new Vector2(0f, 1f);
@@ -433,7 +504,8 @@ namespace CrazyChat.Overlay
             var text = msg != null ? msg.text : "";
             row.Text.text = text;
             row.Text.alignment = TextAnchor.UpperLeft;
-            row.Bubble.color = mine ? MineBubble : TheirBubble;
+            OverlaySkin.ApplyBubble(row.Bubble, mine);
+            row.Text.color = OverlaySkin.Text;
 
             var bubbleW = Mathf.Clamp(row.Text.preferredWidth + 16f, 36f, BubbleMaxWidth);
             row.BubbleRt.anchorMin = row.BubbleRt.anchorMax = mine ? new Vector2(1f, 1f) : new Vector2(0f, 1f);
@@ -462,12 +534,38 @@ namespace CrazyChat.Overlay
             _cardRt.anchoredPosition = cardPos;
         }
 
+        static Transform FindChild(Transform root, string path)
+        {
+            return root != null ? root.Find(path) : null;
+        }
+
+        static Image FindChildImage(Transform root, string path)
+        {
+            var child = FindChild(root, path);
+            return child != null ? child.GetComponent<Image>() : null;
+        }
+
+        static void PaintLabel(Transform root, Color color)
+        {
+            if (root == null)
+            {
+                return;
+            }
+
+            var label = root.GetComponentInChildren<Text>(true);
+            if (label != null)
+            {
+                label.color = color;
+            }
+        }
+
         static Image CreateImage(string name, Transform parent, Color color, Sprite sprite)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             go.transform.SetParent(parent, false);
             var image = go.GetComponent<Image>();
             image.sprite = sprite;
+            image.type = Image.Type.Sliced;
             image.color = color;
             return image;
         }

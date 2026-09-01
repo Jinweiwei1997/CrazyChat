@@ -25,6 +25,7 @@ namespace CrazyChat.Overlay
         public bool AutoStart { get; private set; }
         public OverlayClickEffect ClickEffect { get; private set; } = OverlayClickEffect.Elastic;
         public bool ShowInputIcons { get; private set; }
+        public string UiSkin { get; private set; } = OverlaySkin.Minimal;
 
         public void Load()
         {
@@ -56,6 +57,7 @@ namespace CrazyChat.Overlay
                     ? OverlayClickEffect.Flip
                     : OverlayClickEffect.Elastic;
                 ShowInputIcons = data.showInputIcons;
+                UiSkin = data.uiSkin == OverlaySkin.Basic ? OverlaySkin.Basic : OverlaySkin.Minimal;
             }
             catch (Exception e)
             {
@@ -73,7 +75,8 @@ namespace CrazyChat.Overlay
                 flipHorizontal = FlipHorizontal,
                 autoStart = AutoStart,
                 clickEffect = (int)ClickEffect,
-                showInputIcons = ShowInputIcons
+                showInputIcons = ShowInputIcons,
+                uiSkin = UiSkin
             }, true);
             WriteLocal(json);
             WriteSteamCloud(json);
@@ -103,6 +106,11 @@ namespace CrazyChat.Overlay
         }
 
         public void SetShowInputIcons(bool value) => ShowInputIcons = value;
+
+        public void CycleUiSkin()
+        {
+            UiSkin = UiSkin == OverlaySkin.Basic ? OverlaySkin.Minimal : OverlaySkin.Basic;
+        }
 
         public void SetAutoStart(bool value)
         {
@@ -138,6 +146,11 @@ namespace CrazyChat.Overlay
 
         static string ReadSteamCloud()
         {
+            if (!OverlayConfig.SteamCloud)
+            {
+                return null;
+            }
+
 #if !DISABLESTEAMWORKS
             if (!SteamManager.Initialized || !SteamRemoteStorage.FileExists(FileName))
             {
@@ -160,6 +173,11 @@ namespace CrazyChat.Overlay
 
         static void WriteSteamCloud(string json)
         {
+            if (!OverlayConfig.SteamCloud)
+            {
+                return;
+            }
+
 #if !DISABLESTEAMWORKS
             if (!SteamManager.Initialized)
             {
@@ -181,6 +199,7 @@ namespace CrazyChat.Overlay
             public bool autoStart;
             public int clickEffect;
             public bool showInputIcons;
+            public string uiSkin = OverlaySkin.Minimal;
         }
     }
 

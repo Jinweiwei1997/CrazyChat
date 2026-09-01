@@ -7,6 +7,8 @@ namespace CrazyChat.Overlay
     {
         public const string AssetPath = "Assets/OverlayConfig.asset";
 
+        public const bool SteamCloud = false;
+
         [Header("关=所有在线好友，开=只显示玩本游戏的")]
         public bool requireSameGame;
 
@@ -51,6 +53,14 @@ namespace CrazyChat.Overlay
         [Header("互动连点间隔（秒）")]
         [Min(0f)]
         public float interactCooldown = 0.1f;
+
+        [Header("悬停打开（秒）")]
+        [Min(0f)]
+        public float hoverOpenSeconds = 0.2f;
+
+        [Header("扔番茄扣点击")]
+        [Min(0)]
+        public int tomatoTapCost = 1000;
 
         public string FormatUnread(int count)
         {

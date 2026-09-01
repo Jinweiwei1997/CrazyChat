@@ -49,12 +49,23 @@ namespace CrazyChat.Overlay
 
         public void Add(int amount)
         {
-            if (amount <= 0)
+            if (amount == 0)
             {
                 return;
             }
 
-            Count += amount;
+            var next = Count + amount;
+            if (next < 0)
+            {
+                next = 0;
+            }
+
+            if (next == Count)
+            {
+                return;
+            }
+
+            Count = next;
             _dirty = true;
         }
 
@@ -99,6 +110,11 @@ namespace CrazyChat.Overlay
 
         static string ReadSteamCloud()
         {
+            if (!OverlayConfig.SteamCloud)
+            {
+                return null;
+            }
+
 #if !DISABLESTEAMWORKS
             if (!SteamManager.Initialized || !SteamRemoteStorage.FileExists(FileName))
             {
@@ -121,6 +137,11 @@ namespace CrazyChat.Overlay
 
         static void WriteSteamCloud(string json)
         {
+            if (!OverlayConfig.SteamCloud)
+            {
+                return;
+            }
+
 #if !DISABLESTEAMWORKS
             if (!SteamManager.Initialized)
             {

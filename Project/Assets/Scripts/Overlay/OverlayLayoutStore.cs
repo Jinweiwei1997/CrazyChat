@@ -14,7 +14,7 @@ using Steamworks;
 namespace CrazyChat.Overlay
 {
     /// <summary>
-    /// 记录每个好友头像的位置：本地文件 + Steam 云存档。
+    /// 记录每个好友头像的位置：本地文件。云存档等有正式 AppID 再开。
     /// 坐标用 0~1，换分辨率或换电脑也能对上。
     /// </summary>
     public sealed class OverlayLayoutStore
@@ -154,6 +154,11 @@ namespace CrazyChat.Overlay
 
         static string ReadSteamCloud()
         {
+            if (!OverlayConfig.SteamCloud)
+            {
+                return null;
+            }
+
 #if !DISABLESTEAMWORKS
             if (!SteamManager.Initialized || !SteamRemoteStorage.FileExists(FileName))
             {
@@ -176,6 +181,11 @@ namespace CrazyChat.Overlay
 
         static void WriteSteamCloud(string json)
         {
+            if (!OverlayConfig.SteamCloud)
+            {
+                return;
+            }
+
 #if !DISABLESTEAMWORKS
             if (!SteamManager.Initialized)
             {

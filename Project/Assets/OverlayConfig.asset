@@ -24,3 +24,5 @@ MonoBehaviour:
   unreadCap: 99
   easterEggEvery: 1000
   interactCooldown: 0.1
+  hoverOpenSeconds: 0.2
+  tomatoTapCost: 100

@@ -1,16 +1,41 @@
+#if !(UNITY_STANDALONE_WIN || UNITY_STANDALONE_LINUX || UNITY_STANDALONE_OSX || STEAMWORKS_WIN || STEAMWORKS_LIN_OSX)
+#define DISABLESTEAMWORKS
+#endif
+
 using UnityEngine;
+#if !DISABLESTEAMWORKS
+using Steamworks;
+#endif
 
 namespace CrazyChat.Overlay
 {
     public sealed class OverlayBootstrap : MonoBehaviour
     {
         static OverlayBootstrap _instance;
+        static bool _steamSessionOpen;
 
 #if UNITY_2019_3_OR_NEWER
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics()
         {
             _instance = null;
+        }
+#endif
+
+#if UNITY_EDITOR
+        [UnityEditor.InitializeOnLoadMethod]
+        static void WatchEditorPlayMode()
+        {
+            UnityEditor.EditorApplication.playModeStateChanged -= OnEditorPlayModeChanged;
+            UnityEditor.EditorApplication.playModeStateChanged += OnEditorPlayModeChanged;
+        }
+
+        static void OnEditorPlayModeChanged(UnityEditor.PlayModeStateChange state)
+        {
+            if (state == UnityEditor.PlayModeStateChange.ExitingPlayMode)
+            {
+                EndSteamSession();
+            }
         }
 #endif
 
@@ -43,6 +68,7 @@ namespace CrazyChat.Overlay
 
             ConfigureSceneCamera();
             EnsureSteamManager();
+            _steamSessionOpen = SteamManager.Initialized;
 
             var friends = gameObject.AddComponent<PlayingFriendsService>();
             friends.BindConfig(OverlayConfig.LoadOrDefault());
@@ -83,6 +109,45 @@ namespace CrazyChat.Overlay
             {
                 light.enabled = false;
             }
+        }
+
+        void OnApplicationQuit()
+        {
+            EndSteamSession();
+        }
+
+        static void EndSteamSession()
+        {
+            if (!_steamSessionOpen)
+            {
+                return;
+            }
+
+            _steamSessionOpen = false;
+#if !DISABLESTEAMWORKS
+            var steam = FindObjectOfType<SteamManager>();
+            if (steam != null)
+            {
+                try
+                {
+                    SteamFriends.ClearRichPresence();
+                }
+                catch (System.Exception)
+                {
+                }
+
+                DestroyImmediate(steam.gameObject);
+                return;
+            }
+
+            try
+            {
+                SteamAPI.Shutdown();
+            }
+            catch (System.Exception)
+            {
+            }
+#endif
         }
     }
 }
