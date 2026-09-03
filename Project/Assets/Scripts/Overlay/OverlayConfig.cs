@@ -10,7 +10,7 @@ namespace CrazyChat.Overlay
         public const bool SteamCloud = false;
 
         [Header("关=所有在线好友，开=只显示玩本游戏的")]
-        public bool requireSameGame;
+        public bool requireSameGame = true;
 
         [Header("只显示在线好友")]
         public bool onlineOnly = true;

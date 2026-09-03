@@ -36,6 +36,7 @@ namespace CrazyChat.Overlay
         readonly List<ulong> _targets = new List<ulong>();
         bool _targeting;
         ulong _targetId;
+        Vector2 _lastOverlaySize;
 
         public FriendAvatarChip LocalChip { get; private set; }
 
@@ -394,6 +395,26 @@ namespace CrazyChat.Overlay
             _interactUi?.HideMenu();
         }
 
+        public void OnChipHoverEnter(FriendAvatarChip chip)
+        {
+            if (chip == null || chip.IsLocal)
+            {
+                return;
+            }
+
+            _interactUi?.NotifyChipHoverEnter(chip.SteamId);
+        }
+
+        public void OnChipHoverExit(FriendAvatarChip chip)
+        {
+            if (chip == null || chip.IsLocal)
+            {
+                return;
+            }
+
+            _interactUi?.NotifyChipHoverExit(chip.SteamId);
+        }
+
         public string GetFriendName(ulong friendId)
         {
             return _service != null ? _service.GetName(friendId) : "好友";
@@ -649,6 +670,8 @@ namespace CrazyChat.Overlay
 
         void Update()
         {
+            SyncOverlayBounds();
+
             if (Time.unscaledTime >= _nextStatsSave)
             {
                 _nextStatsSave = Time.unscaledTime + 2f;
@@ -825,14 +848,84 @@ namespace CrazyChat.Overlay
 
         public Vector2 Clamp(Vector2 pixel)
         {
-            return Clamp(pixel, Mathf.Max(36f, ChipSize * 0.5f));
+            var scale = _settings != null ? _settings.Scale : 1f;
+            return Clamp(pixel, Mathf.Max(36f, ChipSize * 0.5f * scale));
+        }
+
+        public static Vector2 OverlayPixelSize
+        {
+            get
+            {
+                var w = Screen.width;
+                var h = Screen.height;
+                if (w > 0 && h > 0)
+                {
+                    return new Vector2(w, h);
+                }
+
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+                return new Vector2(Display.main.systemWidth, Display.main.systemHeight);
+#else
+                return Vector2.one;
+#endif
+            }
         }
 
         public static Vector2 Clamp(Vector2 pixel, float pad)
         {
-            pixel.x = Mathf.Clamp(pixel.x, pad, Screen.width - pad);
-            pixel.y = Mathf.Clamp(pixel.y, pad, Screen.height - pad);
+            var size = OverlayPixelSize;
+            if (size.x <= pad * 2f || size.y <= pad * 2f)
+            {
+                return pixel;
+            }
+
+            pixel.x = Mathf.Clamp(pixel.x, pad, size.x - pad);
+            pixel.y = Mathf.Clamp(pixel.y, pad, size.y - pad);
             return pixel;
+        }
+
+        void SyncOverlayBounds()
+        {
+            var size = OverlayPixelSize;
+            if (size.x <= 0f || size.y <= 0f || size == _lastOverlaySize)
+            {
+                return;
+            }
+
+            _lastOverlaySize = size;
+            ReclampVisibleChips();
+        }
+
+        void ReclampVisibleChips()
+        {
+            if (_chips.Count == 0)
+            {
+                return;
+            }
+
+            var dirty = false;
+            foreach (var pair in _chips)
+            {
+                if (pair.Value == null)
+                {
+                    continue;
+                }
+
+                var pos = Clamp(pair.Value.LayoutPosition);
+                if (pos == pair.Value.LayoutPosition)
+                {
+                    continue;
+                }
+
+                pair.Value.SetLayoutPosition(pos);
+                _store?.SetPixel(pair.Key, pos);
+                dirty = true;
+            }
+
+            if (dirty)
+            {
+                _store?.Save();
+            }
         }
 
         static RectTransform MakeLayer(Transform canvas, string name)

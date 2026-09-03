@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c8e2a14f6b9d4a71a3e5f0821c4d7b90, type: 3}
   m_Name: OverlayConfig
   m_EditorClassIdentifier: CrazyChat.Overlay.OverlayConfig
-  requireSameGame: 0
+  requireSameGame: 1
   onlineOnly: 1
   includeLocalPlayer: 1
   maxDesktopFriends: 30

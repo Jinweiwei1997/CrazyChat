@@ -6,21 +6,34 @@ namespace CrazyChat.Overlay.Interact
 {
     public sealed class OverlayInteractUi : MonoBehaviour
     {
+        const int SlotCount = 4;
+        const float SlotSize = 36f;
+        const float SlotGap = 8f;
+
+        static readonly Vector2[] SlotDirections =
+        {
+            new Vector2(0f, 1f),
+            new Vector2(1f, 0f),
+            new Vector2(0f, -1f),
+            new Vector2(-1f, 0f)
+        };
+
         FriendOverlayView _view;
         OverlayInteractService _service;
         OverlayInteractFx _fx;
         RectTransform _root;
-        GameObject _menu;
-        RectTransform _menuRt;
-        Image _menuImage;
+        GameObject _ring;
+        RectTransform _ringRt;
+        readonly Image[] _slotBg = new Image[SlotCount];
+        readonly Text[] _slotLabels = new Text[SlotCount];
+        readonly IOverlayInteractAction[] _slotActions = new IOverlayInteractAction[SlotCount];
         ulong _openFor;
         float _nextUse;
-        bool _hoverButton;
-        bool _hoverMenu;
+        bool _hoverChip;
+        bool _hoverRing;
         float _hideAt = -1f;
         float _showAt = -1f;
         ulong _pendingId;
-        readonly Dictionary<ulong, RectTransform> _buttons = new Dictionary<ulong, RectTransform>();
 
         public static OverlayInteractUi Create(Transform chrome, Transform windows, FriendOverlayView view, OverlayInteractService service, OverlayInteractFx fx)
         {
@@ -30,195 +43,139 @@ namespace CrazyChat.Overlay.Interact
             ui._view = view;
             ui._service = service;
             ui._fx = fx;
-            ui.Build(windows);
+            ui.Build(windows != null ? windows : chrome);
             return ui;
         }
 
-        void Build(Transform windows)
+        void Build(Transform layer)
         {
             _root = (RectTransform)transform;
             Stretch(_root);
 
-            _menu = new GameObject("Menu", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-            _menu.transform.SetParent(windows != null ? windows : _root, false);
-            _menuImage = _menu.GetComponent<Image>();
-            OverlaySkin.ApplyPanel(_menuImage);
-            _menuImage.raycastTarget = true;
-            _menuRt = (RectTransform)_menu.transform;
-            _menuRt.anchorMin = _menuRt.anchorMax = new Vector2(0f, 0f);
-            _menuRt.pivot = new Vector2(0.5f, 0.5f);
-            var actions = OverlayInteractCatalog.All;
-            _menuRt.sizeDelta = new Vector2(120f, 16f + actions.Count * 36f);
-            for (var i = 0; i < actions.Count; i++)
+            _ring = new GameObject("ItemRing", typeof(RectTransform));
+            _ring.transform.SetParent(layer, false);
+            _ringRt = (RectTransform)_ring.transform;
+            _ringRt.anchorMin = _ringRt.anchorMax = new Vector2(0f, 0f);
+            _ringRt.pivot = new Vector2(0.5f, 0.5f);
+            _ringRt.sizeDelta = Vector2.zero;
+
+            for (var i = 0; i < SlotCount; i++)
             {
-                var action = actions[i];
-                var row = CreateImage(action.Id, _menuRt, OverlaySprites.Accent, OverlaySprites.RoundedRect);
-                OverlaySkin.ApplyButton(row, accent: true);
-                row.raycastTarget = true;
-                var rowRt = row.rectTransform;
-                rowRt.anchorMin = rowRt.anchorMax = new Vector2(0.5f, 1f);
-                rowRt.pivot = new Vector2(0.5f, 1f);
-                rowRt.anchoredPosition = new Vector2(0f, -10f - i * 36f);
-                rowRt.sizeDelta = new Vector2(100f, 30f);
-                FillLabel(rowRt, action.Label, 13, OverlaySkin.Text);
-                var captured = action;
-                row.gameObject.AddComponent<Button>().onClick.AddListener(() => Use(captured));
+                BuildSlot(i, _ringRt);
             }
 
-            _menu.SetActive(false);
-            OverlayHoverRelay.Bind(_menu, HoverEnterFromMenu, HoverLeaveFromMenu);
+            RefreshSlots();
+            _ring.SetActive(false);
         }
 
-        public void ApplySkin()
+        void BuildSlot(int index, RectTransform parent)
         {
-            OverlaySkin.ApplyPanel(_menuImage);
-            if (_menuRt != null)
+            var slot = CreateImage("Slot_" + index, parent, new Color(1f, 1f, 1f, 0.14f), OverlaySprites.RoundedRect);
+            slot.raycastTarget = true;
+            var rt = slot.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(SlotSize, SlotSize);
+            _slotBg[index] = slot;
+            _slotLabels[index] = FillLabel(rt, string.Empty, 11, OverlaySkin.Text);
+
+            var capturedIndex = index;
+            slot.gameObject.AddComponent<Button>().onClick.AddListener(() => UseSlot(capturedIndex));
+            OverlayHoverRelay.Bind(slot.gameObject, HoverEnterFromRing, HoverLeaveFromRing);
+        }
+
+        void RefreshSlots()
+        {
+            var actions = OverlayInteractCatalog.All;
+            for (var i = 0; i < SlotCount; i++)
             {
-                var rows = _menuRt.GetComponentsInChildren<Image>(true);
-                for (var i = 0; i < rows.Length; i++)
-                {
-                    if (rows[i] == _menuImage)
-                    {
-                        continue;
-                    }
-
-                    OverlaySkin.ApplyButton(rows[i], accent: true);
-                }
-
-                var labels = _menuRt.GetComponentsInChildren<Text>(true);
-                for (var i = 0; i < labels.Length; i++)
-                {
-                    labels[i].color = OverlaySkin.Text;
-                }
-            }
-
-            foreach (var pair in _buttons)
-            {
-                if (pair.Value == null)
+                _slotActions[i] = i < actions.Count ? actions[i] : null;
+                var filled = _slotActions[i] != null;
+                var bg = _slotBg[i];
+                if (bg == null)
                 {
                     continue;
                 }
 
-                OverlaySkin.ApplyPanel(pair.Value.GetComponent<Image>());
-                var label = pair.Value.GetComponentInChildren<Text>(true);
-                if (label != null)
+                bg.gameObject.SetActive(true);
+                if (filled)
                 {
-                    label.color = OverlaySkin.Text;
+                    OverlaySkin.ApplyButton(bg, accent: true);
+                    bg.color = OverlaySprites.Accent;
+                }
+                else
+                {
+                    OverlaySkin.ApplyPanel(bg);
+                    bg.color = new Color(1f, 1f, 1f, 0.14f);
+                }
+
+                bg.raycastTarget = true;
+                var button = bg.GetComponent<Button>();
+                if (button != null)
+                {
+                    button.interactable = filled;
+                }
+
+                if (_slotLabels[i] != null)
+                {
+                    _slotLabels[i].text = filled ? ShortSlotLabel(_slotActions[i].Label) : string.Empty;
+                    _slotLabels[i].color = OverlaySkin.Text;
                 }
             }
         }
 
+        static string ShortSlotLabel(string label)
+        {
+            if (string.IsNullOrEmpty(label))
+            {
+                return string.Empty;
+            }
+
+            if (label.Length <= 3)
+            {
+                return label;
+            }
+
+            return label.StartsWith("扔") && label.Length > 1 ? label.Substring(1) : label;
+        }
+
+        public void ApplySkin()
+        {
+            RefreshSlots();
+        }
+
         public void Sync()
         {
-            var seen = new HashSet<ulong>();
-            if (_view != null)
+            if (_openFor != 0 && (_view == null || !_view.TryGetChip(_openFor, out var chip) || chip == null))
             {
-                _view.VisitDesktopFriends(chip =>
-                {
-                    seen.Add(chip.SteamId);
-                    if (!_buttons.ContainsKey(chip.SteamId))
-                    {
-                        _buttons[chip.SteamId] = CreateButton(chip.SteamId);
-                    }
-                });
+                HideMenu();
             }
-
-            var stale = new List<ulong>();
-            foreach (var pair in _buttons)
-            {
-                if (!seen.Contains(pair.Key))
-                {
-                    stale.Add(pair.Key);
-                }
-            }
-
-            for (var i = 0; i < stale.Count; i++)
-            {
-                if (_buttons.TryGetValue(stale[i], out var rt) && rt != null)
-                {
-                    Destroy(rt.gameObject);
-                }
-
-                _buttons.Remove(stale[i]);
-                if (_openFor == stale[i])
-                {
-                    HideMenu();
-                }
-            }
-
-            ApplySkin();
         }
 
         public void HideMenu()
         {
             _openFor = 0;
-            _hoverButton = false;
-            _hoverMenu = false;
+            _hoverChip = false;
+            _hoverRing = false;
             _hideAt = -1f;
             _showAt = -1f;
             _pendingId = 0;
-            if (_menu != null)
+            if (_ring != null)
             {
-                _menu.SetActive(false);
+                _ring.SetActive(false);
             }
         }
 
-        void LateUpdate()
+        public void NotifyChipHoverEnter(ulong friendId)
         {
-            if (_view == null)
+            if (friendId == 0)
             {
                 return;
             }
 
-            var scale = _view.Settings != null ? _view.Settings.Scale : 1f;
-            var chipSize = _view.Config != null ? _view.Config.chipSize : 128f;
-            _view.VisitDesktopFriends(chip =>
-            {
-                if (!_buttons.TryGetValue(chip.SteamId, out var button) || button == null)
-                {
-                    return;
-                }
-
-                var pos = chip.FollowPosition;
-                var offset = new Vector2(chipSize * 0.5f * scale + 28f, -10f * scale);
-                if (pos.x + offset.x + 28f > Screen.width)
-                {
-                    offset.x = -offset.x;
-                }
-
-                button.anchoredPosition = pos + offset;
-            });
-
-            if (_menu != null && _menu.activeSelf && _view.TryGetChip(_openFor, out var openChip) && openChip != null)
-            {
-                PlaceMenu(openChip.FollowPosition, chipSize, scale);
-            }
-
-            if (_showAt > 0f && Time.unscaledTime >= _showAt)
-            {
-                var id = _pendingId;
-                _showAt = -1f;
-                _pendingId = 0;
-                if (_hoverButton && id != 0)
-                {
-                    Show(id);
-                }
-            }
-
-            if (_menu != null && _menu.activeSelf && _hideAt > 0f && Time.unscaledTime >= _hideAt)
-            {
-                if (!_hoverButton && !_hoverMenu)
-                {
-                    HideMenu();
-                }
-            }
-        }
-
-        void HoverEnterFromButton(ulong friendId)
-        {
-            _hoverButton = true;
+            _hoverChip = true;
             _hideAt = -1f;
-            if (_menu != null && _menu.activeSelf && _openFor == friendId)
+            if (_ring != null && _ring.activeSelf && _openFor == friendId)
             {
                 _showAt = -1f;
                 _pendingId = 0;
@@ -228,7 +185,7 @@ namespace CrazyChat.Overlay.Interact
             ScheduleShow(friendId);
         }
 
-        void HoverLeaveFromButton(ulong friendId)
+        public void NotifyChipHoverExit(ulong friendId)
         {
             if (_pendingId == friendId)
             {
@@ -241,19 +198,53 @@ namespace CrazyChat.Overlay.Interact
                 return;
             }
 
-            _hoverButton = false;
+            _hoverChip = false;
             ScheduleHide();
         }
 
-        void HoverEnterFromMenu()
+        void LateUpdate()
         {
-            _hoverMenu = true;
+            if (_view == null)
+            {
+                return;
+            }
+
+            if (_ring != null && _ring.activeSelf && _view.TryGetChip(_openFor, out var openChip) && openChip != null)
+            {
+                var scale = _view.Settings != null ? _view.Settings.Scale : 1f;
+                var chipSize = _view.Config != null ? _view.Config.chipSize : 128f;
+                PlaceRing(openChip.FollowPosition, chipSize, scale);
+            }
+
+            if (_showAt > 0f && Time.unscaledTime >= _showAt)
+            {
+                var id = _pendingId;
+                _showAt = -1f;
+                _pendingId = 0;
+                if (_hoverChip && id != 0)
+                {
+                    Show(id);
+                }
+            }
+
+            if (_ring != null && _ring.activeSelf && _hideAt > 0f && Time.unscaledTime >= _hideAt)
+            {
+                if (!_hoverChip && !_hoverRing)
+                {
+                    HideMenu();
+                }
+            }
+        }
+
+        void HoverEnterFromRing()
+        {
+            _hoverRing = true;
             _hideAt = -1f;
         }
 
-        void HoverLeaveFromMenu()
+        void HoverLeaveFromRing()
         {
-            _hoverMenu = false;
+            _hoverRing = false;
             ScheduleHide();
         }
 
@@ -278,21 +269,31 @@ namespace CrazyChat.Overlay.Interact
             _pendingId = 0;
             _view?.HideSettings();
             _openFor = friendId;
-            if (_menu != null)
+            if (_ring != null)
             {
-                _menu.SetActive(true);
-                _menu.transform.SetAsLastSibling();
+                _ring.SetActive(true);
+                _ring.transform.SetAsLastSibling();
             }
         }
 
         void ScheduleHide()
         {
-            if (_hoverButton || _hoverMenu)
+            if (_hoverChip || _hoverRing)
             {
                 return;
             }
 
             _hideAt = Time.unscaledTime + 0.22f;
+        }
+
+        void UseSlot(int index)
+        {
+            if (index < 0 || index >= SlotCount)
+            {
+                return;
+            }
+
+            Use(_slotActions[index]);
         }
 
         void Use(IOverlayInteractAction action)
@@ -321,34 +322,20 @@ namespace CrazyChat.Overlay.Interact
             }
         }
 
-        void PlaceMenu(Vector2 avatarPos, float chipSize, float scale)
+        void PlaceRing(Vector2 avatarPos, float chipSize, float scale)
         {
-            var size = _menuRt.sizeDelta;
-            var offsetX = chipSize * 0.5f * scale + 16f + size.x * 0.5f;
-            if (avatarPos.x + offsetX + size.x * 0.5f > Screen.width - 12f)
+            _ringRt.anchoredPosition = avatarPos;
+            var radius = chipSize * 0.5f * scale + SlotSize * 0.5f + SlotGap;
+            for (var i = 0; i < SlotCount; i++)
             {
-                offsetX = -offsetX;
+                var bg = _slotBg[i];
+                if (bg == null)
+                {
+                    continue;
+                }
+
+                bg.rectTransform.anchoredPosition = SlotDirections[i] * radius;
             }
-
-            var pos = avatarPos + new Vector2(offsetX, 8f);
-            pos.x = Mathf.Clamp(pos.x, 12f + size.x * 0.5f, Screen.width - 12f - size.x * 0.5f);
-            pos.y = Mathf.Clamp(pos.y, 12f + size.y * 0.5f, Screen.height - 12f - size.y * 0.5f);
-            _menuRt.anchoredPosition = pos;
-        }
-
-        RectTransform CreateButton(ulong friendId)
-        {
-            var button = CreateImage("Interact_" + friendId, _root, OverlaySprites.Panel, OverlaySprites.RoundedRect);
-            OverlaySkin.ApplyPanel(button);
-            button.raycastTarget = true;
-            var rt = button.rectTransform;
-            rt.anchorMin = rt.anchorMax = new Vector2(0f, 0f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = new Vector2(48f, 26f);
-            FillLabel(rt, "互动", 13, OverlaySkin.Text);
-            var id = friendId;
-            OverlayHoverRelay.Bind(button.gameObject, () => HoverEnterFromButton(id), () => HoverLeaveFromButton(id));
-            return rt;
         }
 
         static Image CreateImage(string name, Transform parent, Color color, Sprite sprite)
@@ -362,7 +349,7 @@ namespace CrazyChat.Overlay.Interact
             return image;
         }
 
-        static void FillLabel(Transform parent, string text, int size, Color color)
+        static Text FillLabel(Transform parent, string text, int size, Color color)
         {
             var go = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
             go.transform.SetParent(parent, false);
@@ -374,6 +361,7 @@ namespace CrazyChat.Overlay.Interact
             label.text = text;
             label.raycastTarget = false;
             Stretch((RectTransform)go.transform);
+            return label;
         }
 
         static void Stretch(RectTransform rt)

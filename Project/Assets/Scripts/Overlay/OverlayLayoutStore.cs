@@ -69,9 +69,10 @@ namespace CrazyChat.Overlay
 
         public bool TryGetPixel(ulong steamId, out Vector2 pixel)
         {
-            if (_normalized.TryGetValue(steamId, out var n) && Screen.width > 0 && Screen.height > 0)
+            var size = FriendOverlayView.OverlayPixelSize;
+            if (_normalized.TryGetValue(steamId, out var n) && size.x > 0f && size.y > 0f)
             {
-                pixel = new Vector2(n.x * Screen.width, n.y * Screen.height);
+                pixel = new Vector2(n.x * size.x, n.y * size.y);
                 return true;
             }
 
@@ -81,12 +82,13 @@ namespace CrazyChat.Overlay
 
         public void SetPixel(ulong steamId, Vector2 pixel)
         {
-            if (Screen.width <= 0 || Screen.height <= 0)
+            var size = FriendOverlayView.OverlayPixelSize;
+            if (size.x <= 0f || size.y <= 0f)
             {
                 return;
             }
 
-            _normalized[steamId] = new Vector2(pixel.x / Screen.width, pixel.y / Screen.height);
+            _normalized[steamId] = new Vector2(pixel.x / size.x, pixel.y / size.y);
         }
 
         public void Remove(ulong steamId)

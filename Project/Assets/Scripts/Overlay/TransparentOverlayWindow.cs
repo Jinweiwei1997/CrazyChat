@@ -175,6 +175,11 @@ namespace CrazyChat.Overlay
 
             var width = Display.main.systemWidth;
             var height = Display.main.systemHeight;
+            if (width > 0 && height > 0 && (Screen.width != width || Screen.height != height))
+            {
+                Screen.SetResolution(width, height, FullScreenMode.FullScreenWindow);
+            }
+
             SetWindowPos(_hwnd, _alwaysOnTop ? HwndTopmost : HwndNoTopmost, 0, 0, width, height, SwpFrameChanged | SwpShowWindow);
 
             _clickThrough = false;
