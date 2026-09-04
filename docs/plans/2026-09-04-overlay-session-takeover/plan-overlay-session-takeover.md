@@ -42,7 +42,7 @@
 - [x] **Step 1: 扩展测试覆盖心跳所属判定辅助（若有纯函数）或确认 Task1 已覆盖决策**
 - [x] **Step 2: 实现 Guard + 接入 Bootstrap**
 - [x] **Step 3: `dotnet run` 回归 + diff 确认未碰 SteamManager**
-- [ ] **Step 4: Git checkpoint**
+- [x] **Step 4: Git checkpoint**
 
 ### Task 3: 收尾验证与 finalize
 
@@ -50,5 +50,5 @@
 
 **Acceptance:** spec 验收项有证据或明确手工步骤；git finalize（commit 已在 checkpoint，push 按偏好）。
 
-- [ ] **Step 1: 对照 spec 验收清单自检**
-- [ ] **Step 2: git-workflow finalize**
+- [x] **Step 1: 对照 spec 验收清单自检**
+- [x] **Step 2: git-workflow finalize**
