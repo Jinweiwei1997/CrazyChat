@@ -35,6 +35,7 @@ namespace CrazyChat.Overlay
             if (state == UnityEditor.PlayModeStateChange.ExitingPlayMode)
             {
                 EndSteamSession();
+                OverlaySessionGuard.ReleaseLocalMutex();
             }
         }
 #endif
@@ -44,6 +45,12 @@ namespace CrazyChat.Overlay
         {
             if (_instance != null)
             {
+                return;
+            }
+
+            if (!OverlaySessionGuard.TryAcquireLocalMutex())
+            {
+                OverlaySessionGuard.BeginQuit("CrazyChat 已在本机运行");
                 return;
             }
 
@@ -69,6 +76,9 @@ namespace CrazyChat.Overlay
             ConfigureSceneCamera();
             EnsureSteamManager();
             _steamSessionOpen = SteamManager.Initialized;
+
+            var session = gameObject.AddComponent<OverlaySessionGuard>();
+            session.StartLeaseIfPossible();
 
             var friends = gameObject.AddComponent<PlayingFriendsService>();
             friends.BindConfig(OverlayConfig.LoadOrDefault());
@@ -114,6 +124,7 @@ namespace CrazyChat.Overlay
         void OnApplicationQuit()
         {
             EndSteamSession();
+            OverlaySessionGuard.ReleaseLocalMutex();
         }
 
         static void EndSteamSession()
