@@ -23,6 +23,7 @@ namespace CrazyChat.Overlay
         OverlayInteractUi _interactUi;
         OverlayInteractFx _interactFx;
         OverlayInputPopFx _inputPop;
+        OverlayAvatarPresence _avatarPresence;
         RectTransform _layer;
         RectTransform _chromeLayer;
         RectTransform _windowLayer;
@@ -127,6 +128,9 @@ namespace CrazyChat.Overlay
             _input.Confirm += OnConfirmTarget;
             _input.Cancel += StopTargeting;
 
+            _avatarPresence = gameObject.AddComponent<OverlayAvatarPresence>();
+            _avatarPresence.Bind(this, _interact, _input, _settings);
+
             _service.Changed += Rebuild;
             Rebuild();
             ApplyUserSettings();
@@ -155,6 +159,11 @@ namespace CrazyChat.Overlay
             {
                 pair.Value?.ApplySkin();
             }
+        }
+
+        public void NotifyAvatarPresenceChanged()
+        {
+            _avatarPresence?.OnLocalAvatarChanged();
         }
 
         public void NotifyMoved(FriendAvatarChip chip)
@@ -304,6 +313,7 @@ namespace CrazyChat.Overlay
                 _interact.Received -= OnInteractReceived;
             }
 
+            _avatarPresence?.Unbind();
             _stats?.SaveIfDirty();
         }
 
@@ -332,7 +342,11 @@ namespace CrazyChat.Overlay
 
             if (OverlayTapSync.TryDecode(actionId, out var effect, out var vk))
             {
-                fromChip.PlayReaction(effect);
+                if (!fromChip.PresenceMode)
+                {
+                    fromChip.PlayReaction(effect);
+                }
+
                 PlayInputIcon(fromChip, vk);
                 return;
             }
@@ -506,7 +520,10 @@ namespace CrazyChat.Overlay
             if (LocalChip != null)
             {
                 LocalChip.SetTapCount(_stats.Count);
-                LocalChip.PlayReaction();
+                if (!LocalChip.PresenceMode)
+                {
+                    LocalChip.PlayReaction();
+                }
             }
 
             var vk = _pendingVk;
@@ -544,6 +561,11 @@ namespace CrazyChat.Overlay
         void BroadcastTap(int vk)
         {
             if (_interact == null || _settings == null || _service == null)
+            {
+                return;
+            }
+
+            if (_avatarPresence != null && _avatarPresence.LocalEnabled)
             {
                 return;
             }
@@ -716,6 +738,7 @@ namespace CrazyChat.Overlay
                     }
 
                     chip.SetLayoutPosition(Clamp(localPos));
+                    _avatarPresence?.RefreshChip(chip);
                     continue;
                 }
 
@@ -730,6 +753,9 @@ namespace CrazyChat.Overlay
                     {
                         chip.SetLayoutPosition(Clamp(pos));
                     }
+
+                    _avatarPresence?.OnDesktopFriendAdded(friend.SteamId);
+                    _avatarPresence?.RefreshChip(chip);
                 }
                 else
                 {

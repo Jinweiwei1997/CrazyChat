@@ -26,6 +26,7 @@ namespace CrazyChat.Overlay
         public OverlayClickEffect ClickEffect { get; private set; } = OverlayClickEffect.Elastic;
         public bool ShowInputIcons { get; private set; }
         public string UiSkin { get; private set; } = OverlaySkin.Minimal;
+        public int AvatarVersion { get; private set; }
 
         public void Load()
         {
@@ -58,6 +59,12 @@ namespace CrazyChat.Overlay
                     : OverlayClickEffect.Elastic;
                 ShowInputIcons = data.showInputIcons;
                 UiSkin = data.uiSkin == OverlaySkin.Basic ? OverlaySkin.Basic : OverlaySkin.Minimal;
+                AvatarVersion = data.avatarVersion;
+                if (!OverlayAvatarRules.IsEnabled(AvatarVersion, OverlayAvatarCodec.LocalPathA,
+                        OverlayAvatarCodec.LocalPathB))
+                {
+                    AvatarVersion = 0;
+                }
             }
             catch (Exception e)
             {
@@ -76,7 +83,8 @@ namespace CrazyChat.Overlay
                 autoStart = AutoStart,
                 clickEffect = (int)ClickEffect,
                 showInputIcons = ShowInputIcons,
-                uiSkin = UiSkin
+                uiSkin = UiSkin,
+                avatarVersion = AvatarVersion
             }, true);
             WriteLocal(json);
             WriteSteamCloud(json);
@@ -106,6 +114,42 @@ namespace CrazyChat.Overlay
         }
 
         public void SetShowInputIcons(bool value) => ShowInputIcons = value;
+
+        public bool AvatarEnabled =>
+            OverlayAvatarRules.IsEnabled(AvatarVersion, OverlayAvatarCodec.LocalPathA, OverlayAvatarCodec.LocalPathB);
+
+        public bool TrySetAvatarSlot(bool slotA, byte[] sourceImage)
+        {
+            var png = OverlayAvatarCodec.ProcessToPng(sourceImage);
+            if (png == null)
+            {
+                return false;
+            }
+
+            var path = slotA ? OverlayAvatarCodec.LocalPathA : OverlayAvatarCodec.LocalPathB;
+            if (!OverlayAvatarCodec.TryWrite(path, png))
+            {
+                return false;
+            }
+
+            if (OverlayAvatarRules.FilesReady(OverlayAvatarCodec.LocalPathA, OverlayAvatarCodec.LocalPathB))
+            {
+                AvatarVersion = Mathf.Max(1, AvatarVersion + 1);
+            }
+            else
+            {
+                AvatarVersion = 0;
+            }
+
+            return true;
+        }
+
+        public void ClearAvatarPresence()
+        {
+            OverlayAvatarCodec.DeleteQuiet(OverlayAvatarCodec.LocalPathA);
+            OverlayAvatarCodec.DeleteQuiet(OverlayAvatarCodec.LocalPathB);
+            AvatarVersion = 0;
+        }
 
         public void CycleUiSkin()
         {
@@ -200,6 +244,7 @@ namespace CrazyChat.Overlay
             public int clickEffect;
             public bool showInputIcons;
             public string uiSkin = OverlaySkin.Minimal;
+            public int avatarVersion;
         }
     }
 

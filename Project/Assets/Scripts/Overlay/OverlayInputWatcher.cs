@@ -11,6 +11,7 @@ namespace CrazyChat.Overlay
     {
         public event Action Tapped;
         public event Action<int> InputDown;
+        public event Action<bool> PresenceChanged;
         public event Action DoubleControl;
         public event Action NavigateLeft;
         public event Action NavigateRight;
@@ -19,6 +20,9 @@ namespace CrazyChat.Overlay
 
         readonly bool[] _down = new bool[256];
         float _lastCtrl;
+        bool _anyDown;
+
+        public bool IsAnyDown => _anyDown;
 
         void Update()
         {
@@ -37,6 +41,8 @@ namespace CrazyChat.Overlay
             }
 
             PollUnityCommands();
+            var held = Input.anyKey || Input.GetMouseButton(0) || Input.GetMouseButton(1) || Input.GetMouseButton(2);
+            SetAnyDown(held);
 #endif
             for (var i = 0; i < taps; i++)
             {
@@ -69,7 +75,29 @@ namespace CrazyChat.Overlay
                 _down[vk] = pressed;
             }
 
+            var any = false;
+            for (var vk = 1; vk < 256; vk++)
+            {
+                if (_down[vk])
+                {
+                    any = true;
+                    break;
+                }
+            }
+
+            SetAnyDown(any);
             return taps;
+        }
+
+        void SetAnyDown(bool any)
+        {
+            if (any == _anyDown)
+            {
+                return;
+            }
+
+            _anyDown = any;
+            PresenceChanged?.Invoke(any);
         }
 
         void OnCommandDown(int vk)

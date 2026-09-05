@@ -27,6 +27,7 @@ namespace CrazyChat.Overlay
         Text _clickEffectText;
         Text _inputIconsText;
         Text _skinText;
+        Text _avatarStatusText;
         Text _titleText;
         Image _buttonImage;
         Image _cardImage;
@@ -78,9 +79,9 @@ namespace CrazyChat.Overlay
             _cardRt.anchorMin = new Vector2(0f, 0f);
             _cardRt.anchorMax = new Vector2(0f, 0f);
             _cardRt.pivot = new Vector2(0.5f, 0.5f);
-            _cardRt.sizeDelta = new Vector2(280f, 456f);
+            _cardRt.sizeDelta = new Vector2(280f, 520f);
 
-            _titleText = PlaceLabel(_cardRt, "设置", 20, OverlaySkin.Text, new Vector2(0f, 186f), new Vector2(180f, 28f));
+            _titleText = PlaceLabel(_cardRt, "设置", 20, OverlaySkin.Text, new Vector2(0f, 218f), new Vector2(180f, 28f));
 
             _closeImage = CreateImage("Close", _cardRt, OverlaySprites.Button, OverlaySprites.RoundedRect);
             OverlaySkin.ApplyButton(_closeImage);
@@ -94,8 +95,8 @@ namespace CrazyChat.Overlay
             FillLabel(closeRt, "关闭", 13, OverlaySkin.Text);
             close.gameObject.AddComponent<Button>().onClick.AddListener(Hide);
 
-            _gameTabImage = AddTabButton(_cardRt, "游戏", new Vector2(-58f, 146f), () => ShowTab(SettingsTab.Game));
-            _systemTabImage = AddTabButton(_cardRt, "系统", new Vector2(58f, 146f), () => ShowTab(SettingsTab.System));
+            _gameTabImage = AddTabButton(_cardRt, "游戏", new Vector2(-58f, 178f), () => ShowTab(SettingsTab.Game));
+            _systemTabImage = AddTabButton(_cardRt, "系统", new Vector2(58f, 178f), () => ShowTab(SettingsTab.System));
 
             _gamePage = CreatePage(_cardRt, "GamePage");
             _systemPage = CreatePage(_cardRt, "SystemPage");
@@ -171,7 +172,7 @@ namespace CrazyChat.Overlay
 
         void BuildGamePage(Transform parent)
         {
-            var y = 104f;
+            var y = 136f;
             _scaleText = AddScaleRow(parent, ref y);
             _dragText = AddToggleRow(parent, "禁止拖动", ref y, () =>
             {
@@ -203,12 +204,51 @@ namespace CrazyChat.Overlay
                 _view.ApplyUserSettings();
                 RefreshLabels();
             });
+            _avatarStatusText = PlaceLabel(parent, "形象 A/B", 13, OverlaySkin.TextMuted, new Vector2(0f, y),
+                new Vector2(240f, 20f));
+            y -= 28f;
+            AddActionButton(parent, "上传闲置图 A", ref y, () => PickAvatar(true));
+            AddActionButton(parent, "上传活动图 B", ref y, () => PickAvatar(false));
+            AddActionButton(parent, "清除形象图", ref y, () =>
+            {
+                _view.Settings.ClearAvatarPresence();
+                _view.ApplyUserSettings();
+                _view.NotifyAvatarPresenceChanged();
+                RefreshLabels();
+            });
             AddActionButton(parent, "复位头像位置", ref y, () => _view.ResetVisibleToDefault());
             AddActionButton(parent, "复位缩放", ref y, () =>
             {
                 _view.ResetScale();
                 RefreshLabels();
             });
+        }
+
+        void PickAvatar(bool slotA)
+        {
+            var path = OverlayFileDialog.OpenImage();
+            if (string.IsNullOrEmpty(path))
+            {
+                return;
+            }
+
+            try
+            {
+                var bytes = System.IO.File.ReadAllBytes(path);
+                if (!_view.Settings.TrySetAvatarSlot(slotA, bytes))
+                {
+                    Debug.LogWarning("[Overlay] 形象图无效或过大，未能保存。");
+                    return;
+                }
+
+                _view.ApplyUserSettings();
+                _view.NotifyAvatarPresenceChanged();
+                RefreshLabels();
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[Overlay] 读取形象图失败: " + e.Message);
+            }
         }
 
         void BuildSystemPage(Transform parent)
@@ -506,6 +546,17 @@ namespace CrazyChat.Overlay
             if (_skinText != null)
             {
                 _skinText.text = OverlaySkin.Label;
+            }
+
+            if (_avatarStatusText != null)
+            {
+                var ready = settings.AvatarEnabled;
+                var hasA = System.IO.File.Exists(OverlayAvatarCodec.LocalPathA);
+                var hasB = System.IO.File.Exists(OverlayAvatarCodec.LocalPathB);
+                _avatarStatusText.text = ready
+                    ? "形象已启用 v" + settings.AvatarVersion
+                    : "形象未启用（A:" + (hasA ? "有" : "无") + " B:" + (hasB ? "有" : "无") + "）";
+                _avatarStatusText.color = OverlaySkin.TextMuted;
             }
         }
 

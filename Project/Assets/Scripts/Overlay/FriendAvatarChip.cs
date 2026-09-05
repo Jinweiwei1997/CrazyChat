@@ -23,6 +23,13 @@ namespace CrazyChat.Overlay
         RectTransform _rect;
         RectTransform _body;
         Image _avatar;
+        Sprite _runtimeSprite;
+        Sprite _presenceA;
+        Sprite _presenceB;
+        bool _presenceOwnedA;
+        bool _presenceOwnedB;
+        bool _presenceActive;
+        bool _presenceMode;
         Image _ring;
         Image _dash;
         GameObject _nameRoot;
@@ -37,7 +44,6 @@ namespace CrazyChat.Overlay
         string _bubbleContent = "...";
         int _unread;
         bool _selected;
-        Sprite _runtimeSprite;
         Vector2 _layoutPos;
         bool _dragging;
         float _reactionUntil;
@@ -276,6 +282,118 @@ namespace CrazyChat.Overlay
             RefreshCount();
             RefreshChatChrome();
             ApplySkin();
+            RefreshPresenceVisual();
+        }
+
+        public bool PresenceMode => _presenceMode;
+
+        public void SetPresenceSprites(Sprite idle, Sprite active, bool takeOwnership = false)
+        {
+            ReleaseOwnedPresence();
+            _presenceA = idle;
+            _presenceB = active;
+            _presenceOwnedA = takeOwnership && idle != null;
+            _presenceOwnedB = takeOwnership && active != null;
+            _presenceMode = _presenceA != null && _presenceB != null;
+            RefreshPresenceVisual();
+        }
+
+        public void ClearPresenceSprites()
+        {
+            ReleaseOwnedPresence();
+            _presenceA = null;
+            _presenceB = null;
+            _presenceMode = false;
+            _presenceActive = false;
+            ApplySteamAvatarOnly();
+        }
+
+        public void SetPresenceActive(bool active)
+        {
+            _presenceActive = active;
+            if (_presenceMode)
+            {
+                RefreshPresenceVisual();
+            }
+        }
+
+        void RefreshPresenceVisual()
+        {
+            if (!_presenceMode || _avatar == null)
+            {
+                return;
+            }
+
+            var sprite = _presenceActive ? _presenceB : _presenceA;
+            if (sprite == null)
+            {
+                return;
+            }
+
+            _avatar.sprite = sprite;
+            _avatar.color = Color.white;
+        }
+
+        void ApplySteamAvatarOnly()
+        {
+            if (_friend == null || _avatar == null)
+            {
+                return;
+            }
+
+            if (_runtimeSprite != null)
+            {
+                Destroy(_runtimeSprite);
+                _runtimeSprite = null;
+            }
+
+            if (_friend.Avatar != null)
+            {
+                _runtimeSprite = Sprite.Create(
+                    _friend.Avatar,
+                    new Rect(0, 0, _friend.Avatar.width, _friend.Avatar.height),
+                    new Vector2(0.5f, 0.5f),
+                    100f,
+                    0,
+                    SpriteMeshType.FullRect);
+                _avatar.sprite = _runtimeSprite;
+                _avatar.color = Color.white;
+            }
+            else
+            {
+                _avatar.sprite = OverlaySprites.RoundedSquare;
+                _avatar.color = _friend.IsLocal
+                    ? new Color(0.35f, 0.62f, 0.95f)
+                    : new Color(0.55f, 0.58f, 0.65f);
+            }
+        }
+
+        void ReleaseOwnedPresence()
+        {
+            if (_presenceOwnedA && _presenceA != null)
+            {
+                if (_presenceA.texture != null)
+                {
+                    Destroy(_presenceA.texture);
+                }
+
+                Destroy(_presenceA);
+            }
+
+            if (_presenceOwnedB && _presenceB != null)
+            {
+                if (_presenceB.texture != null)
+                {
+                    Destroy(_presenceB.texture);
+                }
+
+                Destroy(_presenceB);
+            }
+
+            _presenceOwnedA = false;
+            _presenceOwnedB = false;
+            _presenceA = null;
+            _presenceB = null;
         }
 
         public void ApplySkin()
@@ -385,6 +503,11 @@ namespace CrazyChat.Overlay
 
         public void PlayReaction()
         {
+            if (_presenceMode)
+            {
+                return;
+            }
+
             var effect = _view != null && _view.Settings != null
                 ? _view.Settings.ClickEffect
                 : OverlayClickEffect.Elastic;
@@ -393,6 +516,11 @@ namespace CrazyChat.Overlay
 
         public void PlayReaction(OverlayClickEffect effect)
         {
+            if (_presenceMode)
+            {
+                return;
+            }
+
             _playedEffect = effect;
             if (effect == OverlayClickEffect.Flip)
             {
