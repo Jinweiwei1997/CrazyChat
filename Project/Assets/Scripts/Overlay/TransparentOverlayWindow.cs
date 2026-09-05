@@ -19,6 +19,7 @@ namespace CrazyChat.Overlay
         float _nextTopmostTime;
         bool _applied;
         bool _alwaysOnTop = true;
+        bool _suspendTopmost;
 
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         const int GwlStyle = -16;
@@ -104,12 +105,43 @@ namespace CrazyChat.Overlay
         {
             _alwaysOnTop = enabled;
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-            if (_applied)
+            if (_applied && !_suspendTopmost)
             {
                 ApplyTopmost();
             }
 #endif
         }
+
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+        public IntPtr WindowHandle => _hwnd;
+
+        /// <summary>
+        /// Temporarily drop TOPMOST so Win32 file dialogs are visible and usable.
+        /// </summary>
+        public void SuspendTopmostForDialog(bool suspend)
+        {
+            _suspendTopmost = suspend;
+            if (!_applied || _hwnd == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (suspend)
+            {
+                SetWindowPos(_hwnd, HwndNoTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
+            }
+            else
+            {
+                ApplyTopmost();
+            }
+        }
+#else
+        public IntPtr WindowHandle => IntPtr.Zero;
+
+        public void SuspendTopmostForDialog(bool suspend)
+        {
+        }
+#endif
 
         IEnumerator Start()
         {
@@ -137,7 +169,7 @@ namespace CrazyChat.Overlay
             var overUi = _raycasterHost != null && _raycasterHost.IsPointerOverInteractive();
             SetClickThrough(!overUi);
 
-            if (_alwaysOnTop && Time.unscaledTime >= _nextTopmostTime)
+            if (_alwaysOnTop && !_suspendTopmost && Time.unscaledTime >= _nextTopmostTime)
             {
                 ApplyTopmost();
                 _nextTopmostTime = Time.unscaledTime + topmostRefreshSeconds;
