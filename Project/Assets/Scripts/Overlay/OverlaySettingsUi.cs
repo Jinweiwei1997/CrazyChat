@@ -28,6 +28,11 @@ namespace CrazyChat.Overlay
         Text _inputIconsText;
         Text _skinText;
         Text _avatarStatusText;
+        Text _avatarSetupStatus;
+        Image _slotAImage;
+        Image _slotBImage;
+        GameObject _avatarSetup;
+        OverlayAvatarCropUi _cropUi;
         Text _titleText;
         Image _buttonImage;
         Image _cardImage;
@@ -204,18 +209,10 @@ namespace CrazyChat.Overlay
                 _view.ApplyUserSettings();
                 RefreshLabels();
             });
-            _avatarStatusText = PlaceLabel(parent, "形象 A/B", 13, OverlaySkin.TextMuted, new Vector2(0f, y),
+            _avatarStatusText = PlaceLabel(parent, "动态形象", 13, OverlaySkin.TextMuted, new Vector2(0f, y),
                 new Vector2(240f, 20f));
             y -= 28f;
-            AddActionButton(parent, "上传闲置图 A", ref y, () => PickAvatar(true));
-            AddActionButton(parent, "上传活动图 B", ref y, () => PickAvatar(false));
-            AddActionButton(parent, "清除形象图", ref y, () =>
-            {
-                _view.Settings.ClearAvatarPresence();
-                _view.ApplyUserSettings();
-                _view.NotifyAvatarPresenceChanged();
-                RefreshLabels();
-            });
+            AddActionButton(parent, "设置动态图", ref y, OpenAvatarSetup);
             AddActionButton(parent, "复位头像位置", ref y, () => _view.ResetVisibleToDefault());
             AddActionButton(parent, "复位缩放", ref y, () =>
             {
@@ -224,7 +221,118 @@ namespace CrazyChat.Overlay
             });
         }
 
-        void PickAvatar(bool slotA)
+        void EnsureAvatarSetup()
+        {
+            if (_avatarSetup != null)
+            {
+                return;
+            }
+
+            var modal = _panel != null ? _panel.transform.parent : transform;
+            _cropUi = OverlayAvatarCropUi.Create(modal);
+
+            _avatarSetup = new GameObject("AvatarSetup", typeof(RectTransform));
+            _avatarSetup.transform.SetParent(modal, false);
+            Stretch((RectTransform)_avatarSetup.transform);
+            _avatarSetup.SetActive(false);
+
+            var dim = CreateImage("Dim", _avatarSetup.transform, new Color(0f, 0f, 0f, 0.35f), OverlaySprites.RoundedRect);
+            dim.raycastTarget = true;
+            Stretch(dim.rectTransform);
+
+            var card = CreateImage("Card", _avatarSetup.transform, OverlaySprites.Panel, OverlaySprites.RoundedRect);
+            OverlaySkin.ApplyPanel(card);
+            card.raycastTarget = true;
+            var cardRt = card.rectTransform;
+            cardRt.anchorMin = cardRt.anchorMax = new Vector2(0.5f, 0.5f);
+            cardRt.sizeDelta = new Vector2(300f, 260f);
+
+            PlaceLabel(cardRt, "设置动态图", 18, OverlaySkin.Text, new Vector2(0f, 100f), new Vector2(200f, 28f));
+            _avatarSetupStatus = PlaceLabel(cardRt, "", 12, OverlaySkin.TextMuted, new Vector2(0f, 72f),
+                new Vector2(260f, 20f));
+
+            _slotAImage = CreateSlot(cardRt, new Vector2(-56f, 0f), true);
+            _slotBImage = CreateSlot(cardRt, new Vector2(56f, 0f), false);
+
+            AddSetupBtn(cardRt, "清除", new Vector2(-50f, -90f), () =>
+            {
+                _view.Settings.ClearAvatarPresence();
+                _view.ApplyUserSettings();
+                _view.NotifyAvatarPresenceChanged();
+                RefreshAvatarSlots();
+                RefreshLabels();
+            });
+            AddSetupBtn(cardRt, "关闭", new Vector2(50f, -90f), () => _avatarSetup.SetActive(false));
+        }
+
+        Image CreateSlot(Transform parent, Vector2 pos, bool slotA)
+        {
+            var bg = CreateImage(slotA ? "SlotA" : "SlotB", parent, OverlaySprites.Button, OverlaySprites.RoundedSquare);
+            OverlaySkin.ApplyButton(bg);
+            bg.raycastTarget = true;
+            var rt = bg.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = new Vector2(88f, 88f);
+
+            var preview = CreateImage("Preview", rt, Color.white, OverlaySprites.RoundedSquare);
+            preview.preserveAspect = true;
+            preview.raycastTarget = false;
+            var pRt = preview.rectTransform;
+            Stretch(pRt);
+            pRt.offsetMin = new Vector2(6f, 6f);
+            pRt.offsetMax = new Vector2(-6f, -6f);
+
+            var tipBg = CreateImage("TipBg", rt, new Color(0f, 0f, 0f, 0.65f), OverlaySprites.RoundedRect);
+            tipBg.raycastTarget = false;
+            var tipBgRt = tipBg.rectTransform;
+            tipBgRt.anchorMin = tipBgRt.anchorMax = new Vector2(0.5f, 0.5f);
+            tipBgRt.sizeDelta = new Vector2(78f, 36f);
+            tipBg.gameObject.SetActive(false);
+
+            var tip = PlaceLabel(rt, slotA ? "设置闲置图" : "设置动态图", 11, Color.white,
+                new Vector2(0f, 0f), new Vector2(76f, 34f));
+            tip.gameObject.SetActive(false);
+
+            OverlayHoverRelay.Bind(bg.gameObject,
+                () =>
+                {
+                    tipBg.gameObject.SetActive(true);
+                    tip.gameObject.SetActive(true);
+                    tipBg.transform.SetAsLastSibling();
+                    tip.transform.SetAsLastSibling();
+                },
+                () =>
+                {
+                    tipBg.gameObject.SetActive(false);
+                    tip.gameObject.SetActive(false);
+                });
+            bg.gameObject.AddComponent<Button>().onClick.AddListener(() => BeginPickSlot(slotA));
+            return preview;
+        }
+
+        void AddSetupBtn(Transform parent, string title, Vector2 pos, UnityEngine.Events.UnityAction click)
+        {
+            var img = CreateImage(title, parent, OverlaySprites.Button, OverlaySprites.RoundedRect);
+            OverlaySkin.ApplyButton(img);
+            img.raycastTarget = true;
+            var rt = img.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = new Vector2(72f, 28f);
+            FillLabel(rt, title, 13, OverlaySkin.Text);
+            img.gameObject.AddComponent<Button>().onClick.AddListener(click);
+        }
+
+        void OpenAvatarSetup()
+        {
+            EnsureAvatarSetup();
+            RefreshAvatarSlots();
+            _avatarSetup.SetActive(true);
+            _avatarSetup.transform.SetAsLastSibling();
+        }
+
+        void BeginPickSlot(bool slotA)
         {
             var path = OverlayFileDialog.OpenImage();
             if (string.IsNullOrEmpty(path))
@@ -232,22 +340,92 @@ namespace CrazyChat.Overlay
                 return;
             }
 
+            byte[] bytes;
             try
             {
-                var bytes = System.IO.File.ReadAllBytes(path);
-                if (!_view.Settings.TrySetAvatarSlot(slotA, bytes))
+                bytes = System.IO.File.ReadAllBytes(path);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[Overlay] 读取形象图失败: " + e.Message);
+                return;
+            }
+
+            EnsureAvatarSetup();
+            _cropUi.Open(bytes, png =>
+            {
+                if (!_view.Settings.TrySetAvatarSlot(slotA, png))
                 {
-                    Debug.LogWarning("[Overlay] 形象图无效或过大，未能保存。");
+                    Debug.LogWarning("[Overlay] 形象图保存失败。");
                     return;
                 }
 
                 _view.ApplyUserSettings();
                 _view.NotifyAvatarPresenceChanged();
+                RefreshAvatarSlots();
                 RefreshLabels();
-            }
-            catch (System.Exception e)
+            });
+        }
+
+        void RefreshAvatarSlots()
+        {
+            if (_slotAImage == null || _slotBImage == null)
             {
-                Debug.LogWarning("[Overlay] 读取形象图失败: " + e.Message);
+                return;
+            }
+
+            SetSlotPreview(_slotAImage, OverlayAvatarCodec.LocalPathA);
+            SetSlotPreview(_slotBImage, OverlayAvatarCodec.LocalPathB);
+            if (_avatarSetupStatus != null && _view != null && _view.Settings != null)
+            {
+                var s = _view.Settings;
+                _avatarSetupStatus.text = s.AvatarEnabled
+                    ? "已启用（闲置 + 动态） v" + s.AvatarVersion
+                    : "需设置两张图后才会启用";
+                _avatarSetupStatus.color = OverlaySkin.TextMuted;
+            }
+        }
+
+        static void SetSlotPreview(Image target, string path)
+        {
+            if (target.sprite != null && target.sprite.texture != null &&
+                target.sprite != OverlaySprites.RoundedSquare)
+            {
+                var tex = target.sprite.texture;
+                Destroy(target.sprite);
+                Destroy(tex);
+                target.sprite = OverlaySprites.RoundedSquare;
+            }
+
+            if (!System.IO.File.Exists(path))
+            {
+                target.sprite = OverlaySprites.RoundedSquare;
+                target.color = new Color(1f, 1f, 1f, 0.25f);
+                return;
+            }
+
+            var sp = OverlayAvatarCodec.LoadSprite(path);
+            if (sp == null)
+            {
+                target.sprite = OverlaySprites.RoundedSquare;
+                target.color = new Color(1f, 1f, 1f, 0.25f);
+                return;
+            }
+
+            target.sprite = sp;
+            target.color = Color.white;
+        }
+
+        void CloseAvatarOverlays()
+        {
+            if (_cropUi != null)
+            {
+                _cropUi.ForceClose();
+            }
+
+            if (_avatarSetup != null)
+            {
+                _avatarSetup.SetActive(false);
             }
         }
 
@@ -477,6 +655,7 @@ namespace CrazyChat.Overlay
             _hoverCard = false;
             _hideAt = -1f;
             _showAt = -1f;
+            CloseAvatarOverlays();
             if (_panel != null)
             {
                 _panel.SetActive(false);
@@ -555,7 +734,7 @@ namespace CrazyChat.Overlay
                 var hasB = System.IO.File.Exists(OverlayAvatarCodec.LocalPathB);
                 _avatarStatusText.text = ready
                     ? "形象已启用 v" + settings.AvatarVersion
-                    : "形象未启用（A:" + (hasA ? "有" : "无") + " B:" + (hasB ? "有" : "无") + "）";
+                    : "形象未启用（闲置:" + (hasA ? "有" : "无") + " 动态:" + (hasB ? "有" : "无") + "）";
                 _avatarStatusText.color = OverlaySkin.TextMuted;
             }
         }
