@@ -25,7 +25,6 @@ namespace CrazyChat.Overlay
         public bool AutoStart { get; private set; }
         public OverlayClickEffect ClickEffect { get; private set; } = OverlayClickEffect.Elastic;
         public bool ShowInputIcons { get; private set; }
-        public string UiSkin { get; private set; } = OverlaySkin.Minimal;
         public int AvatarVersion { get; private set; }
 
         public void Load()
@@ -58,7 +57,6 @@ namespace CrazyChat.Overlay
                     ? OverlayClickEffect.Flip
                     : OverlayClickEffect.Elastic;
                 ShowInputIcons = data.showInputIcons;
-                UiSkin = data.uiSkin == OverlaySkin.Basic ? OverlaySkin.Basic : OverlaySkin.Minimal;
                 AvatarVersion = data.avatarVersion;
                 if (!OverlayAvatarRules.IsEnabled(AvatarVersion, OverlayAvatarCodec.LocalPathA,
                         OverlayAvatarCodec.LocalPathB))
@@ -83,7 +81,6 @@ namespace CrazyChat.Overlay
                 autoStart = AutoStart,
                 clickEffect = (int)ClickEffect,
                 showInputIcons = ShowInputIcons,
-                uiSkin = UiSkin,
                 avatarVersion = AvatarVersion
             }, true);
             WriteLocal(json);
@@ -149,11 +146,6 @@ namespace CrazyChat.Overlay
             OverlayAvatarCodec.DeleteQuiet(OverlayAvatarCodec.LocalPathA);
             OverlayAvatarCodec.DeleteQuiet(OverlayAvatarCodec.LocalPathB);
             AvatarVersion = 0;
-        }
-
-        public void CycleUiSkin()
-        {
-            UiSkin = UiSkin == OverlaySkin.Basic ? OverlaySkin.Minimal : OverlaySkin.Basic;
         }
 
         public void SetAutoStart(bool value)
@@ -243,7 +235,6 @@ namespace CrazyChat.Overlay
             public bool autoStart;
             public int clickEffect;
             public bool showInputIcons;
-            public string uiSkin = OverlaySkin.Minimal;
             public int avatarVersion;
         }
     }

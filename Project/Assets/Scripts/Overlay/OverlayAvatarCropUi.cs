@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -14,7 +13,6 @@ namespace CrazyChat.Overlay
         const float MinZoom = 1f;
         const float MaxZoom = 4f;
 
-        GameObject _root;
         RectTransform _imageRt;
         RawImage _image;
         Text _hint;
@@ -69,7 +67,6 @@ namespace CrazyChat.Overlay
 
         void Build()
         {
-            _root = gameObject;
             var dim = CreateImage("Dim", transform, new Color(0f, 0f, 0f, 0.55f), OverlaySprites.RoundedRect);
             dim.raycastTarget = true;
             Stretch(dim.rectTransform);
@@ -208,7 +205,6 @@ namespace CrazyChat.Overlay
             var fit = _cropPx / minEdge;
             var disp = fit * _zoom;
             var half = crop * 0.5f;
-            // Crop center in image local space maps to texture:
             var texCenterX = _source.width * 0.5f - _pan.x / disp;
             var texCenterY = _source.height * 0.5f - _pan.y / disp;
             var halfTex = half / disp;

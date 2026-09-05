@@ -101,7 +101,6 @@ namespace CrazyChat.Overlay
 
             _settings = new OverlayUserSettings();
             _settings.Load();
-            OverlaySkin.Set(_settings.UiSkin);
             _settingsUi = OverlaySettingsUi.Create(_chromeLayer, _modalLayer, this);
 
             _chatStore = new OverlayChatStore();
@@ -144,7 +143,6 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            OverlaySkin.Set(_settings.UiSkin);
             _settings.Save();
             var window = GetComponent<TransparentOverlayWindow>();
             if (window != null)
@@ -152,7 +150,7 @@ namespace CrazyChat.Overlay
                 window.SetAlwaysOnTop(_settings.AlwaysOnTop);
             }
 
-            _settingsUi?.ApplySkin();
+            // _settingsUi?.ApplySkin();
             _chatUi?.ApplySkin();
             _interactUi?.ApplySkin();
             foreach (var pair in _chips)
