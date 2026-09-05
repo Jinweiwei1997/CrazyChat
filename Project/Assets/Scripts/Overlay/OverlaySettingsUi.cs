@@ -328,9 +328,14 @@ namespace CrazyChat.Overlay
         {
             EnsureAvatarSetup();
             RefreshAvatarSlots();
+            _hideAt = -1f;
             _avatarSetup.SetActive(true);
             _avatarSetup.transform.SetAsLastSibling();
         }
+
+        bool AvatarOverlayOpen =>
+            (_avatarSetup != null && _avatarSetup.activeSelf) ||
+            (_cropUi != null && _cropUi.gameObject.activeSelf);
 
         void BeginPickSlot(bool slotA)
         {
@@ -352,6 +357,7 @@ namespace CrazyChat.Overlay
             }
 
             EnsureAvatarSetup();
+            _hideAt = -1f;
             _cropUi.Open(bytes, png =>
             {
                 if (!_view.Settings.TrySetAvatarSlot(slotA, png))
@@ -664,7 +670,7 @@ namespace CrazyChat.Overlay
 
         void ScheduleHide()
         {
-            if (_hoverButton || _hoverCard)
+            if (_hoverButton || _hoverCard || AvatarOverlayOpen)
             {
                 return;
             }
@@ -685,7 +691,7 @@ namespace CrazyChat.Overlay
 
             if (_panel != null && _panel.activeSelf && _hideAt > 0f && Time.unscaledTime >= _hideAt)
             {
-                if (!_hoverButton && !_hoverCard)
+                if (!_hoverButton && !_hoverCard && !AvatarOverlayOpen)
                 {
                     Hide();
                 }
