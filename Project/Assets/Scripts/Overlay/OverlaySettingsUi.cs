@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -35,6 +36,7 @@ namespace CrazyChat.Overlay
         Image _slotBImage;
         GameObject _avatarSetup;
         OverlayAvatarCropUi _cropUi;
+        Coroutine _pickRoutine;
         [SerializeField] Text _titleText;
         [SerializeField] Image _buttonImage;
         [SerializeField] Image _cardImage;
@@ -294,10 +296,6 @@ namespace CrazyChat.Overlay
             _panel.transform.SetParent(modal != null ? modal : transform, false);
             Stretch((RectTransform)_panel.transform);
             _panel.SetActive(false);
-
-            var dim = CreateImage("Dim", _panel.transform, new Color(0f, 0f, 0f, 0.22f), OverlaySprites.RoundedRect);
-            dim.raycastTarget = false;
-            Stretch(dim.rectTransform);
 
             _cardImage = CreateImage("Background", _panel.transform, OverlaySprites.Panel, OverlaySprites.RoundedRect);
             OverlaySkin.ApplySettingsPanel(_cardImage);
@@ -639,10 +637,36 @@ namespace CrazyChat.Overlay
 
         void BeginPickSlot(bool slotA)
         {
-            var path = OverlayFileDialog.OpenImage();
+            if (_pickRoutine != null)
+            {
+                StopCoroutine(_pickRoutine);
+            }
+
+            _pickRoutine = StartCoroutine(BeginPickSlotRoutine(slotA));
+        }
+
+        IEnumerator BeginPickSlotRoutine(bool slotA)
+        {
+            // Leave Button/EventSystem stack before blocking Win32 dialog.
+            yield return null;
+            _hideAt = -1f;
+
+            string path = null;
+            try
+            {
+                path = OverlayFileDialog.OpenImage();
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[Overlay] 选图失败: " + e.Message);
+                _pickRoutine = null;
+                yield break;
+            }
+
             if (string.IsNullOrEmpty(path))
             {
-                return;
+                _pickRoutine = null;
+                yield break;
             }
 
             byte[] bytes;
@@ -653,7 +677,8 @@ namespace CrazyChat.Overlay
             catch (System.Exception e)
             {
                 Debug.LogWarning("[Overlay] 读取形象图失败: " + e.Message);
-                return;
+                _pickRoutine = null;
+                yield break;
             }
 
             EnsureAvatarSetup();
@@ -671,6 +696,7 @@ namespace CrazyChat.Overlay
                 RefreshAvatarSlots();
                 RefreshLabels();
             });
+            _pickRoutine = null;
         }
 
         void RefreshAvatarSlots()
