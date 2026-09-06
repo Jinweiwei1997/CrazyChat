@@ -17,8 +17,8 @@ namespace CrazyChat.Overlay
         const string FileName = "overlay_prefs.json";
         const float MinScale = 0.5f;
         const float MaxScale = 2.5f;
-        const int MinSettingsStyle = 1;
-        const int MaxSettingsStyle = 4;
+        const int MinSettingsTheme = 1;
+        const int MaxSettingsTheme = 2;
 
         public float Scale { get; private set; } = 1f;
         public bool AlwaysOnTop { get; private set; } = true;
@@ -26,7 +26,7 @@ namespace CrazyChat.Overlay
         public bool FlipHorizontal { get; private set; }
         public bool AutoStart { get; private set; }
         public bool ShowInputIcons { get; private set; }
-        public int SettingsStyle { get; private set; } = MinSettingsStyle;
+        public int SettingsTheme { get; private set; } = MinSettingsTheme;
         public int AvatarVersion { get; private set; }
 
         public void Load()
@@ -56,7 +56,7 @@ namespace CrazyChat.Overlay
                 FlipHorizontal = data.flipHorizontal;
                 AutoStart = data.autoStart;
                 ShowInputIcons = data.showInputIcons;
-                SettingsStyle = Mathf.Clamp(data.settingsStyle, MinSettingsStyle, MaxSettingsStyle);
+                SettingsTheme = Mathf.Clamp(data.settingsTheme, MinSettingsTheme, MaxSettingsTheme);
                 AvatarVersion = data.avatarVersion;
                 if (!OverlayAvatarRules.IsEnabled(AvatarVersion, OverlayAvatarCodec.LocalPathA,
                         OverlayAvatarCodec.LocalPathB))
@@ -80,7 +80,7 @@ namespace CrazyChat.Overlay
                 flipHorizontal = FlipHorizontal,
                 autoStart = AutoStart,
                 showInputIcons = ShowInputIcons,
-                settingsStyle = SettingsStyle,
+                settingsTheme = SettingsTheme,
                 avatarVersion = AvatarVersion
             }, true);
             WriteLocal(json);
@@ -105,9 +105,9 @@ namespace CrazyChat.Overlay
 
         public void SetShowInputIcons(bool value) => ShowInputIcons = value;
 
-        public void CycleSettingsStyle()
+        public void CycleSettingsTheme()
         {
-            SettingsStyle = SettingsStyle >= MaxSettingsStyle ? MinSettingsStyle : SettingsStyle + 1;
+            SettingsTheme = SettingsTheme >= MaxSettingsTheme ? MinSettingsTheme : SettingsTheme + 1;
         }
 
         public bool AvatarEnabled =>
@@ -232,7 +232,7 @@ namespace CrazyChat.Overlay
             public bool flipHorizontal;
             public bool autoStart;
             public bool showInputIcons;
-            public int settingsStyle = MinSettingsStyle;
+            public int settingsTheme = MinSettingsTheme;
             public int avatarVersion;
         }
     }

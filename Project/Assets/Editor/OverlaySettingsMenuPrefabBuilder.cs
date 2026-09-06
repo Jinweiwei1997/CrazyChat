@@ -7,14 +7,14 @@ using UnityEngine.UI;
 public static class OverlaySettingsMenuPrefabBuilder
 {
     const string AssetPath = "Assets/Resources/Prefab/UI/SettingsMenu.prefab";
-    const string RoundedRectPath = "Assets/Resources/Overlay/UI/rounded_rect.png";
-    static readonly string[] StylePaths =
-    {
-        RoundedRectPath,
-        "Assets/Resources/Overlay/UI/rounded_rect_style2.png",
-        "Assets/Resources/Overlay/UI/rounded_rect_style3.png",
-        "Assets/Resources/Overlay/UI/rounded_rect_style4.png"
-    };
+    const string SquareRectPath = "Assets/Resources/Overlay/UI/square_rect.png";
+    const string JournalRectPath = "Assets/Resources/Overlay/UI/journal_rect.png";
+    static readonly Color FlatBackground = new Color(0.094f, 0.094f, 0.094f, 1f);
+    static readonly Color FlatControl = new Color(0.176f, 0.176f, 0.188f, 1f);
+    static readonly Color FlatAccent = new Color(0f, 0.478f, 0.8f, 1f);
+    static readonly Color FlatDanger = new Color(0.65f, 0.16f, 0.16f, 1f);
+    static readonly Color FlatText = new Color(0.8f, 0.8f, 0.8f, 1f);
+    static readonly Color FlatMuted = new Color(0.59f, 0.59f, 0.59f, 1f);
 
     [MenuItem("CrazyChat/Build Settings Menu Prefab")]
     public static void Build()
@@ -30,8 +30,8 @@ public static class OverlaySettingsMenuPrefabBuilder
 
         var ui = root.AddComponent<OverlaySettingsUi>();
         ui.EditorPopulate();
-        var styles = EnsureStyleSprites();
-        ReplaceGeneratedSprites(root, styles[0]);
+        ReplaceGeneratedSprites(root, ConfigureSprite(SquareRectPath, 1f));
+        ConfigureSprite(JournalRectPath, 4f);
         ReplaceGeneratedFonts(root);
 
         var prefab = PrefabUtility.SaveAsPrefabAsset(root, AssetPath);
@@ -47,37 +47,78 @@ public static class OverlaySettingsMenuPrefabBuilder
         Debug.Log("[Overlay] 已写入 " + AssetPath);
     }
 
-    [MenuItem("CrazyChat/Add Settings Skin Style Row")]
-    public static void AddSkinStyleRow()
+    [MenuItem("CrazyChat/Apply Settings Themes Layout")]
+    public static void ApplySettingsThemesLayout()
     {
-        var styles = EnsureStyleSprites();
+        var square = ConfigureSprite(SquareRectPath, 1f);
+        ConfigureSprite(JournalRectPath, 4f);
         var root = PrefabUtility.LoadPrefabContents(AssetPath);
         try
         {
             var ui = root.GetComponent<OverlaySettingsUi>();
-            var row = ui != null ? ui.EditorEnsureSkinStyleRow() : null;
-            if (row == null)
+            var background = root.transform.Find("SettingsPanel/Background");
+            if (background == null)
             {
-                Debug.LogError("[Overlay] 设置 Prefab 中找不到 SkinStyleRow 挂载位置。");
+                Debug.LogError("[Overlay] 设置 Prefab 中找不到 Background。");
                 return;
             }
 
-            var inputIcons = row.parent.Find("InputIconsRow");
-            if (inputIcons != null)
+            var skinRow = background.Find("Pages/GamePage/SkinStyleRow");
+            if (skinRow != null)
             {
-                row.SetSiblingIndex(inputIcons.GetSiblingIndex() + 1);
+                Object.DestroyImmediate(skinRow.gameObject);
             }
 
-            var images = row.GetComponentsInChildren<Image>(true);
+            var themeRow = ui != null ? ui.EditorEnsureThemeRow() : null;
+            if (themeRow == null)
+            {
+                Debug.LogError("[Overlay] 设置 Prefab 中无法加入 ThemeRow。");
+                return;
+            }
+
+            ((RectTransform)background).localScale = new Vector3(2f / 3f, 2f / 3f, 1f);
+            var images = background.GetComponentsInChildren<Image>(true);
             for (var i = 0; i < images.Length; i++)
             {
-                if (images[i].sprite == null || !EditorUtility.IsPersistent(images[i].sprite))
+                var image = images[i];
+                image.sprite = square;
+                image.type = Image.Type.Sliced;
+                image.color = FlatControl;
+
+                if (image.gameObject.name == "Background")
                 {
-                    images[i].sprite = styles[0];
+                    image.color = FlatBackground;
+                }
+                else if (image.gameObject.name == "GameTab")
+                {
+                    image.color = FlatAccent;
+                }
+                else if (image.gameObject.name == "QuitGameRow")
+                {
+                    image.color = FlatDanger;
                 }
             }
 
-            ReplaceGeneratedFonts(row.gameObject);
+            var labels = background.GetComponentsInChildren<Text>(true);
+            for (var i = 0; i < labels.Length; i++)
+            {
+                var name = labels[i].gameObject.name;
+                labels[i].color = name == "Muted" || name == "Status" ? FlatMuted : FlatText;
+            }
+
+            var backgroundImage = background.GetComponent<Image>();
+            var outline = background.GetComponent<Outline>();
+            if (outline == null)
+            {
+                outline = background.gameObject.AddComponent<Outline>();
+            }
+
+            outline.effectColor = new Color(0.235f, 0.235f, 0.235f, 1f);
+            outline.effectDistance = new Vector2(1f, -1f);
+            outline.useGraphicAlpha = false;
+            backgroundImage.raycastTarget = true;
+
+            ReplaceGeneratedFonts(root);
             PrefabUtility.SaveAsPrefabAsset(root, AssetPath);
         }
         finally
@@ -87,21 +128,10 @@ public static class OverlaySettingsMenuPrefabBuilder
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
-        Debug.Log("[Overlay] 已增量加入设置皮肤风格按钮。");
+        Debug.Log("[Overlay] 已应用双主题设置布局。");
     }
 
-    static Sprite[] EnsureStyleSprites()
-    {
-        var sprites = new Sprite[StylePaths.Length];
-        for (var i = 0; i < StylePaths.Length; i++)
-        {
-            sprites[i] = ConfigureSprite(StylePaths[i]);
-        }
-
-        return sprites;
-    }
-
-    static Sprite ConfigureSprite(string assetPath)
+    static Sprite ConfigureSprite(string assetPath, float border)
     {
         AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport);
 
@@ -113,7 +143,7 @@ public static class OverlaySettingsMenuPrefabBuilder
 
         importer.textureType = TextureImporterType.Sprite;
         importer.spriteImportMode = SpriteImportMode.Single;
-        importer.spriteBorder = new Vector4(10f, 10f, 10f, 10f);
+        importer.spriteBorder = new Vector4(border, border, border, border);
         importer.mipmapEnabled = false;
         importer.alphaIsTransparency = true;
         importer.filterMode = FilterMode.Point;
@@ -122,14 +152,14 @@ public static class OverlaySettingsMenuPrefabBuilder
         return AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
     }
 
-    static void ReplaceGeneratedSprites(GameObject root, Sprite roundedRect)
+    static void ReplaceGeneratedSprites(GameObject root, Sprite sprite)
     {
         var images = root.GetComponentsInChildren<Image>(true);
         for (var i = 0; i < images.Length; i++)
         {
             if (images[i].sprite != null && !EditorUtility.IsPersistent(images[i].sprite))
             {
-                images[i].sprite = roundedRect;
+                images[i].sprite = sprite;
             }
         }
     }

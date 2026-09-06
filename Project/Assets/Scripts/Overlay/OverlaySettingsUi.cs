@@ -17,13 +17,17 @@ namespace CrazyChat.Overlay
         const float ActionRowHeight = 36f;
         const float GearSize = 32f;
         const float CloseSize = 32f;
-        static readonly string[] StyleResources =
-        {
-            "Overlay/UI/rounded_rect",
-            "Overlay/UI/rounded_rect_style2",
-            "Overlay/UI/rounded_rect_style3",
-            "Overlay/UI/rounded_rect_style4"
-        };
+        const float CardVisualScale = 2f / 3f;
+        const string VsCodeSpriteResource = "Overlay/UI/square_rect";
+        const string JournalSpriteResource = "Overlay/UI/journal_rect";
+        static readonly Color FlatBackground = new Color(0.094f, 0.094f, 0.094f, 1f);
+        static readonly Color FlatControl = new Color(0.176f, 0.176f, 0.188f, 1f);
+        static readonly Color FlatAccent = new Color(0f, 0.478f, 0.8f, 1f);
+        static readonly Color JournalBackground = new Color(0.96f, 0.93f, 0.86f, 1f);
+        static readonly Color JournalControl = new Color(0.9f, 0.84f, 0.73f, 1f);
+        static readonly Color JournalAccent = new Color(0.79f, 0.47f, 0.39f, 1f);
+        static readonly Color JournalText = new Color(0.25f, 0.23f, 0.2f, 1f);
+        static readonly Color JournalMuted = new Color(0.47f, 0.43f, 0.38f, 1f);
 
         FriendOverlayView _view;
         [SerializeField] GameObject _panel;
@@ -38,9 +42,11 @@ namespace CrazyChat.Overlay
         [SerializeField] Text _autoStartText;
         [SerializeField] Text _inputIconsText;
         [SerializeField] Text _avatarStatusText;
-        Text _settingsStyleText;
-        readonly List<Image> _settingsStyleImages = new List<Image>();
-        Sprite[] _settingsStyleSprites;
+        Text _themeText;
+        readonly List<Image> _themeImages = new List<Image>();
+        readonly List<Text> _themeLabels = new List<Text>();
+        Sprite _vsCodeSprite;
+        Sprite _journalSprite;
         Text _avatarSetupStatus;
         Image _slotAImage;
         Image _slotBImage;
@@ -86,7 +92,8 @@ namespace CrazyChat.Overlay
             ApplyFonts(ui._buttonRt);
             ApplyFonts(ui._cardRt);
             ui.Bind();
-            ui.ApplySettingsStyle();
+            ui._cardRt.localScale = new Vector3(CardVisualScale, CardVisualScale, 1f);
+            ui.ApplyTheme();
             ui.ShowPage(DefaultPage);
             ui.Hide();
             return ui;
@@ -98,9 +105,9 @@ namespace CrazyChat.Overlay
             Build(null);
         }
 
-        public Transform EditorEnsureSkinStyleRow()
+        public Transform EditorEnsureThemeRow()
         {
-            var existing = FindNode(_cardRt, "Pages/GamePage/SkinStyleRow");
+            var existing = FindNode(_cardRt, "Pages/GamePage/ThemeRow");
             if (existing != null)
             {
                 return existing;
@@ -112,8 +119,15 @@ namespace CrazyChat.Overlay
                 return null;
             }
 
-            AddActionRow(gamePage, "SkinStyleRow", "皮肤风格 1");
-            return FindNode(_cardRt, "Pages/GamePage/SkinStyleRow");
+            AddActionRow(gamePage, "ThemeRow", "界面风格 1");
+            var row = FindNode(_cardRt, "Pages/GamePage/ThemeRow");
+            var inputIcons = FindNode(_cardRt, "Pages/GamePage/InputIconsRow");
+            if (row != null && inputIcons != null)
+            {
+                row.SetSiblingIndex(inputIcons.GetSiblingIndex() + 1);
+            }
+
+            return row;
         }
 #endif
 
@@ -130,6 +144,13 @@ namespace CrazyChat.Overlay
                 labels[i].font = OverlaySprites.UiFont;
             }
         }
+
+        bool JournalTheme => _view != null && _view.Settings != null && _view.Settings.SettingsTheme == 2;
+        Color ThemeBackground => JournalTheme ? JournalBackground : FlatBackground;
+        Color ThemeControl => JournalTheme ? JournalControl : FlatControl;
+        Color ThemeAccent => JournalTheme ? JournalAccent : FlatAccent;
+        Color ThemeText => JournalTheme ? JournalText : OverlaySkin.SettingsText;
+        Color ThemeMuted => JournalTheme ? JournalMuted : OverlaySkin.SettingsMuted;
 
         void Bind()
         {
@@ -169,12 +190,12 @@ namespace CrazyChat.Overlay
                 _view.ApplyUserSettings();
                 RefreshLabels();
             });
-            var styleRow = FindNode(_cardRt, "Pages/GamePage/SkinStyleRow");
-            _settingsStyleText = styleRow != null ? styleRow.GetComponentInChildren<Text>(true) : null;
-            BindClick(styleRow, () =>
+            var themeRow = FindNode(_cardRt, "Pages/GamePage/ThemeRow");
+            _themeText = themeRow != null ? themeRow.GetComponentInChildren<Text>(true) : null;
+            BindClick(themeRow, () =>
             {
-                _view.Settings.CycleSettingsStyle();
-                ApplySettingsStyle();
+                _view.Settings.CycleSettingsTheme();
+                ApplyTheme();
                 _view.ApplyUserSettings();
                 RefreshLabels();
             });
@@ -258,13 +279,14 @@ namespace CrazyChat.Overlay
             Stretch((RectTransform)_panel.transform);
             _panel.SetActive(false);
 
-            _cardImage = CreateImage("Background", _panel.transform, OverlaySprites.Panel, OverlaySprites.RoundedRect);
+            _cardImage = CreateImage("Background", _panel.transform, FlatBackground, OverlaySprites.RoundedRect);
             _cardImage.raycastTarget = true;
             _cardRt = _cardImage.rectTransform;
             _cardRt.anchorMin = new Vector2(0f, 0f);
             _cardRt.anchorMax = new Vector2(0f, 0f);
             _cardRt.pivot = new Vector2(0.5f, 0.5f);
             _cardRt.sizeDelta = new Vector2(CardWidth, CardHeight);
+            _cardRt.localScale = new Vector3(CardVisualScale, CardVisualScale, 1f);
 
             BuildHeader(_cardRt);
             BuildTabBar(_cardRt);
@@ -284,7 +306,7 @@ namespace CrazyChat.Overlay
             var title = PlaceLabel(headerRt, "设置", 18, OverlaySkin.SettingsText, Vector2.zero, new Vector2(160f, 28f));
             title.gameObject.name = "Title";
 
-            _closeImage = CreateImage("Close", headerRt, OverlaySprites.Button, OverlaySprites.RoundedRect);
+            _closeImage = CreateImage("Close", headerRt, FlatControl, OverlaySprites.RoundedRect);
             _closeImage.raycastTarget = true;
             var closeRt = _closeImage.rectTransform;
             closeRt.anchorMin = closeRt.anchorMax = new Vector2(1f, 0.5f);
@@ -330,7 +352,7 @@ namespace CrazyChat.Overlay
             _dragText = AddToggleRow(gamePage, "DisableDragRow", "禁止拖动");
             _flipText = AddToggleRow(gamePage, "FlipHorizontalRow", "水平翻转");
             _inputIconsText = AddToggleRow(gamePage, "InputIconsRow", "按键图标");
-            AddActionRow(gamePage, "SkinStyleRow", "皮肤风格 1");
+            AddActionRow(gamePage, "ThemeRow", "界面风格 1");
             _avatarStatusText = AddStatusRow(gamePage, "AvatarStatusRow", "动态形象");
             AddActionRow(gamePage, "AvatarSetupRow", "设置动态图");
             AddActionRow(gamePage, "ResetLayoutRow", "复位头像位置");
@@ -602,7 +624,7 @@ namespace CrazyChat.Overlay
 
         Image AddTabButton(Transform parent, string id, string title)
         {
-            var tab = CreateImage(id, parent, OverlaySprites.Button, OverlaySprites.RoundedRect);
+            var tab = CreateImage(id, parent, FlatControl, OverlaySprites.RoundedRect);
             tab.raycastTarget = true;
             var le = tab.gameObject.AddComponent<LayoutElement>();
             le.minHeight = 28f;
@@ -639,7 +661,7 @@ namespace CrazyChat.Overlay
                     var image = tab.GetComponent<Image>();
                     OverlaySprites.StyleFill(
                         image,
-                        TabToPage(tab.name) == pageName ? OverlaySprites.Accent : OverlaySprites.Button);
+                        TabToPage(tab.name) == pageName ? ThemeAccent : ThemeControl);
                 }
             }
         }
@@ -681,7 +703,7 @@ namespace CrazyChat.Overlay
 
         void AddActionRow(Transform parent, string id, string title, bool danger = false)
         {
-            var button = CreateImage(id, parent, danger ? OverlaySprites.Danger : OverlaySprites.Accent,
+            var button = CreateImage(id, parent, danger ? OverlaySprites.Danger : FlatControl,
                 OverlaySprites.RoundedRect);
             button.raycastTarget = true;
             var le = button.gameObject.AddComponent<LayoutElement>();
@@ -719,7 +741,7 @@ namespace CrazyChat.Overlay
 
         Image AddRowButton(Transform row, string id, string title, float width, int fontSize)
         {
-            var button = CreateImage(id, row, OverlaySprites.Button, OverlaySprites.RoundedRect);
+            var button = CreateImage(id, row, FlatControl, OverlaySprites.RoundedRect);
             button.raycastTarget = true;
             var le = button.gameObject.AddComponent<LayoutElement>();
             le.preferredWidth = width;
@@ -875,9 +897,9 @@ namespace CrazyChat.Overlay
             SetToggle(_flipText, settings.FlipHorizontal);
             SetToggle(_autoStartText, settings.AutoStart);
             SetToggle(_inputIconsText, settings.ShowInputIcons);
-            if (_settingsStyleText != null)
+            if (_themeText != null)
             {
-                _settingsStyleText.text = "皮肤风格 " + settings.SettingsStyle;
+                _themeText.text = "界面风格 " + settings.SettingsTheme;
             }
 
             if (_avatarStatusText != null)
@@ -888,59 +910,79 @@ namespace CrazyChat.Overlay
                 _avatarStatusText.text = ready
                     ? "形象已启用 v" + settings.AvatarVersion
                     : "形象未启用（闲置:" + (hasA ? "有" : "无") + " 动态:" + (hasB ? "有" : "无") + "）";
-                _avatarStatusText.color = OverlaySkin.SettingsMuted;
+                _avatarStatusText.color = ThemeMuted;
             }
         }
 
-        void ApplySettingsStyle()
+        void ApplyTheme()
         {
-            var settings = _view != null ? _view.Settings : null;
-            if (settings == null || _cardRt == null)
+            if (_cardRt == null)
             {
                 return;
             }
 
-            if (_settingsStyleSprites == null)
+            if (_vsCodeSprite == null)
             {
-                _settingsStyleSprites = new Sprite[StyleResources.Length];
-                for (var i = 0; i < StyleResources.Length; i++)
-                {
-                    _settingsStyleSprites[i] = Resources.Load<Sprite>(StyleResources[i]);
-                }
+                _vsCodeSprite = Resources.Load<Sprite>(VsCodeSpriteResource);
+                _journalSprite = Resources.Load<Sprite>(JournalSpriteResource);
             }
 
-            if (_settingsStyleImages.Count == 0)
+            if (_themeImages.Count == 0)
             {
-                var images = _cardRt.GetComponentsInChildren<Image>(true);
-                for (var i = 0; i < images.Length; i++)
-                {
-                    var sprite = images[i].sprite;
-                    if (sprite != null && (sprite.name == "rounded_rect" ||
-                                           sprite.name.StartsWith("rounded_rect_style")))
-                    {
-                        _settingsStyleImages.Add(images[i]);
-                    }
-                }
+                _themeImages.AddRange(_cardRt.GetComponentsInChildren<Image>(true));
+                _themeLabels.AddRange(_cardRt.GetComponentsInChildren<Text>(true));
             }
 
-            var index = Mathf.Clamp(settings.SettingsStyle - 1, 0, _settingsStyleSprites.Length - 1);
-            var selected = _settingsStyleSprites[index];
-            if (selected == null)
+            var sprite = JournalTheme ? _journalSprite : _vsCodeSprite;
+            if (sprite == null)
             {
-                Debug.LogWarning("[Overlay] 缺少设置皮肤资源: Resources/" + StyleResources[index]);
+                Debug.LogWarning("[Overlay] 缺少设置主题图片。");
                 return;
             }
 
-            for (var i = 0; i < _settingsStyleImages.Count; i++)
+            for (var i = 0; i < _themeImages.Count; i++)
             {
-                if (_settingsStyleImages[i] != null)
+                var image = _themeImages[i];
+                if (image == null)
                 {
-                    _settingsStyleImages[i].sprite = selected;
+                    continue;
                 }
+
+                image.sprite = sprite;
+                image.type = Image.Type.Sliced;
+                var selectedTab =
+                    image.gameObject.name == "GameTab" && _page == "GamePage" ||
+                    image.gameObject.name == "SystemTab" && _page == "SystemPage";
+                image.color = image.gameObject.name == "Background"
+                    ? ThemeBackground
+                    : image.gameObject.name == "QuitGameRow"
+                        ? (JournalTheme ? new Color(0.65f, 0.3f, 0.27f, 1f) : new Color(0.65f, 0.16f, 0.16f, 1f))
+                        : selectedTab
+                            ? ThemeAccent
+                            : ThemeControl;
+            }
+
+            for (var i = 0; i < _themeLabels.Count; i++)
+            {
+                var label = _themeLabels[i];
+                if (label != null)
+                {
+                    label.color = label.gameObject.name == "Muted" || label.gameObject.name == "Status"
+                        ? ThemeMuted
+                        : ThemeText;
+                }
+            }
+
+            var outline = _cardRt.GetComponent<Outline>();
+            if (outline != null)
+            {
+                outline.effectColor = JournalTheme
+                    ? new Color(0.62f, 0.55f, 0.44f, 1f)
+                    : new Color(0.235f, 0.235f, 0.235f, 1f);
             }
         }
 
-        static void SetToggle(Text label, bool on)
+        void SetToggle(Text label, bool on)
         {
             if (label == null)
             {
@@ -948,10 +990,10 @@ namespace CrazyChat.Overlay
             }
 
             label.text = on ? "开" : "关";
-            label.color = OverlaySkin.SettingsText;
+            label.color = ThemeText;
             OverlaySprites.StyleFill(
                 label.transform.parent.GetComponent<Image>(),
-                on ? OverlaySprites.Accent : OverlaySprites.Button);
+                on ? ThemeAccent : ThemeControl);
         }
 
         void LateUpdate()
@@ -987,7 +1029,7 @@ namespace CrazyChat.Overlay
 
         void PlaceCardBeside(Vector2 avatarPos)
         {
-            var size = _cardRt.sizeDelta;
+            var size = _cardRt.sizeDelta * CardVisualScale;
             var chipSize = _view != null && _view.Config != null ? _view.Config.chipSize : 128f;
             var offsetX = chipSize * 0.5f + 8f + size.x * 0.5f;
             if (avatarPos.x + offsetX + size.x * 0.5f > Screen.width - 12f)
