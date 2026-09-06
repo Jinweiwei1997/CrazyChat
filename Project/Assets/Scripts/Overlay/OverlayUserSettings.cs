@@ -17,14 +17,16 @@ namespace CrazyChat.Overlay
         const string FileName = "overlay_prefs.json";
         const float MinScale = 0.5f;
         const float MaxScale = 2.5f;
+        const int MinSettingsStyle = 1;
+        const int MaxSettingsStyle = 4;
 
         public float Scale { get; private set; } = 1f;
         public bool AlwaysOnTop { get; private set; } = true;
         public bool DisableDrag { get; private set; }
         public bool FlipHorizontal { get; private set; }
         public bool AutoStart { get; private set; }
-        public OverlayClickEffect ClickEffect { get; private set; } = OverlayClickEffect.Elastic;
         public bool ShowInputIcons { get; private set; }
+        public int SettingsStyle { get; private set; } = MinSettingsStyle;
         public int AvatarVersion { get; private set; }
 
         public void Load()
@@ -53,10 +55,8 @@ namespace CrazyChat.Overlay
                 DisableDrag = data.disableDrag;
                 FlipHorizontal = data.flipHorizontal;
                 AutoStart = data.autoStart;
-                ClickEffect = data.clickEffect == (int)OverlayClickEffect.Flip
-                    ? OverlayClickEffect.Flip
-                    : OverlayClickEffect.Elastic;
                 ShowInputIcons = data.showInputIcons;
+                SettingsStyle = Mathf.Clamp(data.settingsStyle, MinSettingsStyle, MaxSettingsStyle);
                 AvatarVersion = data.avatarVersion;
                 if (!OverlayAvatarRules.IsEnabled(AvatarVersion, OverlayAvatarCodec.LocalPathA,
                         OverlayAvatarCodec.LocalPathB))
@@ -79,8 +79,8 @@ namespace CrazyChat.Overlay
                 disableDrag = DisableDrag,
                 flipHorizontal = FlipHorizontal,
                 autoStart = AutoStart,
-                clickEffect = (int)ClickEffect,
                 showInputIcons = ShowInputIcons,
+                settingsStyle = SettingsStyle,
                 avatarVersion = AvatarVersion
             }, true);
             WriteLocal(json);
@@ -103,14 +103,12 @@ namespace CrazyChat.Overlay
 
         public void SetFlipHorizontal(bool value) => FlipHorizontal = value;
 
-        public void CycleClickEffect()
-        {
-            ClickEffect = ClickEffect == OverlayClickEffect.Elastic
-                ? OverlayClickEffect.Flip
-                : OverlayClickEffect.Elastic;
-        }
-
         public void SetShowInputIcons(bool value) => ShowInputIcons = value;
+
+        public void CycleSettingsStyle()
+        {
+            SettingsStyle = SettingsStyle >= MaxSettingsStyle ? MinSettingsStyle : SettingsStyle + 1;
+        }
 
         public bool AvatarEnabled =>
             OverlayAvatarRules.IsEnabled(AvatarVersion, OverlayAvatarCodec.LocalPathA, OverlayAvatarCodec.LocalPathB);
@@ -233,16 +231,10 @@ namespace CrazyChat.Overlay
             public bool disableDrag;
             public bool flipHorizontal;
             public bool autoStart;
-            public int clickEffect;
             public bool showInputIcons;
+            public int settingsStyle = MinSettingsStyle;
             public int avatarVersion;
         }
-    }
-
-    public enum OverlayClickEffect
-    {
-        Elastic = 0,
-        Flip = 1
     }
 
     public static class OverlayAutoStart

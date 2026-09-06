@@ -150,13 +150,6 @@ namespace CrazyChat.Overlay
                 window.SetAlwaysOnTop(_settings.AlwaysOnTop);
             }
 
-            // _settingsUi?.ApplySkin();
-            _chatUi?.ApplySkin();
-            _interactUi?.ApplySkin();
-            foreach (var pair in _chips)
-            {
-                pair.Value?.ApplySkin();
-            }
         }
 
         public void NotifyAvatarPresenceChanged()
@@ -338,13 +331,8 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            if (OverlayTapSync.TryDecode(actionId, out var effect, out var vk))
+            if (OverlayTapSync.TryDecode(actionId, out var vk))
             {
-                if (!fromChip.PresenceMode)
-                {
-                    fromChip.PlayReaction(effect);
-                }
-
                 PlayInputIcon(fromChip, vk);
                 return;
             }
@@ -491,7 +479,7 @@ namespace CrazyChat.Overlay
                     continue;
                 }
 
-                var latest = _chatStore.GetLatest(pair.Key);
+                var latest = _chatStore.GetLatestPeer(pair.Key);
                 pair.Value.SetChatPreview(latest != null ? latest.text : null, _chatStore.GetUnread(pair.Key));
             }
 
@@ -519,10 +507,6 @@ namespace CrazyChat.Overlay
             if (LocalChip != null)
             {
                 LocalChip.SetTapCount(_stats.Count);
-                if (!LocalChip.PresenceMode)
-                {
-                    LocalChip.PlayReaction();
-                }
             }
 
             var vk = _pendingVk;
@@ -564,7 +548,7 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            if (_avatarPresence != null && _avatarPresence.LocalEnabled)
+            if (!_settings.ShowInputIcons || vk == 0)
             {
                 return;
             }
@@ -575,8 +559,7 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            var sendVk = _settings.ShowInputIcons ? vk : 0;
-            var payload = OverlayTapSync.Encode(_settings.ClickEffect, sendVk);
+            var payload = OverlayTapSync.Encode(vk);
             var sent = false;
             VisitDesktopFriends(chip =>
             {

@@ -93,6 +93,24 @@ namespace CrazyChat.Overlay
             return list[list.Count - 1];
         }
 
+        public OverlayChatMessage GetLatestPeer(ulong friendId)
+        {
+            if (!_threads.TryGetValue(friendId, out var list))
+            {
+                return null;
+            }
+
+            for (var i = list.Count - 1; i >= 0; i--)
+            {
+                if (!list[i].mine)
+                {
+                    return list[i];
+                }
+            }
+
+            return null;
+        }
+
         public IReadOnlyList<OverlayChatMessage> GetMessages(ulong friendId)
         {
             return _threads.TryGetValue(friendId, out var list) ? list : (IReadOnlyList<OverlayChatMessage>)Array.Empty<OverlayChatMessage>();

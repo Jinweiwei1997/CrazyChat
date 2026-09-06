@@ -7,12 +7,12 @@ namespace CrazyChat.Overlay
     public sealed class FriendAvatarChip : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         const float BubbleVisualScale = 0.75f;
-        const float BubbleBaseWidth = 118f * BubbleVisualScale;
-        const float BubbleHeight = 28f * BubbleVisualScale;
-        const float BubbleMinWidth = 48f * BubbleVisualScale;
-        const float BubbleMaxWidth = 220f * BubbleVisualScale;
-        const float BubbleTextPad = 20f * BubbleVisualScale;
-        const float BubbleOffsetY = 6f * BubbleVisualScale;
+        const float BubbleBaseWidth = 72f * BubbleVisualScale;
+        const float BubbleHeight = 26f * BubbleVisualScale;
+        const float BubbleMinWidth = 32f * BubbleVisualScale;
+        const float BubbleMaxWidth = 180f * BubbleVisualScale;
+        const float BubbleTextPad = 14f * BubbleVisualScale;
+        const float BubbleOffsetY = 0f;
         const int BubbleFontSize = 9;
 
         float _size = 128f;
@@ -41,15 +41,12 @@ namespace CrazyChat.Overlay
         Image _badge;
         Text _badgeText;
         Image _nameBg;
-        string _bubbleContent = "…";
+        string _bubbleContent = "";
         int _unread;
         bool _selected;
         bool _chatExpanded;
         Vector2 _layoutPos;
         bool _dragging;
-        float _reactionUntil;
-        float _tapFlip = 1f;
-        OverlayClickEffect _playedEffect = OverlayClickEffect.Elastic;
         long _tapCount;
         bool _hover;
 
@@ -82,6 +79,11 @@ namespace CrazyChat.Overlay
             if (_body != null)
             {
                 _body.sizeDelta = new Vector2(size, size);
+            }
+
+            if (_countText != null)
+            {
+                ((RectTransform)_countText.transform).sizeDelta = new Vector2(Mathf.Max(40f, size - 72f), 40f);
             }
         }
 
@@ -188,6 +190,9 @@ namespace CrazyChat.Overlay
             _countText = countGo.GetComponent<Text>();
             _countText.font = OverlaySprites.UiFont;
             _countText.fontSize = 26;
+            _countText.resizeTextForBestFit = true;
+            _countText.resizeTextMinSize = 6;
+            _countText.resizeTextMaxSize = 26;
             _countText.alignment = TextAnchor.MiddleCenter;
             _countText.color = new Color(1f, 1f, 1f, 0.9f);
             _countText.raycastTarget = false;
@@ -196,7 +201,7 @@ namespace CrazyChat.Overlay
             countRt.anchorMax = new Vector2(0.5f, 0f);
             countRt.pivot = new Vector2(0.5f, 1f);
             countRt.anchoredPosition = new Vector2(0f, -2f);
-            countRt.sizeDelta = new Vector2(176f, 40f);
+            countRt.sizeDelta = new Vector2(Mathf.Max(40f, _size - 72f), 40f);
             countGo.SetActive(false);
 
             _bubble = CreateImage("Bubble", _rect, OverlaySprites.Panel, OverlaySprites.RoundedRect);
@@ -210,7 +215,7 @@ namespace CrazyChat.Overlay
             bubbleRt.sizeDelta = new Vector2(BubbleBaseWidth, BubbleHeight);
             _bubbleFade = _bubble.gameObject.AddComponent<CanvasGroup>();
             _bubbleFade.blocksRaycasts = true;
-            _bubbleText = FillChipLabel(_bubble.rectTransform, "…", BubbleFontSize, OverlaySkin.Text);
+            _bubbleText = FillChipLabel(_bubble.rectTransform, "", BubbleFontSize, OverlaySkin.Text);
 
             _badge = CreateImage("Badge", _rect, new Color(0.92f, 0.28f, 0.28f, 1f), OverlaySprites.Circle);
             _badge.raycastTarget = false;
@@ -285,8 +290,6 @@ namespace CrazyChat.Overlay
             ApplySkin();
             RefreshPresenceVisual();
         }
-
-        public bool PresenceMode => _presenceMode;
 
         public void SetPresenceSprites(Sprite idle, Sprite active, bool takeOwnership = false)
         {
@@ -414,7 +417,7 @@ namespace CrazyChat.Overlay
 
         public void SetChatPreview(string text, int unread)
         {
-            var next = string.IsNullOrEmpty(text) ? "…" : Ellipsize(text, 8);
+            var next = string.IsNullOrEmpty(text) ? "" : Ellipsize(text, 8);
             if (next != _bubbleContent && _bubbleFade != null)
             {
                 _bubbleFade.alpha = 0.15f;
@@ -463,9 +466,7 @@ namespace CrazyChat.Overlay
                 _bubble.gameObject.SetActive(showBubble);
                 if (showBubble && _bubbleText != null)
                 {
-                    _bubbleText.text = _unread > 0
-                        ? _bubbleContent + "（未读 " + FormatUnread(_unread) + "）"
-                        : _bubbleContent;
+                    _bubbleText.text = _bubbleContent;
                     var width = Mathf.Clamp(_bubbleText.preferredWidth + BubbleTextPad, BubbleMinWidth, BubbleMaxWidth);
                     _bubble.rectTransform.sizeDelta = new Vector2(width, BubbleHeight);
                 }
@@ -514,44 +515,6 @@ namespace CrazyChat.Overlay
             RefreshCount();
         }
 
-        public void PlayReaction()
-        {
-            if (_presenceMode)
-            {
-                return;
-            }
-
-            var effect = _view != null && _view.Settings != null
-                ? _view.Settings.ClickEffect
-                : OverlayClickEffect.Elastic;
-            PlayReaction(effect);
-        }
-
-        public void PlayReaction(OverlayClickEffect effect)
-        {
-            if (_presenceMode)
-            {
-                return;
-            }
-
-            _playedEffect = effect;
-            if (effect == OverlayClickEffect.Flip)
-            {
-                _tapFlip = -_tapFlip;
-            }
-
-            _reactionUntil = Time.unscaledTime + ReactionSeconds;
-        }
-
-        float ReactionSeconds
-        {
-            get
-            {
-                var seconds = _view != null && _view.Config != null ? _view.Config.reactionSeconds : 0.12f;
-                return Mathf.Max(0.05f, seconds);
-            }
-        }
-
         void RefreshCount()
         {
             if (_countText == null)
@@ -590,34 +553,10 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            var press = 0f;
-            var effect = IsLocal && _view != null && _view.Settings != null
-                ? _view.Settings.ClickEffect
-                : _playedEffect;
-            var reacting = Time.unscaledTime < _reactionUntil;
-            var t = reacting ? 1f - (_reactionUntil - Time.unscaledTime) / ReactionSeconds : 1f;
-            if (reacting && effect != OverlayClickEffect.Flip)
-            {
-                press = Mathf.Sin(t * Mathf.PI);
-            }
-
             var hover = _hover ? 1.06f : 1f;
             var baseFlip = IsLocal && _view != null && _view.Settings != null && _view.Settings.FlipHorizontal ? -1f : 1f;
-            var tapFlip = effect == OverlayClickEffect.Flip ? _tapFlip : 1f;
-            var flipX = baseFlip * tapFlip;
-            if (effect == OverlayClickEffect.Flip && reacting)
-            {
-                var dest = _tapFlip;
-                var src = -_tapFlip;
-                flipX = baseFlip * (t < 0.5f ? src * (1f - t * 2f) : dest * ((t - 0.5f) * 2f));
-                if (Mathf.Abs(flipX) < 0.04f)
-                {
-                    flipX = 0.04f * Mathf.Sign(t < 0.5f ? src : dest) * baseFlip;
-                }
-            }
-
-            _body.anchoredPosition = new Vector2(0f, -press * 7f);
-            _body.localScale = new Vector3(hover * (1f + press * 0.04f) * flipX, hover * (1f - press * 0.1f), 1f);
+            _body.anchoredPosition = Vector2.zero;
+            _body.localScale = new Vector3(hover * baseFlip, hover, 1f);
             if (_bubbleFade != null && _bubbleFade.alpha < 1f)
             {
                 _bubbleFade.alpha = Mathf.MoveTowards(_bubbleFade.alpha, 1f, Time.unscaledDeltaTime * 4f);

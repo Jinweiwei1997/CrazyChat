@@ -19,8 +19,10 @@ namespace CrazyChat.Overlay
         public event Action Cancel;
 
         readonly bool[] _down = new bool[256];
+        readonly bool[] _eligible = new bool[256];
         float _lastCtrl;
         bool _anyDown;
+        bool _pollInitialized;
 
         public bool IsAnyDown => _anyDown;
 
@@ -41,8 +43,8 @@ namespace CrazyChat.Overlay
             }
 
             PollUnityCommands();
-            var held = Input.anyKey || Input.GetMouseButton(0) || Input.GetMouseButton(1) || Input.GetMouseButton(2);
-            SetAnyDown(held);
+            SetAnyDown(Input.anyKey || Input.GetMouseButton(0) || Input.GetMouseButton(1) ||
+                       Input.GetMouseButton(2));
 #endif
             for (var i = 0; i < taps; i++)
             {
@@ -57,15 +59,29 @@ namespace CrazyChat.Overlay
         int PollWindows()
         {
             var taps = 0;
+            var any = false;
             for (var vk = 1; vk < 256; vk++)
             {
-                if (vk == 3 || vk == 7)
+                if (!IsPhysicalInput(vk))
                 {
+                    _down[vk] = false;
                     continue;
                 }
 
                 var pressed = (GetAsyncKeyState(vk) & 0x8000) != 0;
-                if (pressed && !_down[vk])
+                if (!_pollInitialized)
+                {
+                    _down[vk] = pressed;
+                    _eligible[vk] = !pressed;
+                    continue;
+                }
+
+                if (!pressed)
+                {
+                    _eligible[vk] = true;
+                }
+
+                if (_eligible[vk] && pressed && !_down[vk])
                 {
                     taps++;
                     OnCommandDown(vk);
@@ -73,25 +89,50 @@ namespace CrazyChat.Overlay
                 }
 
                 _down[vk] = pressed;
+                any |= _eligible[vk] && pressed;
             }
 
-            var any = false;
-            for (var vk = 1; vk < 256; vk++)
-            {
-                if (_down[vk])
-                {
-                    any = true;
-                    break;
-                }
-            }
-
+            _pollInitialized = true;
             SetAnyDown(any);
             return taps;
         }
 
+        // Only poll real keyboard and mouse buttons. Undefined / IME virtual keys can report as stuck.
+        static bool IsPhysicalInput(int vk)
+        {
+            if (vk == 0x01 || vk == 0x02 || (vk >= 0x04 && vk <= 0x06))
+            {
+                return true;
+            }
+
+            if (vk == 0x08 || vk == 0x09 || vk == 0x0D || (vk >= 0x10 && vk <= 0x14) || vk == 0x1B)
+            {
+                return true;
+            }
+
+            if ((vk >= 0x20 && vk <= 0x2F) || (vk >= 0x30 && vk <= 0x39) ||
+                (vk >= 0x41 && vk <= 0x5D))
+            {
+                return true;
+            }
+
+            if ((vk >= 0x60 && vk <= 0x87) || vk == 0x90 || vk == 0x91)
+            {
+                return true;
+            }
+
+            if ((vk >= 0xA6 && vk <= 0xB7) || (vk >= 0xBA && vk <= 0xC0) ||
+                (vk >= 0xDB && vk <= 0xDF))
+            {
+                return true;
+            }
+
+            return vk == 0xE2;
+        }
+
         void SetAnyDown(bool any)
         {
-            if (any == _anyDown)
+            if (_anyDown == any)
             {
                 return;
             }

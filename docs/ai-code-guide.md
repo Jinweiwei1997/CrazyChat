@@ -2,6 +2,8 @@
 
 先扩展现有类，不要新开一层。目标是多个 AI 改同一套 Overlay 时，结构不膨胀、不重复。
 
+现行界面、按钮功能和状态切换见 [game-ui-rules.md](game-ui-rules.md)，不要用 `桌面互动伙伴需求.md` 当现行需求。
+
 业务代码只在 `Project/Assets/Scripts/Overlay/`。不要改 `Steamworks.NET/SteamManager.cs` 和 `com.rlabrecque.steamworks.net/`。
 
 ---
@@ -56,7 +58,16 @@ OverlaySprites            圆/圆角/字体，UI 共用
 
 ## UI 写法（保持同构）
 
-运行时拼，不用 Prefab / TMP / UI Toolkit。
+界面正在从运行时拼装逐个迁移到 Prefab。已经迁移的界面运行时只实例化 Prefab；尚未迁移的界面继续使用 `Create()` + uGUI `Text` 运行时拼装。不要在同一界面长期保留“Prefab 优先、失败后运行时重建”的双轨逻辑。
+
+当前迁移状态：
+
+- `OverlaySettingsUi`：使用 `Resources/Prefab/UI/SettingsMenu.prefab`，运行时不再调用 `Build()`。
+- 其他界面：保持现状，后续按界面逐个迁移，不要顺手批量改造。
+
+设置 Prefab 的初始层级由 `OverlaySettingsUi.EditorPopulate()` / `CrazyChat/Build Settings Menu Prefab` 从现有 `Build()` 生成，用于确保迁移前后结构和功能一致。接入正式 UI 资源后，重新生成会覆盖 Prefab 上的美术调整，执行生成菜单前必须确认。
+
+尚未迁移的运行时界面沿用：
 
 ```csharp
 public static XxxUi Create(Transform parent, FriendOverlayView view)
@@ -69,6 +80,7 @@ public static XxxUi Create(Transform parent, FriendOverlayView view)
 }
 ```
 
+- 已迁移界面的 `Create()` 只负责加载、实例化、挂层和接线；缺少必需 Prefab 时明确报错，不再静默创建第二套 UI。
 - `sealed class`，私有 `_camelCase`，命名空间 `CrazyChat.Overlay`（互动用 `.Interact`）
 - 图：`OverlaySprites.Circle` / `RoundedRect`；字：`OverlaySprites.UiFont`
 - 装饰 `raycastTarget = false`（否则桌面点击穿透会坏）

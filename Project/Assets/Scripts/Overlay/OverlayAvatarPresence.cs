@@ -45,7 +45,8 @@ namespace CrazyChat.Overlay
 
             if (_input != null)
             {
-                _input.PresenceChanged += OnLocalPresence;
+                _input.PresenceChanged += SetLocalActive;
+                _localActive = _input.IsAnyDown;
             }
 
             ReloadLocalSprites();
@@ -61,7 +62,7 @@ namespace CrazyChat.Overlay
 
             if (_input != null)
             {
-                _input.PresenceChanged -= OnLocalPresence;
+                _input.PresenceChanged -= SetLocalActive;
             }
         }
 
@@ -116,8 +117,13 @@ namespace CrazyChat.Overlay
             EnsureRemote(steamId);
         }
 
-        void OnLocalPresence(bool active)
+        void SetLocalActive(bool active)
         {
+            if (_localActive == active)
+            {
+                return;
+            }
+
             _localActive = active;
             ApplyLocalChip();
             if (!LocalEnabled || _interact == null)

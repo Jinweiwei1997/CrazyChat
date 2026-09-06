@@ -34,10 +34,6 @@ namespace CrazyChat.Overlay
         [Range(48, 256)]
         public float chipSize = 128f;
 
-        [Header("捕捉回落（秒）")]
-        [Min(0.05f)]
-        public float reactionSeconds = 0.12f;
-
         [Header("每条会话最多存几条")]
         [Min(1)]
         public int maxMessagesPerFriend = 200;
