@@ -10,13 +10,22 @@ namespace CrazyChat.Overlay
     {
         const string PrefabResource = "Prefab/UI/ChatPanel";
         const float CardWidth = 300f;
-        const float CompactHeight = 360f;
+        const float BubbleCompactHeight = 240f;
+        const float BubbleCompactWidth = 260f;
         const float HistoryHeight = 520f;
         const float HeaderHeight = 44f;
         const float StatusHeight = 18f;
         const float ComposerHeight = 52f;
         const float BubbleMaxWidth = 214f;
-        const int CompactTake = 12;
+        const float SendButtonWidth = 52f;
+        const float AllMessagesButtonWidth = 72f;
+        const float ComposerGap = 6f;
+
+        enum ChatMode
+        {
+            Compact,
+            Full
+        }
 
         FriendOverlayView _view;
         OverlayChatService _chat;
@@ -29,9 +38,10 @@ namespace CrazyChat.Overlay
         [SerializeField] InputField _input;
         [SerializeField] ScrollRect _scroll;
         [SerializeField] RectTransform _content;
+        Text _allMessagesLabel;
         ulong _friendId;
         bool _open;
-        bool _showAll;
+        ChatMode _mode = ChatMode.Compact;
         Coroutine _refocusRoutine;
         readonly List<ChatRow> _rows = new List<ChatRow>();
 
@@ -188,37 +198,11 @@ namespace CrazyChat.Overlay
                 Stretch(empty);
             }
 
-            if (_status != null)
-            {
-                var statusRt = _status.rectTransform;
-                statusRt.anchorMin = new Vector2(0f, 0f);
-                statusRt.anchorMax = new Vector2(1f, 0f);
-                statusRt.pivot = new Vector2(0.5f, 0f);
-                statusRt.anchoredPosition = new Vector2(0f, ComposerHeight);
-                statusRt.sizeDelta = new Vector2(-20f, StatusHeight);
-            }
-
-            var inputRt = FindNode(_cardRt, "Input") as RectTransform;
-            if (inputRt != null)
-            {
-                inputRt.anchorMin = new Vector2(0f, 0f);
-                inputRt.anchorMax = new Vector2(1f, 0f);
-                inputRt.pivot = new Vector2(0f, 0f);
-                inputRt.anchoredPosition = new Vector2(10f, 10f);
-                inputRt.sizeDelta = new Vector2(-82f, 32f);
-                InsetStretch(inputRt.Find("Placeholder") as RectTransform, 10f);
-                InsetStretch(inputRt.Find("Text") as RectTransform, 10f);
-            }
-
-            var send = FindNode(_cardRt, "Send") as RectTransform;
-            if (send != null)
-            {
-                PinBottomRight(send, new Vector2(-10f, 10f), new Vector2(52f, 32f));
-            }
-
             StretchNamedLabel(FindNode(_cardRt, "Header/Close"));
             StretchNamedLabel(FindNode(_cardRt, "Header/History"));
             StretchNamedLabel(FindNode(_cardRt, "Send"));
+            StretchNamedLabel(FindNode(_cardRt, "AllMessages"));
+            ApplyLayout();
         }
 
         static void InsetStretch(RectTransform rt, float padX)
@@ -250,12 +234,13 @@ namespace CrazyChat.Overlay
         void Bind()
         {
             OverlayHoverRelay.Bind(_card, OnCardPointerEnter, null);
-            BindClick(FindNode(_cardRt, "Header/Close"), Hide);
-            BindClick(FindNode(_cardRt, "Header/History"), ToggleHistory);
+            BindClick(FindNode(_cardRt, "Header/Close"), CloseOrCollapse);
             BindClick(FindNode(_cardRt, "Send"), Send);
             EnsureScroll();
             EnsureInput();
+            EnsureAllMessagesButton();
             ApplyFonts();
+            ApplyLayout();
         }
 
         void EnsureScroll()
@@ -413,8 +398,8 @@ namespace CrazyChat.Overlay
 
             _friendId = friendId;
             _open = true;
-            _showAll = false;
-            ApplyCardSize();
+            _mode = ChatMode.Compact;
+            ApplyLayout();
             _card.SetActive(true);
             transform.SetAsLastSibling();
             _chat.Store.MarkRead(friendId);
@@ -441,6 +426,7 @@ namespace CrazyChat.Overlay
 
             _open = false;
             _friendId = 0;
+            _mode = ChatMode.Compact;
             if (_card != null)
             {
                 _card.SetActive(false);
@@ -586,8 +572,18 @@ namespace CrazyChat.Overlay
             var send = CreateImage("Send", _cardRt, OverlaySprites.Accent, OverlaySprites.RoundedRect);
             OverlaySkin.ApplyButton(send, accent: true);
             send.raycastTarget = true;
-            PinBottomRight(send.rectTransform, new Vector2(-10f, 10f), new Vector2(52f, 32f));
+            PinBottomRight(send.rectTransform, new Vector2(-10f, 10f), new Vector2(SendButtonWidth, 32f));
             FillLabel(send.rectTransform, "发送", 13, OverlaySkin.Text);
+
+            var allMessages = CreateImage("AllMessages", _cardRt, OverlaySprites.Button, OverlaySprites.RoundedRect);
+            OverlaySkin.ApplyButton(allMessages);
+            allMessages.raycastTarget = true;
+            PinBottomRight(
+                allMessages.rectTransform,
+                new Vector2(-(10f + SendButtonWidth + ComposerGap), 10f),
+                new Vector2(AllMessagesButtonWidth, 32f));
+            _allMessagesLabel = FillLabel(allMessages.rectTransform, "全部消息", 12, OverlaySkin.Text);
+            ApplyLayout();
         }
 
         public void ApplySkin()
@@ -605,6 +601,7 @@ namespace CrazyChat.Overlay
             OverlaySkin.ApplyButton(FindChildImage(_cardRt, "Body"), well: true);
             OverlaySkin.ApplyButton(FindChildImage(_cardRt, "Input"));
             OverlaySkin.ApplyButton(FindChildImage(_cardRt, "Send"), accent: true);
+            OverlaySkin.ApplyButton(FindChildImage(_cardRt, "AllMessages"));
             if (_title != null)
             {
                 _title.color = OverlaySkin.Text;
@@ -613,6 +610,11 @@ namespace CrazyChat.Overlay
             if (_historyLabel != null)
             {
                 _historyLabel.color = OverlaySkin.Text;
+            }
+
+            if (_allMessagesLabel != null)
+            {
+                _allMessagesLabel.color = OverlaySkin.Text;
             }
 
             if (_status != null)
@@ -640,6 +642,7 @@ namespace CrazyChat.Overlay
             }
 
             PaintLabel(FindChild(_cardRt, "Send"), OverlaySkin.Text);
+            PaintLabel(FindChild(_cardRt, "AllMessages"), OverlaySkin.Text);
             PaintLabel(FindChild(_cardRt, "Header/Close"), OverlaySkin.Text);
             PaintLabel(FindChild(_cardRt, "Header/History"), OverlaySkin.Text);
 
@@ -649,23 +652,150 @@ namespace CrazyChat.Overlay
             }
         }
 
-        void ToggleHistory()
+        void EnsureAllMessagesButton()
         {
-            _showAll = !_showAll;
-            ApplyCardSize();
+            var node = FindNode(_cardRt, "AllMessages");
+            if (node == null)
+            {
+                var allMessages = CreateImage("AllMessages", _cardRt, OverlaySprites.Button, OverlaySprites.RoundedRect);
+                OverlaySkin.ApplyButton(allMessages);
+                allMessages.raycastTarget = true;
+                PinBottomRight(
+                    allMessages.rectTransform,
+                    new Vector2(-(10f + SendButtonWidth + ComposerGap), 10f),
+                    new Vector2(AllMessagesButtonWidth, 32f));
+                _allMessagesLabel = FillLabel(allMessages.rectTransform, "全部消息", 12, OverlaySkin.Text);
+                node = allMessages.transform;
+            }
+            else if (_allMessagesLabel == null)
+            {
+                _allMessagesLabel = FindLabel(node, "Label") ?? node.GetComponentInChildren<Text>(true);
+            }
+
+            BindClick(node, ShowAllMessages);
+        }
+
+        void ShowAllMessages()
+        {
+            if (!_open || _mode == ChatMode.Full)
+            {
+                return;
+            }
+
+            _mode = ChatMode.Full;
+            ApplyLayout();
             Refresh();
+            KeepInputFocused();
+        }
+
+        void CloseOrCollapse()
+        {
+            if (!_open)
+            {
+                return;
+            }
+
+            if (_mode == ChatMode.Full)
+            {
+                _mode = ChatMode.Compact;
+                ApplyLayout();
+                Refresh();
+                KeepInputFocused();
+                return;
+            }
+
+            Hide();
+        }
+
+        void ApplyLayout()
+        {
+            ApplyCardSize();
+            ApplyComposerLayout();
+            ApplyModeChrome();
         }
 
         void ApplyCardSize()
         {
-            if (_cardRt != null)
+            if (_cardRt == null)
             {
-                _cardRt.sizeDelta = new Vector2(CardWidth, _showAll ? HistoryHeight : CompactHeight);
+                return;
             }
 
-            if (_historyLabel != null)
+            if (_mode == ChatMode.Compact)
             {
-                _historyLabel.text = _showAll ? "收起" : "历史";
+                _cardRt.pivot = new Vector2(0.5f, 0f);
+                _cardRt.sizeDelta = new Vector2(BubbleCompactWidth, BubbleCompactHeight);
+            }
+            else
+            {
+                _cardRt.pivot = new Vector2(0.5f, 0.5f);
+                _cardRt.sizeDelta = new Vector2(CardWidth, HistoryHeight);
+            }
+        }
+
+        void ApplyComposerLayout()
+        {
+            var statusSpace = _mode == ChatMode.Compact ? 0f : StatusHeight;
+            var body = FindNode(_cardRt, "Body") as RectTransform;
+            if (body != null)
+            {
+                body.anchorMin = Vector2.zero;
+                body.anchorMax = Vector2.one;
+                body.pivot = new Vector2(0.5f, 0.5f);
+                body.offsetMin = new Vector2(8f, ComposerHeight + statusSpace);
+                body.offsetMax = new Vector2(-8f, -HeaderHeight - 2f);
+            }
+
+            if (_status != null)
+            {
+                var statusRt = _status.rectTransform;
+                statusRt.anchorMin = new Vector2(0f, 0f);
+                statusRt.anchorMax = new Vector2(1f, 0f);
+                statusRt.pivot = new Vector2(0.5f, 0f);
+                statusRt.anchoredPosition = new Vector2(0f, ComposerHeight);
+                statusRt.sizeDelta = new Vector2(-20f, StatusHeight);
+                _status.gameObject.SetActive(_mode == ChatMode.Full);
+            }
+
+            var reserved = _mode == ChatMode.Compact
+                ? 10f + AllMessagesButtonWidth + ComposerGap + SendButtonWidth + 10f
+                : 82f;
+
+            var inputRt = FindNode(_cardRt, "Input") as RectTransform;
+            if (inputRt != null)
+            {
+                inputRt.anchorMin = new Vector2(0f, 0f);
+                inputRt.anchorMax = new Vector2(1f, 0f);
+                inputRt.pivot = new Vector2(0f, 0f);
+                inputRt.anchoredPosition = new Vector2(10f, 10f);
+                inputRt.sizeDelta = new Vector2(-reserved, 32f);
+                InsetStretch(inputRt.Find("Placeholder") as RectTransform, 10f);
+                InsetStretch(inputRt.Find("Text") as RectTransform, 10f);
+            }
+
+            var send = FindNode(_cardRt, "Send") as RectTransform;
+            if (send != null)
+            {
+                PinBottomRight(send, new Vector2(-10f, 10f), new Vector2(SendButtonWidth, 32f));
+            }
+
+            var allMessages = FindNode(_cardRt, "AllMessages") as RectTransform;
+            if (allMessages != null)
+            {
+                PinBottomRight(
+                    allMessages,
+                    new Vector2(-(10f + SendButtonWidth + ComposerGap), 10f),
+                    new Vector2(AllMessagesButtonWidth, 32f));
+                allMessages.gameObject.SetActive(_mode == ChatMode.Compact);
+            }
+        }
+
+        void ApplyModeChrome()
+        {
+            var history = FindNode(_cardRt, "Header/History");
+            if (history != null)
+            {
+                history.gameObject.SetActive(false);
             }
         }
 
@@ -741,7 +871,7 @@ namespace CrazyChat.Overlay
         {
             if (_open && Input.GetKeyDown(KeyCode.Escape))
             {
-                Hide();
+                CloseOrCollapse();
             }
         }
 
@@ -757,7 +887,14 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            PlaceCardBeside(pos);
+            if (_mode == ChatMode.Compact)
+            {
+                PlaceCardAbove(pos);
+            }
+            else
+            {
+                PlaceCardBeside(pos);
+            }
         }
 
         void Refresh()
@@ -769,16 +906,11 @@ namespace CrazyChat.Overlay
 
             var name = _open ? _view.GetFriendName(_friendId) : "聊天";
             _title.text = Ellipsize(name, 12);
-            if (_status != null)
+            if (_status != null && _mode == ChatMode.Full)
             {
                 _status.text = SteamManager.Initialized
                     ? "双方开着本游戏才能送到"
                     : "Steam 未连接，消息只会留在本机";
-            }
-
-            if (_historyLabel != null)
-            {
-                _historyLabel.text = _showAll ? "收起" : "历史";
             }
 
             if (!_open)
@@ -793,16 +925,20 @@ namespace CrazyChat.Overlay
         {
             var count = messages != null ? messages.Count : 0;
             var start = 0;
-            if (!_showAll && count > CompactTake)
+            if (_mode == ChatMode.Compact)
             {
-                start = count - CompactTake;
+                start = OverlayChatRules.StartIndexFromLastPeer(messages);
             }
 
-            var visible = count - start;
+            var visible = Mathf.Max(0, count - start);
             if (_empty != null)
             {
-                _empty.gameObject.SetActive(visible == 0);
-                _empty.text = "还没有消息";
+                var showEmpty = visible == 0 && count == 0;
+                _empty.gameObject.SetActive(showEmpty);
+                if (showEmpty)
+                {
+                    _empty.text = "还没有消息";
+                }
             }
 
             while (_rows.Count < visible)
@@ -886,6 +1022,21 @@ namespace CrazyChat.Overlay
             var bubbleH = textH + 12f;
             row.BubbleRt.sizeDelta = new Vector2(bubbleW, bubbleH);
             return bubbleH;
+        }
+
+        void PlaceCardAbove(Vector2 avatarPos)
+        {
+            var size = _cardRt.sizeDelta;
+            var chipSize = _view != null && _view.Config != null ? _view.Config.chipSize : 128f;
+            var scale = _view != null && _view.Settings != null ? _view.Settings.Scale : 1f;
+            var gap = 8f * scale;
+            // Center-pivot card sits fully above chip top.
+            var cardPos = new Vector2(
+                avatarPos.x,
+                avatarPos.y + chipSize * 0.5f * scale + gap + size.y * 0.5f);
+            cardPos.x = Mathf.Clamp(cardPos.x, 12f + size.x * 0.5f, Screen.width - 12f - size.x * 0.5f);
+            cardPos.y = Mathf.Clamp(cardPos.y, 12f + size.y * 0.5f, Screen.height - 12f - size.y * 0.5f);
+            _cardRt.anchoredPosition = cardPos;
         }
 
         void PlaceCardBeside(Vector2 avatarPos)

@@ -470,6 +470,7 @@ namespace CrazyChat.Overlay
                 if (pair.Value != null)
                 {
                     pair.Value.SetSelected(pair.Key == selected);
+                    pair.Value.SetChatExpanded(_chatUi != null && _chatUi.IsOpen && pair.Key == _chatUi.OpenFriendId);
                 }
             }
 

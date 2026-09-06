@@ -16,21 +16,21 @@
 
 ### Task 1: Spec checkpoint + helpers
 
-- [ ] Checkpoint approved spec
-- [ ] Add message slice helper (peer last → end) testable static method on OverlayChatStore or OverlayChatUi
+- [x] Checkpoint approved spec
+- [x] Add message slice helper (peer last → end) testable static method on OverlayChatStore or OverlayChatUi
 
 ### Task 2: OverlayChatUi Compact/Full
 
-- [ ] Mode enum; OpenCompact / OpenFull / CloseFullToCompact / Hide
-- [ ] Compact layout at bubble anchor; Full keeps side panel
-- [ ] 「全部消息」left of send; Escape/close per mode
-- [ ] Keep input focus after send
+- [x] Mode enum; OpenCompact / OpenFull / CloseFullToCompact / Hide
+- [x] Compact layout at bubble anchor; Full keeps side panel
+- [x] 「全部消息」left of send; Escape/close per mode
+- [x] Keep input focus after send
 
 ### Task 3: View wiring + bubble preview
 
-- [ ] OpenChat → Compact; targeting Enter → Compact
-- [ ] Chip bubble always shows latest or "…"
-- [ ] Selection refresh with modes
+- [x] OpenChat → Compact; targeting Enter → Compact
+- [x] Chip bubble always shows latest or "…"
+- [x] Selection refresh with modes
 
 ### Task 4: Build Export/0.2 + finalize
 

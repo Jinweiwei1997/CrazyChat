@@ -41,9 +41,10 @@ namespace CrazyChat.Overlay
         Image _badge;
         Text _badgeText;
         Image _nameBg;
-        string _bubbleContent = "...";
+        string _bubbleContent = "…";
         int _unread;
         bool _selected;
+        bool _chatExpanded;
         Vector2 _layoutPos;
         bool _dragging;
         float _reactionUntil;
@@ -209,7 +210,7 @@ namespace CrazyChat.Overlay
             bubbleRt.sizeDelta = new Vector2(BubbleBaseWidth, BubbleHeight);
             _bubbleFade = _bubble.gameObject.AddComponent<CanvasGroup>();
             _bubbleFade.blocksRaycasts = true;
-            _bubbleText = FillChipLabel(_bubble.rectTransform, "...", BubbleFontSize, OverlaySkin.Text);
+            _bubbleText = FillChipLabel(_bubble.rectTransform, "…", BubbleFontSize, OverlaySkin.Text);
 
             _badge = CreateImage("Badge", _rect, new Color(0.92f, 0.28f, 0.28f, 1f), OverlaySprites.Circle);
             _badge.raycastTarget = false;
@@ -413,7 +414,7 @@ namespace CrazyChat.Overlay
 
         public void SetChatPreview(string text, int unread)
         {
-            var next = string.IsNullOrEmpty(text) ? "..." : Ellipsize(text, 8);
+            var next = string.IsNullOrEmpty(text) ? "…" : Ellipsize(text, 8);
             if (next != _bubbleContent && _bubbleFade != null)
             {
                 _bubbleFade.alpha = 0.15f;
@@ -427,6 +428,17 @@ namespace CrazyChat.Overlay
         public void SetSelected(bool selected)
         {
             _selected = selected;
+            RefreshChatChrome();
+        }
+
+        public void SetChatExpanded(bool expanded)
+        {
+            if (_chatExpanded == expanded)
+            {
+                return;
+            }
+
+            _chatExpanded = expanded;
             RefreshChatChrome();
         }
 
@@ -447,8 +459,9 @@ namespace CrazyChat.Overlay
             var showChat = _friend != null && !_friend.IsLocal;
             if (_bubble != null)
             {
-                _bubble.gameObject.SetActive(showChat);
-                if (showChat && _bubbleText != null)
+                var showBubble = showChat && !_chatExpanded;
+                _bubble.gameObject.SetActive(showBubble);
+                if (showBubble && _bubbleText != null)
                 {
                     _bubbleText.text = _unread > 0
                         ? _bubbleContent + "（未读 " + FormatUnread(_unread) + "）"
