@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -31,6 +32,7 @@ namespace CrazyChat.Overlay
         ulong _friendId;
         bool _open;
         bool _showAll;
+        Coroutine _refocusRoutine;
         readonly List<ChatRow> _rows = new List<ChatRow>();
 
         public static OverlayChatUi Create(Transform canvas, FriendOverlayView view, OverlayChatService chat)
@@ -422,7 +424,7 @@ namespace CrazyChat.Overlay
                 _input.text = string.Empty;
                 if (focusInput)
                 {
-                    EventSystem.current?.SetSelectedGameObject(_input.gameObject);
+                    KeepInputFocused();
                 }
             }
 
@@ -431,6 +433,12 @@ namespace CrazyChat.Overlay
 
         public void Hide()
         {
+            if (_refocusRoutine != null)
+            {
+                StopCoroutine(_refocusRoutine);
+                _refocusRoutine = null;
+            }
+
             _open = false;
             _friendId = 0;
             if (_card != null)
@@ -685,15 +693,48 @@ namespace CrazyChat.Overlay
             var text = _input.text;
             _input.text = string.Empty;
             _chat.Send(_friendId, text);
+            KeepInputFocused();
+        }
+
+        void KeepInputFocused()
+        {
+            if (!isActiveAndEnabled)
+            {
+                FocusInputNow();
+                return;
+            }
+
+            if (_refocusRoutine != null)
+            {
+                StopCoroutine(_refocusRoutine);
+            }
+
+            _refocusRoutine = StartCoroutine(RefocusInputNextFrame());
+        }
+
+        IEnumerator RefocusInputNextFrame()
+        {
+            yield return null;
+            _refocusRoutine = null;
+            FocusInputNow();
+        }
+
+        void FocusInputNow()
+        {
+            if (!_open || _input == null || !_input.gameObject.activeInHierarchy)
+            {
+                return;
+            }
+
             EventSystem.current?.SetSelectedGameObject(_input.gameObject);
+            _input.ActivateInputField();
+            _input.Select();
+            _view?.RefreshChatSelection();
         }
 
         void OnCardPointerEnter()
         {
-            if (_input != null)
-            {
-                EventSystem.current?.SetSelectedGameObject(_input.gameObject);
-            }
+            KeepInputFocused();
         }
 
         void Update()
