@@ -7,6 +7,8 @@ namespace CrazyChat.Overlay
     {
         public const string Minimal = "minimal";
         public const string Basic = "basic";
+        public const float OpenWindowScale = 1.3f;
+        public const float SettingsChatWidthScale = 0.7f;
 
         const string ResVertical = "Overlay/Skins/basic/panel_vertical";
         const string ResHorizontal = "Overlay/Skins/basic/panel_horizontal";
@@ -48,6 +50,60 @@ namespace CrazyChat.Overlay
         public static Color SettingsText => Color.white;
 
         public static Color SettingsMuted => new Color(1f, 1f, 1f, 0.72f);
+
+        public static Color ThemeBackground(int theme) => theme == 2
+            ? new Color(0.98f, 0.98f, 0.98f, 1f)
+            : new Color(0.118f, 0.118f, 0.118f, 1f);
+
+        public static Color ThemeHeader(int theme) => theme == 2
+            ? new Color(0.95f, 0.95f, 0.95f, 1f)
+            : new Color(0.094f, 0.094f, 0.094f, 1f);
+
+        public static Color ThemeSection(int theme) => theme == 2
+            ? new Color(0.92f, 0.92f, 0.92f, 1f)
+            : new Color(0.102f, 0.102f, 0.102f, 1f);
+
+        public static Color ThemeControl(int theme) => theme == 2
+            ? new Color(0.88f, 0.88f, 0.88f, 1f)
+            : new Color(0.176f, 0.176f, 0.176f, 1f);
+
+        public static Color ThemeAccent(int theme) => theme == 2
+            ? new Color(0.78f, 0.78f, 0.8f, 1f)
+            : new Color(0.88f, 0.42f, 0.62f, 1f);
+
+        public static Color ThemeMuted(int theme) => theme == 2
+            ? new Color(0.43f, 0.43f, 0.45f, 1f)
+            : new Color(0.64f, 0.64f, 0.64f, 1f);
+
+        public static Color ThemeHover(int theme) => theme == 2
+            ? new Color(0f, 0f, 0f, 0.06f)
+            : new Color(1f, 1f, 1f, 0.08f);
+
+        public static Color ThemeDivider(int theme) => theme == 2
+            ? new Color(0.86f, 0.86f, 0.86f, 1f)
+            : new Color(0.235f, 0.235f, 0.235f, 1f);
+
+        public static Color ThemeInputBackground(int theme) => theme == 2
+            ? Color.white
+            : new Color(0.125f, 0.125f, 0.125f, 1f);
+
+        public static Color ThemeDanger(int theme) => theme == 2
+            ? new Color(0.78f, 0.18f, 0.18f, 1f)
+            : new Color(0.96f, 0.53f, 0.44f, 1f);
+
+        public static Color SettingsThemeText(int theme)
+        {
+            return theme == 2
+                ? new Color(0.14f, 0.14f, 0.15f, 1f)
+                : new Color(0.94f, 0.94f, 0.94f, 1f);
+        }
+
+        public static Color InputIconColor(int theme)
+        {
+            return theme == 2
+                ? Color.white
+                : new Color(0.14f, 0.14f, 0.15f, 1f);
+        }
 
         public static void ApplySettingsPanel(Image image)
         {

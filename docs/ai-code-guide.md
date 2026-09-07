@@ -63,9 +63,10 @@ OverlaySprites            圆/圆角/字体，UI 共用
 当前迁移状态：
 
 - `OverlaySettingsUi`：使用 `Resources/Prefab/UI/SettingsMenu.prefab`，运行时不再调用 `Build()`。
+- `OverlayChatUi`：使用 `Resources/Prefab/UI/ChatPanel.prefab`，静态窗口只从 Prefab 加载；消息行继续按聊天数据动态生成。
 - 其他界面：保持现状，后续按界面逐个迁移，不要顺手批量改造。
 
-设置 Prefab 的初始层级由 `OverlaySettingsUi.EditorPopulate()` / `CrazyChat/Build Settings Menu Prefab` 从现有 `Build()` 生成，用于确保迁移前后结构和功能一致。接入正式 UI 资源后，重新生成会覆盖 Prefab 上的美术调整，执行生成菜单前必须确认。
+设置和聊天 Prefab 的初始层级分别由 `OverlaySettingsUi.EditorPopulate()`、`OverlayChatUi.EditorPopulate()` 及对应的 CrazyChat 构建菜单生成。接入正式 UI 资源后，重新生成会覆盖 Prefab 上的美术调整，执行生成菜单前必须确认。
 
 尚未迁移的运行时界面沿用：
 

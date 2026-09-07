@@ -38,6 +38,10 @@ namespace CrazyChat.Overlay
         [Min(1)]
         public int maxMessagesPerFriend = 200;
 
+        [Header("简易聊天最多显示几条")]
+        [Min(1)]
+        public int maxCompactChatMessages = 5;
+
         [Header("未读显示封顶")]
         [Min(1)]
         public int unreadCap = 99;

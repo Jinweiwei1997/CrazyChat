@@ -20,6 +20,9 @@ namespace CrazyChat.Overlay
         bool _applied;
         bool _alwaysOnTop = true;
         bool _suspendTopmost;
+        int _targetDisplayIndex;
+        int _appliedDisplayIndex = -1;
+        Coroutine _moveDisplayRoutine;
 
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         const int GwlStyle = -16;
@@ -112,6 +115,41 @@ namespace CrazyChat.Overlay
 #endif
         }
 
+        public static int GetAvailableDisplayCount()
+        {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            var layout = new List<DisplayInfo>();
+            Screen.GetDisplayLayout(layout);
+            return Mathf.Max(1, layout.Count);
+#else
+            return Mathf.Max(1, Display.displays.Length);
+#endif
+        }
+
+        public void SetTargetDisplay(int index)
+        {
+            var target = Mathf.Max(0, index);
+            if (target == _targetDisplayIndex &&
+                (_moveDisplayRoutine != null || _appliedDisplayIndex == target))
+            {
+                return;
+            }
+
+            _targetDisplayIndex = target;
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            if (!_applied || _appliedDisplayIndex == _targetDisplayIndex)
+            {
+                return;
+            }
+
+            if (_moveDisplayRoutine != null)
+            {
+                StopCoroutine(_moveDisplayRoutine);
+            }
+            _moveDisplayRoutine = StartCoroutine(MoveToTargetDisplay());
+#endif
+        }
+
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         public IntPtr WindowHandle => _hwnd;
 
@@ -146,8 +184,8 @@ namespace CrazyChat.Overlay
         IEnumerator Start()
         {
             Application.runInBackground = true;
-            Screen.fullScreen = false;
-            Screen.fullScreenMode = FullScreenMode.Windowed;
+            Screen.fullScreenMode = FullScreenMode.FullScreenWindow;
+            Screen.fullScreen = true;
 
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
             yield return null;
@@ -205,18 +243,41 @@ namespace CrazyChat.Overlay
             };
             DwmExtendFrameIntoClientArea(_hwnd, ref margins);
 
-            var width = Display.main.systemWidth;
-            var height = Display.main.systemHeight;
-            if (width > 0 && height > 0 && (Screen.width != width || Screen.height != height))
-            {
-                Screen.SetResolution(width, height, FullScreenMode.FullScreenWindow);
-            }
-
-            SetWindowPos(_hwnd, _alwaysOnTop ? HwndTopmost : HwndNoTopmost, 0, 0, width, height, SwpFrameChanged | SwpShowWindow);
+            SetWindowPos(_hwnd, _alwaysOnTop ? HwndTopmost : HwndNoTopmost, 0, 0, 0, 0,
+                SwpNoMove | SwpNoSize | SwpFrameChanged | SwpShowWindow);
 
             _clickThrough = false;
             SetClickThrough(true);
             _applied = true;
+            SetTargetDisplay(_targetDisplayIndex);
+        }
+
+        IEnumerator MoveToTargetDisplay()
+        {
+            var layout = new List<DisplayInfo>();
+            Screen.GetDisplayLayout(layout);
+            if (layout.Count == 0)
+            {
+                _moveDisplayRoutine = null;
+                yield break;
+            }
+
+            var index = Mathf.Clamp(_targetDisplayIndex, 0, layout.Count - 1);
+            var display = layout[index];
+            Screen.fullScreenMode = FullScreenMode.FullScreenWindow;
+            Screen.fullScreen = true;
+            yield return null;
+
+            var move = Screen.MoveMainWindowTo(display, Vector2Int.zero);
+            if (move != null)
+            {
+                yield return move;
+            }
+
+            SetWindowPos(_hwnd, _alwaysOnTop ? HwndTopmost : HwndNoTopmost, 0, 0, 0, 0,
+                SwpNoMove | SwpNoSize | SwpFrameChanged | SwpShowWindow);
+            _appliedDisplayIndex = index;
+            _moveDisplayRoutine = null;
         }
 
         void SetClickThrough(bool clickThrough)

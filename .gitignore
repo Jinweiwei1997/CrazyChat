@@ -1,6 +1,9 @@
 # This .gitignore is at the repo root. Unity project lives in /Project
 # Based on https://github.com/github/gitignore/blob/main/Unity.gitignore
 
+# Root-level VS Code Codicons source checkout
+/vscode-codicons-main/
+
 .utmp/
 /Project/[Ll]ibrary/
 /Project/[Tt]emp/

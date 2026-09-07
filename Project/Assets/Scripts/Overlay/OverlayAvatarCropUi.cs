@@ -70,6 +70,7 @@ namespace CrazyChat.Overlay
             var dim = CreateImage("Dim", transform, new Color(0f, 0f, 0f, 0.55f), OverlaySprites.RoundedRect);
             dim.raycastTarget = true;
             Stretch(dim.rectTransform);
+            dim.gameObject.AddComponent<Button>().onClick.AddListener(Cancel);
 
             var card = CreateImage("Card", transform, OverlaySprites.Panel, OverlaySprites.RoundedRect);
             OverlaySkin.ApplyPanel(card);
@@ -77,6 +78,10 @@ namespace CrazyChat.Overlay
             var cardRt = card.rectTransform;
             cardRt.anchorMin = cardRt.anchorMax = new Vector2(0.5f, 0.5f);
             cardRt.sizeDelta = new Vector2(360f, 420f);
+            cardRt.localScale = new Vector3(
+                OverlaySkin.OpenWindowScale,
+                OverlaySkin.OpenWindowScale,
+                1f);
 
             PlaceLabel(cardRt, "截取方形头像", 16, OverlaySkin.Text, new Vector2(0f, 180f), new Vector2(280f, 24f));
             _hint = PlaceLabel(cardRt, "拖动移动 · 滚轮缩放画面 · +/- 放大窗口", 12, OverlaySkin.TextMuted,

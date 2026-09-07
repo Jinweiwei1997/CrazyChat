@@ -24,7 +24,7 @@ namespace CrazyChat.Overlay
             return fx;
         }
 
-        public void Play(Vector2 head, Sprite icon)
+        public void Play(Vector2 head, Sprite icon, Color color, float scale = 1f)
         {
             if (icon == null)
             {
@@ -33,11 +33,13 @@ namespace CrazyChat.Overlay
 
             var pop = Rent();
             pop.Image.sprite = icon;
-            pop.Image.color = Color.white;
+            pop.Image.color = color;
             pop.Group.alpha = 1f;
-            pop.From = head + new Vector2(Random.Range(-8f, 8f), 4f);
+            scale = Mathf.Max(0.1f, scale);
+            pop.From = head + new Vector2(Random.Range(-8f, 8f), 4f) * scale;
+            pop.Rise = Rise * scale;
             pop.Until = Time.unscaledTime + Duration;
-            pop.Rt.sizeDelta = new Vector2(Size, Size);
+            pop.Rt.sizeDelta = new Vector2(Size, Size) * scale;
             pop.Rt.anchoredPosition = pop.From;
             pop.Rt.gameObject.SetActive(true);
         }
@@ -61,7 +63,7 @@ namespace CrazyChat.Overlay
                 }
 
                 var t = 1f - left / Duration;
-                pop.Rt.anchoredPosition = pop.From + new Vector2(0f, Rise * t);
+                pop.Rt.anchoredPosition = pop.From + new Vector2(0f, pop.Rise * t);
                 pop.Group.alpha = t < 0.25f ? 1f : 1f - (t - 0.25f) / 0.75f;
             }
         }
@@ -129,6 +131,7 @@ namespace CrazyChat.Overlay
             public Image Image;
             public CanvasGroup Group;
             public Vector2 From;
+            public float Rise;
             public float Until;
         }
     }

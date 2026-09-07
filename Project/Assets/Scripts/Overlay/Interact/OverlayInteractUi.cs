@@ -9,6 +9,7 @@ namespace CrazyChat.Overlay.Interact
         const int SlotCount = 4;
         const float SlotSize = 36f;
         const float SlotGap = 8f;
+        const string ControlSpriteResource = "Overlay/UI/control_rect";
 
         static readonly Vector2[] SlotDirections =
         {
@@ -87,6 +88,8 @@ namespace CrazyChat.Overlay.Interact
         void RefreshSlots()
         {
             var actions = OverlayInteractCatalog.All;
+            var theme = _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
+            var control = Resources.Load<Sprite>(ControlSpriteResource);
             for (var i = 0; i < SlotCount; i++)
             {
                 _slotActions[i] = i < actions.Count ? actions[i] : null;
@@ -98,15 +101,17 @@ namespace CrazyChat.Overlay.Interact
                 }
 
                 bg.gameObject.SetActive(true);
+                bg.sprite = control != null ? control : OverlaySprites.RoundedRect;
+                bg.type = Image.Type.Sliced;
                 if (filled)
                 {
-                    OverlaySkin.ApplyButton(bg, accent: true);
-                    bg.color = OverlaySprites.Accent;
+                    var accent = OverlaySkin.ThemeAccent(theme);
+                    accent.a = 0.3f;
+                    bg.color = accent;
                 }
                 else
                 {
-                    OverlaySkin.ApplyPanel(bg);
-                    bg.color = new Color(1f, 1f, 1f, 0.14f);
+                    bg.color = OverlaySkin.ThemeControl(theme);
                 }
 
                 bg.raycastTarget = true;
@@ -119,7 +124,7 @@ namespace CrazyChat.Overlay.Interact
                 if (_slotLabels[i] != null)
                 {
                     _slotLabels[i].text = filled ? ShortSlotLabel(_slotActions[i].Label) : string.Empty;
-                    _slotLabels[i].color = OverlaySkin.Text;
+                    _slotLabels[i].color = OverlaySkin.SettingsThemeText(theme);
                 }
             }
         }
@@ -325,7 +330,8 @@ namespace CrazyChat.Overlay.Interact
         void PlaceRing(Vector2 avatarPos, float chipSize, float scale)
         {
             _ringRt.anchoredPosition = avatarPos;
-            var radius = chipSize * 0.5f * scale + SlotSize * 0.5f + SlotGap;
+            _ringRt.localScale = new Vector3(scale, scale, 1f);
+            var radius = chipSize * 0.5f + SlotSize * 0.5f + SlotGap;
             for (var i = 0; i < SlotCount; i++)
             {
                 var bg = _slotBg[i];

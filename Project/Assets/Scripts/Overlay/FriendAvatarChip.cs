@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -6,14 +7,16 @@ namespace CrazyChat.Overlay
 {
     public sealed class FriendAvatarChip : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
-        const float BubbleVisualScale = 0.75f;
+        const string ControlSpriteResource = "Overlay/UI/control_rect";
+        const float BubbleVisualScale = 1f;
         const float BubbleBaseWidth = 72f * BubbleVisualScale;
         const float BubbleHeight = 26f * BubbleVisualScale;
         const float BubbleMinWidth = 32f * BubbleVisualScale;
         const float BubbleMaxWidth = 180f * BubbleVisualScale;
         const float BubbleTextPad = 14f * BubbleVisualScale;
         const float BubbleOffsetY = 0f;
-        const int BubbleFontSize = 9;
+        const int BubbleFontSize = 12;
+        const float BubbleRotateSeconds = 3f;
 
         float _size = 128f;
 
@@ -31,7 +34,6 @@ namespace CrazyChat.Overlay
         bool _presenceActive;
         bool _presenceMode;
         Image _ring;
-        Image _dash;
         GameObject _nameRoot;
         Text _nameText;
         Text _countText;
@@ -42,6 +44,9 @@ namespace CrazyChat.Overlay
         Text _badgeText;
         Image _nameBg;
         string _bubbleContent = "";
+        readonly List<string> _bubbleUnread = new List<string>();
+        int _bubbleUnreadIndex;
+        float _nextBubbleRotateAt;
         int _unread;
         bool _selected;
         bool _chatExpanded;
@@ -133,13 +138,6 @@ namespace CrazyChat.Overlay
             Stretch(_ring.rectTransform);
             _ring.raycastTarget = false;
 
-            _dash = CreateImage("Dash", _body, new Color(1f, 1f, 1f, 0.95f), OverlaySprites.DashedRoundedSquare);
-            Stretch(_dash.rectTransform);
-            _dash.rectTransform.offsetMin = new Vector2(-6f, -6f);
-            _dash.rectTransform.offsetMax = new Vector2(6f, 6f);
-            _dash.raycastTarget = false;
-            _dash.gameObject.SetActive(false);
-
             var maskGo = new GameObject("Mask", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Mask));
             maskGo.transform.SetParent(_body, false);
             var maskRt = (RectTransform)maskGo.transform;
@@ -162,17 +160,20 @@ namespace CrazyChat.Overlay
             OverlaySkin.ApplyButton(_nameBg);
             _nameBg.raycastTarget = false;
             var nameRt = (RectTransform)_nameRoot.transform;
-            nameRt.anchorMin = new Vector2(0f, 0.5f);
-            nameRt.anchorMax = new Vector2(0f, 0.5f);
-            nameRt.pivot = new Vector2(1f, 0.5f);
-            nameRt.anchoredPosition = new Vector2(-8f, 0f);
-            nameRt.sizeDelta = new Vector2(140f, 28f);
+            nameRt.anchorMin = new Vector2(0f, 0f);
+            nameRt.anchorMax = new Vector2(1f, 0f);
+            nameRt.pivot = new Vector2(0.5f, 0f);
+            nameRt.anchoredPosition = new Vector2(0f, 4f);
+            nameRt.sizeDelta = new Vector2(-8f, 24f);
 
             var textGo = new GameObject("Text", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
             textGo.transform.SetParent(_nameRoot.transform, false);
             _nameText = textGo.GetComponent<Text>();
             _nameText.font = OverlaySprites.UiFont;
-            _nameText.fontSize = 14;
+            _nameText.fontSize = 13;
+            _nameText.resizeTextForBestFit = true;
+            _nameText.resizeTextMinSize = 9;
+            _nameText.resizeTextMaxSize = 13;
             _nameText.alignment = TextAnchor.MiddleCenter;
             _nameText.color = OverlaySkin.Text;
             _nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -217,15 +218,15 @@ namespace CrazyChat.Overlay
             _bubbleFade.blocksRaycasts = true;
             _bubbleText = FillChipLabel(_bubble.rectTransform, "", BubbleFontSize, OverlaySkin.Text);
 
-            _badge = CreateImage("Badge", _rect, new Color(0.92f, 0.28f, 0.28f, 1f), OverlaySprites.Circle);
+            _badge = CreateImage("Badge", _bubble.rectTransform, new Color(0.92f, 0.28f, 0.28f, 1f), OverlaySprites.Circle);
             _badge.raycastTarget = false;
             var badgeRt = _badge.rectTransform;
-            badgeRt.anchorMin = new Vector2(1f, 1f);
-            badgeRt.anchorMax = new Vector2(1f, 1f);
+            badgeRt.anchorMin = new Vector2(1f, 0.5f);
+            badgeRt.anchorMax = new Vector2(1f, 0.5f);
             badgeRt.pivot = new Vector2(0.5f, 0.5f);
-            badgeRt.anchoredPosition = new Vector2(-4f, -4f);
-            badgeRt.sizeDelta = new Vector2(22f, 22f);
-            _badgeText = FillChipLabel(_badge.rectTransform, "1", 11, Color.white);
+            badgeRt.anchoredPosition = new Vector2(2f, 0f);
+            badgeRt.sizeDelta = new Vector2(18f, 18f);
+            _badgeText = FillChipLabel(_badge.rectTransform, "1", 9, Color.white);
             _badge.gameObject.SetActive(false);
         }
 
@@ -283,8 +284,6 @@ namespace CrazyChat.Overlay
 
             var label = _friend.IsLocal ? _friend.Name + "（你）" : _friend.Name;
             _nameText.text = label;
-            var width = Mathf.Clamp(_nameText.preferredWidth + 20f, 72f, 220f);
-            ((RectTransform)_nameRoot.transform).sizeDelta = new Vector2(width, 28f);
             RefreshCount();
             RefreshChatChrome();
             ApplySkin();
@@ -402,22 +401,68 @@ namespace CrazyChat.Overlay
 
         public void ApplySkin()
         {
-            OverlaySkin.ApplyButton(_nameBg);
-            OverlaySkin.ApplyButton(_bubble);
+            var theme = _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
+            var control = Resources.Load<Sprite>(ControlSpriteResource);
+            if (_nameBg != null)
+            {
+                var nameColor = OverlaySkin.ThemeHeader(theme);
+                nameColor.a = 0.92f;
+                ApplyFlatStyle(_nameBg, control, nameColor);
+            }
+            if (_bubble != null)
+            {
+                ApplyFlatStyle(_bubble, control, OverlaySkin.ThemeControl(theme));
+            }
+            if (_badge != null)
+            {
+                _badge.color = OverlaySkin.ThemeAccent(theme);
+            }
             if (_nameText != null)
             {
-                _nameText.color = OverlaySkin.Text;
+                _nameText.color = OverlaySkin.SettingsThemeText(theme);
             }
 
             if (_bubbleText != null)
             {
-                _bubbleText.color = OverlaySkin.Text;
+                _bubbleText.color = OverlaySkin.SettingsThemeText(theme);
+            }
+            if (_badgeText != null)
+            {
+                _badgeText.color = OverlaySkin.SettingsThemeText(theme);
             }
         }
 
-        public void SetChatPreview(string text, int unread)
+        static void ApplyFlatStyle(Image image, Sprite sprite, Color color)
         {
-            var next = string.IsNullOrEmpty(text) ? "" : Ellipsize(text, 8);
+            if (image == null)
+            {
+                return;
+            }
+
+            image.sprite = sprite != null ? sprite : OverlaySprites.RoundedRect;
+            image.type = Image.Type.Sliced;
+            image.preserveAspect = false;
+            image.color = color;
+        }
+
+        public void SetChatPreview(IReadOnlyList<OverlayChatMessage> unreadMessages, int unread)
+        {
+            _bubbleUnread.Clear();
+            if (unreadMessages != null)
+            {
+                for (var i = 0; i < unreadMessages.Count; i++)
+                {
+                    var text = unreadMessages[i] != null ? unreadMessages[i].text : null;
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        _bubbleUnread.Add(Ellipsize(text, 8));
+                    }
+                }
+            }
+
+            _bubbleUnreadIndex = 0;
+            _nextBubbleRotateAt = Time.unscaledTime + BubbleRotateSeconds;
+            var next = _bubbleUnread.Count > 0 ? _bubbleUnread[0] : "";
             if (next != _bubbleContent && _bubbleFade != null)
             {
                 _bubbleFade.alpha = 0.15f;
@@ -445,24 +490,12 @@ namespace CrazyChat.Overlay
             RefreshChatChrome();
         }
 
-        void ApplyBubbleScale(float userScale)
-        {
-            if (_bubble == null)
-            {
-                return;
-            }
-
-            var inv = userScale > 0.0001f ? 1f / userScale : 1f;
-            _bubble.transform.localScale = new Vector3(inv, inv, 1f);
-            _bubble.rectTransform.anchoredPosition = new Vector2(0f, BubbleOffsetY / userScale);
-        }
-
         void RefreshChatChrome()
         {
             var showChat = _friend != null && !_friend.IsLocal;
             if (_bubble != null)
             {
-                var showBubble = showChat && !_chatExpanded;
+                var showBubble = showChat && !_chatExpanded && _unread > 0 && !string.IsNullOrEmpty(_bubbleContent);
                 _bubble.gameObject.SetActive(showBubble);
                 if (showBubble && _bubbleText != null)
                 {
@@ -484,16 +517,15 @@ namespace CrazyChat.Overlay
                 }
             }
 
-            if (_dash != null)
-            {
-                _dash.gameObject.SetActive(_selected && _friend != null && !_friend.IsLocal);
-            }
-
             if (_ring != null && _friend != null)
             {
-                _ring.color = _friend.IsLocal
-                    ? new Color(0.95f, 0.78f, 0.28f, 1f)
-                    : new Color(0.35f, 0.9f, 0.45f, 1f);
+                _ring.color = _selected && !_friend.IsLocal
+                    ? OverlaySkin.ThemeAccent(_view != null && _view.Settings != null
+                        ? _view.Settings.SettingsTheme
+                        : 1)
+                    : _friend.IsLocal
+                        ? new Color(0.95f, 0.78f, 0.28f, 1f)
+                        : new Color(0.35f, 0.9f, 0.45f, 1f);
             }
         }
 
@@ -540,7 +572,6 @@ namespace CrazyChat.Overlay
             var userScale = _view != null && _view.Settings != null ? _view.Settings.Scale : 1f;
             _rect.anchoredPosition = _layoutPos;
             _rect.localScale = new Vector3(userScale, userScale, 1f);
-            ApplyBubbleScale(userScale);
 
             if (_dragging || _body == null)
             {
@@ -560,6 +591,18 @@ namespace CrazyChat.Overlay
             if (_bubbleFade != null && _bubbleFade.alpha < 1f)
             {
                 _bubbleFade.alpha = Mathf.MoveTowards(_bubbleFade.alpha, 1f, Time.unscaledDeltaTime * 4f);
+            }
+
+            if (!_chatExpanded && _bubbleUnread.Count > 1 && Time.unscaledTime >= _nextBubbleRotateAt)
+            {
+                _bubbleUnreadIndex = (_bubbleUnreadIndex + 1) % _bubbleUnread.Count;
+                _bubbleContent = _bubbleUnread[_bubbleUnreadIndex];
+                _nextBubbleRotateAt = Time.unscaledTime + BubbleRotateSeconds;
+                if (_bubbleFade != null)
+                {
+                    _bubbleFade.alpha = 0.15f;
+                }
+                RefreshChatChrome();
             }
         }
 

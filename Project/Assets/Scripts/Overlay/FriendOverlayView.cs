@@ -148,8 +148,16 @@ namespace CrazyChat.Overlay
             if (window != null)
             {
                 window.SetAlwaysOnTop(_settings.AlwaysOnTop);
+                window.SetTargetDisplay(_settings.TargetDisplayIndex);
             }
 
+            foreach (var pair in _chips)
+            {
+                pair.Value?.ApplySkin();
+            }
+            _interactUi?.ApplySkin();
+            _chatUi?.ApplyTheme();
+            ReclampVisibleChips();
         }
 
         public void NotifyAvatarPresenceChanged()
@@ -479,8 +487,9 @@ namespace CrazyChat.Overlay
                     continue;
                 }
 
-                var latest = _chatStore.GetLatestPeer(pair.Key);
-                pair.Value.SetChatPreview(latest != null ? latest.text : null, _chatStore.GetUnread(pair.Key));
+                pair.Value.SetChatPreview(
+                    _chatStore.GetUnreadPeerMessages(pair.Key),
+                    _chatStore.GetUnread(pair.Key));
             }
 
             RefreshBag();
@@ -538,7 +547,8 @@ namespace CrazyChat.Overlay
 
             var scale = _settings != null ? _settings.Scale : 1f;
             var head = chip.FollowPosition + new Vector2(0f, ChipSize * 0.5f * scale + 6f);
-            _inputPop.Play(head, icon);
+            var theme = _settings != null ? _settings.SettingsTheme : 1;
+            _inputPop.Play(head, icon, OverlaySkin.InputIconColor(theme), scale);
         }
 
         void BroadcastTap(int vk)

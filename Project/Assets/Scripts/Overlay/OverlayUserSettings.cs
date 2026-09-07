@@ -27,6 +27,7 @@ namespace CrazyChat.Overlay
         public bool AutoStart { get; private set; }
         public bool ShowInputIcons { get; private set; }
         public int SettingsTheme { get; private set; } = MinSettingsTheme;
+        public int TargetDisplayIndex { get; private set; }
         public int AvatarVersion { get; private set; }
 
         public void Load()
@@ -57,6 +58,7 @@ namespace CrazyChat.Overlay
                 AutoStart = data.autoStart;
                 ShowInputIcons = data.showInputIcons;
                 SettingsTheme = Mathf.Clamp(data.settingsTheme, MinSettingsTheme, MaxSettingsTheme);
+                TargetDisplayIndex = Mathf.Max(0, data.targetDisplayIndex);
                 AvatarVersion = data.avatarVersion;
                 if (!OverlayAvatarRules.IsEnabled(AvatarVersion, OverlayAvatarCodec.LocalPathA,
                         OverlayAvatarCodec.LocalPathB))
@@ -81,6 +83,7 @@ namespace CrazyChat.Overlay
                 autoStart = AutoStart,
                 showInputIcons = ShowInputIcons,
                 settingsTheme = SettingsTheme,
+                targetDisplayIndex = TargetDisplayIndex,
                 avatarVersion = AvatarVersion
             }, true);
             WriteLocal(json);
@@ -104,6 +107,8 @@ namespace CrazyChat.Overlay
         public void SetFlipHorizontal(bool value) => FlipHorizontal = value;
 
         public void SetShowInputIcons(bool value) => ShowInputIcons = value;
+
+        public void SetTargetDisplayIndex(int value) => TargetDisplayIndex = Mathf.Max(0, value);
 
         public void CycleSettingsTheme()
         {
@@ -233,6 +238,7 @@ namespace CrazyChat.Overlay
             public bool autoStart;
             public bool showInputIcons;
             public int settingsTheme = MinSettingsTheme;
+            public int targetDisplayIndex;
             public int avatarVersion;
         }
     }

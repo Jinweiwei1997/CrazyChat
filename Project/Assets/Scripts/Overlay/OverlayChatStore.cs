@@ -121,6 +121,44 @@ namespace CrazyChat.Overlay
             return _unread.TryGetValue(friendId, out var n) ? n : 0;
         }
 
+        public IReadOnlyList<OverlayChatMessage> GetUnreadPeerMessages(ulong friendId)
+        {
+            var unread = GetUnread(friendId);
+            if (unread <= 0 || !_threads.TryGetValue(friendId, out var messages) || messages.Count == 0)
+            {
+                return Array.Empty<OverlayChatMessage>();
+            }
+
+            var first = messages.Count;
+            var remaining = unread;
+            for (var i = messages.Count - 1; i >= 0; i--)
+            {
+                var message = messages[i];
+                if (message == null || message.mine)
+                {
+                    continue;
+                }
+
+                first = i;
+                if (--remaining <= 0)
+                {
+                    break;
+                }
+            }
+
+            var result = new List<OverlayChatMessage>();
+            for (var i = first; i < messages.Count; i++)
+            {
+                var message = messages[i];
+                if (message != null && !message.mine)
+                {
+                    result.Add(message);
+                }
+            }
+
+            return result;
+        }
+
         public void Add(ulong friendId, string text, bool mine, ulong fromId)
         {
             text = (text ?? string.Empty).Trim();

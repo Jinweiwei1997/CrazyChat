@@ -9,25 +9,19 @@ namespace CrazyChat.Overlay
     {
         const string PrefabResource = "Prefab/UI/SettingsMenu";
         const string DefaultPage = "GamePage";
-        const float CardWidth = 300f;
-        const float CardHeight = 540f;
-        const float HeaderHeight = 44f;
-        const float TabBarHeight = 36f;
-        const float RowHeight = 32f;
-        const float ActionRowHeight = 36f;
+        const float CardWidth = 300f * OverlaySkin.SettingsChatWidthScale;
+        const float CardHeight = 358f;
+        const float HeaderHeight = 36f;
+        const float TabBarHeight = 32f;
+        const float RowHeight = 26f;
+        const float ActionRowHeight = 28f;
         const float GearSize = 32f;
-        const float CloseSize = 32f;
-        const float CardVisualScale = 2f / 3f;
-        const string VsCodeSpriteResource = "Overlay/UI/square_rect";
-        const string JournalSpriteResource = "Overlay/UI/journal_rect";
-        static readonly Color FlatBackground = new Color(0.094f, 0.094f, 0.094f, 1f);
-        static readonly Color FlatControl = new Color(0.176f, 0.176f, 0.188f, 1f);
-        static readonly Color FlatAccent = new Color(0f, 0.478f, 0.8f, 1f);
-        static readonly Color JournalBackground = new Color(0.96f, 0.93f, 0.86f, 1f);
-        static readonly Color JournalControl = new Color(0.9f, 0.84f, 0.73f, 1f);
-        static readonly Color JournalAccent = new Color(0.79f, 0.47f, 0.39f, 1f);
-        static readonly Color JournalText = new Color(0.25f, 0.23f, 0.2f, 1f);
-        static readonly Color JournalMuted = new Color(0.47f, 0.43f, 0.38f, 1f);
+        const float CloseSize = 28f;
+        const float CardVisualScale = (2f / 3f) * OverlaySkin.OpenWindowScale;
+        const string ThemeSpriteResource = "Overlay/UI/square_rect";
+        const string ControlSpriteResource = "Overlay/UI/control_rect";
+        const string SettingsIconResource = "Overlay/UI/codicon_settings";
+        const string CloseIconResource = "Overlay/UI/codicon_close";
 
         FriendOverlayView _view;
         [SerializeField] GameObject _panel;
@@ -42,11 +36,14 @@ namespace CrazyChat.Overlay
         [SerializeField] Text _autoStartText;
         [SerializeField] Text _inputIconsText;
         [SerializeField] Text _avatarStatusText;
+        [SerializeField] Dropdown _displayDropdown;
         Text _themeText;
         readonly List<Image> _themeImages = new List<Image>();
         readonly List<Text> _themeLabels = new List<Text>();
-        Sprite _vsCodeSprite;
-        Sprite _journalSprite;
+        Sprite _themeSprite;
+        Sprite _controlSprite;
+        Sprite _settingsIcon;
+        Sprite _closeIcon;
         Text _avatarSetupStatus;
         Image _slotAImage;
         Image _slotBImage;
@@ -57,10 +54,6 @@ namespace CrazyChat.Overlay
         [SerializeField] Image _cardImage;
         [SerializeField] Image _closeImage;
         string _page = DefaultPage;
-        bool _hoverButton;
-        bool _hoverCard;
-        float _hideAt = -1f;
-        float _showAt = -1f;
 
         public static OverlaySettingsUi Create(Transform chrome, Transform modal, FriendOverlayView view)
         {
@@ -93,6 +86,9 @@ namespace CrazyChat.Overlay
             ApplyFonts(ui._cardRt);
             ui.Bind();
             ui._cardRt.localScale = new Vector3(CardVisualScale, CardVisualScale, 1f);
+            ui.RestoreTextTabs();
+            ui.ApplyTypography();
+            ui.ApplyIcons();
             ui.ApplyTheme();
             ui.ShowPage(DefaultPage);
             ui.Hide();
@@ -103,6 +99,11 @@ namespace CrazyChat.Overlay
         public void EditorPopulate()
         {
             Build(null);
+        }
+
+        public void EditorFitContent()
+        {
+            ApplyFixedCardSize();
         }
 
         public Transform EditorEnsureThemeRow()
@@ -129,6 +130,27 @@ namespace CrazyChat.Overlay
 
             return row;
         }
+
+        public Transform EditorEnsureBackdrop()
+        {
+            var existing = FindNode(_panel != null ? _panel.transform : null, "Backdrop");
+            if (existing != null)
+            {
+                existing.SetAsFirstSibling();
+                return existing;
+            }
+
+            if (_panel == null)
+            {
+                return null;
+            }
+
+            var backdrop = CreateImage("Backdrop", _panel.transform, Color.clear, OverlaySprites.RoundedRect);
+            backdrop.raycastTarget = true;
+            Stretch(backdrop.rectTransform);
+            backdrop.transform.SetAsFirstSibling();
+            return backdrop.transform;
+        }
 #endif
 
         static void ApplyFonts(Transform root)
@@ -145,19 +167,19 @@ namespace CrazyChat.Overlay
             }
         }
 
-        bool JournalTheme => _view != null && _view.Settings != null && _view.Settings.SettingsTheme == 2;
-        Color ThemeBackground => JournalTheme ? JournalBackground : FlatBackground;
-        Color ThemeControl => JournalTheme ? JournalControl : FlatControl;
-        Color ThemeAccent => JournalTheme ? JournalAccent : FlatAccent;
-        Color ThemeText => JournalTheme ? JournalText : OverlaySkin.SettingsText;
-        Color ThemeMuted => JournalTheme ? JournalMuted : OverlaySkin.SettingsMuted;
+        int ThemeId => _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
+        Color ThemeBackground => OverlaySkin.ThemeBackground(ThemeId);
+        Color ThemeHeader => OverlaySkin.ThemeHeader(ThemeId);
+        Color ThemeSection => OverlaySkin.ThemeSection(ThemeId);
+        Color ThemeControl => OverlaySkin.ThemeControl(ThemeId);
+        Color ThemeAccent => OverlaySkin.ThemeAccent(ThemeId);
+        Color ThemeText => OverlaySkin.SettingsThemeText(ThemeId);
+        Color ThemeMuted => OverlaySkin.ThemeMuted(ThemeId);
 
         void Bind()
         {
-            OverlayHoverRelay.Bind(_buttonImage != null ? _buttonImage.gameObject : null,
-                HoverEnterFromButton, HoverLeaveFromButton);
-            OverlayHoverRelay.Bind(_cardImage != null ? _cardImage.gameObject : null,
-                HoverEnterFromCard, HoverLeaveFromCard);
+            BindClick(_buttonImage, TogglePanel);
+            BindClick(FindNode(_panel != null ? _panel.transform : null, "Backdrop"), Hide);
             BindClick(_closeImage, Hide);
             BindTabs();
             BindClick(FindNode(_cardRt, "Pages/GamePage/ScaleRow/Minus"), () =>
@@ -218,7 +240,129 @@ namespace CrazyChat.Overlay
                 _view.ApplyUserSettings();
                 RefreshLabels();
             });
+            BindDisplayDropdown();
             BindClick(FindNode(_cardRt, "Pages/SystemPage/QuitGameRow"), QuitGame);
+            BindHoverStyles();
+        }
+
+        void BindDisplayDropdown()
+        {
+            if (_displayDropdown == null)
+            {
+                _displayDropdown = FindNode(_cardRt, "Pages/SystemPage/DisplayRow/DisplayDropdown")
+                    ?.GetComponent<Dropdown>();
+            }
+            if (_displayDropdown == null)
+            {
+                return;
+            }
+
+            _displayDropdown.transition = Selectable.Transition.None;
+            _displayDropdown.onValueChanged.RemoveAllListeners();
+            _displayDropdown.onValueChanged.AddListener(index =>
+            {
+                if (_view == null || _view.Settings == null)
+                {
+                    return;
+                }
+
+                var count = TransparentOverlayWindow.GetAvailableDisplayCount();
+                _view.Settings.SetTargetDisplayIndex(Mathf.Clamp(index, 0, Mathf.Max(0, count - 1)));
+                _view.ApplyUserSettings();
+                RefreshDisplayOptions();
+            });
+            RefreshDisplayOptions();
+        }
+
+        void RefreshDisplayOptions()
+        {
+            if (_displayDropdown == null)
+            {
+                return;
+            }
+
+            var count = TransparentOverlayWindow.GetAvailableDisplayCount();
+            var options = new List<string>(count);
+            for (var i = 0; i < count; i++)
+            {
+                options.Add((i + 1).ToString());
+            }
+
+            _displayDropdown.ClearOptions();
+            _displayDropdown.AddOptions(options);
+            var saved = _view != null && _view.Settings != null ? _view.Settings.TargetDisplayIndex : 0;
+            var selected = Mathf.Clamp(saved, 0, Mathf.Max(0, count - 1));
+            if (_view != null && _view.Settings != null && selected != saved)
+            {
+                _view.Settings.SetTargetDisplayIndex(selected);
+            }
+            _displayDropdown.SetValueWithoutNotify(selected);
+            _displayDropdown.RefreshShownValue();
+        }
+
+        void BindHoverStyles()
+        {
+            BindHover(_buttonImage, () => Color.clear);
+            BindHover(_closeImage, () => Color.clear);
+            if (_cardRt == null)
+            {
+                return;
+            }
+
+            var images = _cardRt.GetComponentsInChildren<Image>(true);
+            for (var i = 0; i < images.Length; i++)
+            {
+                var image = images[i];
+                var name = image.gameObject.name;
+                if (name == "GameTab" || name == "SystemTab")
+                {
+                    BindHover(image, () => TabRestColor(image.transform));
+                }
+                else if (name == "Toggle")
+                {
+                    BindHover(image, () => ToggleRestColor(image));
+                }
+                else if (name == "DisplayDropdown")
+                {
+                    BindHover(image, () => OverlaySkin.ThemeInputBackground(ThemeId));
+                }
+                else if (name == "Minus" || name == "Plus" ||
+                         name.EndsWith("Row") && image.GetComponent<Button>() != null)
+                {
+                    BindHover(image, () => Color.clear);
+                }
+            }
+        }
+
+        void BindHover(Image image, System.Func<Color> restColor)
+        {
+            if (image == null)
+            {
+                return;
+            }
+
+            OverlayHoverRelay.Bind(
+                image.gameObject,
+                () => image.color = OverlaySkin.ThemeHover(ThemeId),
+                () => image.color = restColor != null ? restColor() : Color.clear);
+        }
+
+        Color TabRestColor(Transform tab)
+        {
+            var selected = tab != null && TabToPage(tab.name) == _page;
+            return selected ? WithAlpha(ThemeAccent, 0.3f) : Color.clear;
+        }
+
+        Color ToggleRestColor(Image image)
+        {
+            var label = image != null ? image.GetComponentInChildren<Text>(true) : null;
+            return label != null && label.text == "开" ? WithAlpha(ThemeAccent, 0.3f) : Color.clear;
+        }
+
+        static Color WithAlpha(Color color, float alpha)
+        {
+            color.a = alpha;
+            return color;
         }
 
         void BindTabs()
@@ -262,24 +406,32 @@ namespace CrazyChat.Overlay
 
             button.onClick.RemoveAllListeners();
             button.onClick.AddListener(action);
+            button.transition = Selectable.Transition.None;
         }
 
         void Build(Transform modal)
         {
-            _buttonImage = CreateImage("SettingsButton", transform, OverlaySprites.Panel, OverlaySprites.RoundedRect);
+            _themeSprite = Resources.Load<Sprite>(ThemeSpriteResource);
+            _controlSprite = Resources.Load<Sprite>(ControlSpriteResource);
+            _buttonImage = CreateImage("SettingsButton", transform, Color.clear, _controlSprite);
             _buttonImage.raycastTarget = true;
             _buttonRt = _buttonImage.rectTransform;
             _buttonRt.anchorMin = new Vector2(0f, 0f);
             _buttonRt.anchorMax = new Vector2(0f, 0f);
             _buttonRt.pivot = new Vector2(0.5f, 0.5f);
             _buttonRt.sizeDelta = new Vector2(GearSize, GearSize);
+            CreateIconPlaceholder(_buttonRt, 16f);
 
             _panel = new GameObject("SettingsPanel", typeof(RectTransform));
             _panel.transform.SetParent(modal != null ? modal : transform, false);
             Stretch((RectTransform)_panel.transform);
             _panel.SetActive(false);
 
-            _cardImage = CreateImage("Background", _panel.transform, FlatBackground, OverlaySprites.RoundedRect);
+            var backdrop = CreateImage("Backdrop", _panel.transform, Color.clear, OverlaySprites.RoundedRect);
+            backdrop.raycastTarget = true;
+            Stretch(backdrop.rectTransform);
+
+            _cardImage = CreateImage("Background", _panel.transform, OverlaySkin.ThemeBackground(1), OverlaySprites.RoundedRect);
             _cardImage.raycastTarget = true;
             _cardRt = _cardImage.rectTransform;
             _cardRt.anchorMin = new Vector2(0f, 0f);
@@ -291,44 +443,53 @@ namespace CrazyChat.Overlay
             BuildHeader(_cardRt);
             BuildTabBar(_cardRt);
             BuildPages(_cardRt);
+            ShowPage(DefaultPage);
         }
 
         void BuildHeader(RectTransform parent)
         {
-            var header = CreateEmpty("Header", parent);
-            var headerRt = (RectTransform)header.transform;
+            var header = CreateImage("Header", parent, OverlaySkin.ThemeHeader(1), _themeSprite);
+            header.raycastTarget = false;
+            var headerRt = header.rectTransform;
             headerRt.anchorMin = new Vector2(0f, 1f);
             headerRt.anchorMax = new Vector2(1f, 1f);
             headerRt.pivot = new Vector2(0.5f, 1f);
             headerRt.anchoredPosition = Vector2.zero;
             headerRt.sizeDelta = new Vector2(0f, HeaderHeight);
 
-            var title = PlaceLabel(headerRt, "设置", 18, OverlaySkin.SettingsText, Vector2.zero, new Vector2(160f, 28f));
+            var title = PlaceLabel(headerRt, "设置", 14, OverlaySkin.SettingsText, Vector2.zero, new Vector2(160f, 24f));
             title.gameObject.name = "Title";
+            title.alignment = TextAnchor.MiddleLeft;
+            var titleRt = title.rectTransform;
+            titleRt.anchorMin = titleRt.anchorMax = new Vector2(0f, 0.5f);
+            titleRt.pivot = new Vector2(0f, 0.5f);
+            titleRt.anchoredPosition = new Vector2(12f, 0f);
 
-            _closeImage = CreateImage("Close", headerRt, FlatControl, OverlaySprites.RoundedRect);
+            _closeImage = CreateImage("Close", headerRt, Color.clear, _controlSprite);
             _closeImage.raycastTarget = true;
             var closeRt = _closeImage.rectTransform;
             closeRt.anchorMin = closeRt.anchorMax = new Vector2(1f, 0.5f);
             closeRt.pivot = new Vector2(1f, 0.5f);
-            closeRt.anchoredPosition = new Vector2(-10f, 0f);
+            closeRt.anchoredPosition = new Vector2(-8f, 0f);
             closeRt.sizeDelta = new Vector2(CloseSize, CloseSize);
-            FillLabel(closeRt, "×", 18, OverlaySkin.Text);
+            CreateIconPlaceholder(closeRt, 16f);
             _closeImage.gameObject.AddComponent<Button>();
+            CreateDivider(headerRt, "Divider", true);
         }
 
         void BuildTabBar(RectTransform parent)
         {
-            var tabBar = CreateEmpty("TabBar", parent);
-            _tabBar = (RectTransform)tabBar.transform;
+            var tabBar = CreateImage("TabBar", parent, OverlaySkin.ThemeSection(1), _themeSprite);
+            tabBar.raycastTarget = false;
+            _tabBar = tabBar.rectTransform;
             _tabBar.anchorMin = new Vector2(0f, 1f);
             _tabBar.anchorMax = new Vector2(1f, 1f);
             _tabBar.pivot = new Vector2(0.5f, 1f);
             _tabBar.anchoredPosition = new Vector2(0f, -HeaderHeight);
             _tabBar.sizeDelta = new Vector2(0f, TabBarHeight);
             var layout = _tabBar.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.padding = new RectOffset(12, 12, 4, 4);
-            layout.spacing = 8f;
+            layout.padding = new RectOffset(12, 12, 2, 2);
+            layout.spacing = 4f;
             layout.childAlignment = TextAnchor.MiddleCenter;
             layout.childControlWidth = true;
             layout.childControlHeight = true;
@@ -336,6 +497,7 @@ namespace CrazyChat.Overlay
             layout.childForceExpandHeight = false;
             AddTabButton(_tabBar, "GameTab", "游戏");
             AddTabButton(_tabBar, "SystemTab", "系统");
+            CreateDivider(_tabBar, "Divider", true);
         }
 
         void BuildPages(RectTransform parent)
@@ -344,7 +506,7 @@ namespace CrazyChat.Overlay
             _pagesRoot = (RectTransform)pages.transform;
             _pagesRoot.anchorMin = Vector2.zero;
             _pagesRoot.anchorMax = Vector2.one;
-            _pagesRoot.offsetMin = new Vector2(0f, 10f);
+            _pagesRoot.offsetMin = new Vector2(0f, 8f);
             _pagesRoot.offsetMax = new Vector2(0f, -(HeaderHeight + TabBarHeight));
 
             var gamePage = CreatePage(_pagesRoot, "GamePage");
@@ -362,6 +524,7 @@ namespace CrazyChat.Overlay
             systemPage.gameObject.SetActive(false);
             _topmostText = AddToggleRow(systemPage, "AlwaysOnTopRow", "始终置顶");
             _autoStartText = AddToggleRow(systemPage, "AutoStartRow", "开机自启");
+            _displayDropdown = AddDisplayDropdownRow(systemPage);
             AddActionRow(systemPage, "QuitGameRow", "退出游戏", danger: true);
         }
 
@@ -383,6 +546,7 @@ namespace CrazyChat.Overlay
             var dim = CreateImage("Dim", _avatarSetup.transform, new Color(0f, 0f, 0f, 0.35f), OverlaySprites.RoundedRect);
             dim.raycastTarget = true;
             Stretch(dim.rectTransform);
+            dim.gameObject.AddComponent<Button>().onClick.AddListener(() => _avatarSetup.SetActive(false));
 
             var card = CreateImage("Card", _avatarSetup.transform, OverlaySprites.Panel, OverlaySprites.RoundedRect);
             OverlaySkin.ApplyPanel(card);
@@ -390,6 +554,10 @@ namespace CrazyChat.Overlay
             var cardRt = card.rectTransform;
             cardRt.anchorMin = cardRt.anchorMax = new Vector2(0.5f, 0.5f);
             cardRt.sizeDelta = new Vector2(300f, 260f);
+            cardRt.localScale = new Vector3(
+                OverlaySkin.OpenWindowScale,
+                OverlaySkin.OpenWindowScale,
+                1f);
 
             PlaceLabel(cardRt, "设置动态图", 18, OverlaySkin.Text, new Vector2(0f, 100f), new Vector2(200f, 28f));
             _avatarSetupStatus = PlaceLabel(cardRt, "", 12, OverlaySkin.TextMuted, new Vector2(0f, 72f),
@@ -472,14 +640,9 @@ namespace CrazyChat.Overlay
         {
             EnsureAvatarSetup();
             RefreshAvatarSlots();
-            _hideAt = -1f;
             _avatarSetup.SetActive(true);
             _avatarSetup.transform.SetAsLastSibling();
         }
-
-        bool AvatarOverlayOpen =>
-            (_avatarSetup != null && _avatarSetup.activeSelf) ||
-            (_cropUi != null && _cropUi.gameObject.activeSelf);
 
         void BeginPickSlot(bool slotA)
         {
@@ -495,7 +658,6 @@ namespace CrazyChat.Overlay
         {
             // Leave Button/EventSystem stack before blocking Win32 dialog.
             yield return null;
-            _hideAt = -1f;
 
             string path = null;
             try
@@ -528,7 +690,6 @@ namespace CrazyChat.Overlay
             }
 
             EnsureAvatarSetup();
-            _hideAt = -1f;
             _cropUi.Open(bytes, png =>
             {
                 if (!_view.Settings.TrySetAvatarSlot(slotA, png))
@@ -612,8 +773,8 @@ namespace CrazyChat.Overlay
             var go = CreateEmpty(name, parent);
             Stretch((RectTransform)go.transform);
             var layout = go.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(14, 14, 6, 10);
-            layout.spacing = 8f;
+            layout.padding = new RectOffset(12, 12, 4, 8);
+            layout.spacing = 4f;
             layout.childAlignment = TextAnchor.UpperCenter;
             layout.childControlWidth = true;
             layout.childControlHeight = true;
@@ -624,7 +785,7 @@ namespace CrazyChat.Overlay
 
         Image AddTabButton(Transform parent, string id, string title)
         {
-            var tab = CreateImage(id, parent, FlatControl, OverlaySprites.RoundedRect);
+            var tab = CreateImage(id, parent, Color.clear, _controlSprite);
             tab.raycastTarget = true;
             var le = tab.gameObject.AddComponent<LayoutElement>();
             le.minHeight = 28f;
@@ -659,11 +820,23 @@ namespace CrazyChat.Overlay
                 {
                     var tab = _tabBar.GetChild(i);
                     var image = tab.GetComponent<Image>();
-                    OverlaySprites.StyleFill(
-                        image,
-                        TabToPage(tab.name) == pageName ? ThemeAccent : ThemeControl);
+                    image.color = TabToPage(tab.name) == pageName
+                        ? WithAlpha(ThemeAccent, 0.3f)
+                        : Color.clear;
                 }
             }
+
+            ApplyFixedCardSize();
+        }
+
+        void ApplyFixedCardSize()
+        {
+            if (_cardRt == null)
+            {
+                return;
+            }
+
+            _cardRt.sizeDelta = new Vector2(CardWidth, CardHeight);
         }
 
         static void QuitGame()
@@ -679,9 +852,9 @@ namespace CrazyChat.Overlay
         {
             var row = CreateRow(parent, "ScaleRow", RowHeight);
             AddRowTitle(row, "放大倍数", muted: true);
-            AddRowButton(row, "Minus", "-", 28f, 16);
-            var value = CreateRowLabel(row, "Value", "1.0x", 48f, 15);
-            AddRowButton(row, "Plus", "+", 28f, 16);
+            AddRowButton(row, "Minus", "-", 24f, 14);
+            var value = CreateRowLabel(row, "Value", "1.0x", 48f, 14);
+            AddRowButton(row, "Plus", "+", 24f, 14);
             return value;
         }
 
@@ -689,8 +862,74 @@ namespace CrazyChat.Overlay
         {
             var row = CreateRow(parent, id, RowHeight);
             AddRowTitle(row, title);
-            var toggle = AddRowButton(row, "Toggle", "开", 56f, 13);
+            var toggle = AddRowButton(row, "Toggle", "开", 48f, 13);
             return toggle.GetComponentInChildren<Text>();
+        }
+
+        Dropdown AddDisplayDropdownRow(Transform parent)
+        {
+            var row = CreateRow(parent, "DisplayRow", RowHeight);
+            AddRowTitle(row, "显示器");
+
+            var background = CreateImage("DisplayDropdown", row, OverlaySkin.ThemeInputBackground(1), _controlSprite);
+            background.raycastTarget = true;
+            var element = background.gameObject.AddComponent<LayoutElement>();
+            element.minWidth = 64f;
+            element.preferredWidth = 64f;
+            element.minHeight = 24f;
+            element.preferredHeight = 24f;
+
+            var caption = FillLabel(background.rectTransform, "1", 13, OverlaySkin.SettingsText);
+            caption.gameObject.name = "Label";
+            caption.alignment = TextAnchor.MiddleLeft;
+            caption.rectTransform.offsetMin = new Vector2(8f, 0f);
+            caption.rectTransform.offsetMax = new Vector2(-20f, 0f);
+
+            var arrow = PlaceLabel(background.rectTransform, "▾", 12, OverlaySkin.SettingsText,
+                new Vector2(23f, 0f), new Vector2(16f, 20f));
+            arrow.gameObject.name = "Arrow";
+
+            var template = CreateImage("Template", background.rectTransform, OverlaySkin.ThemeBackground(1), _themeSprite);
+            template.raycastTarget = true;
+            var templateRt = template.rectTransform;
+            templateRt.anchorMin = new Vector2(0f, 0f);
+            templateRt.anchorMax = new Vector2(1f, 0f);
+            templateRt.pivot = new Vector2(0.5f, 1f);
+            templateRt.anchoredPosition = new Vector2(0f, -2f);
+            templateRt.sizeDelta = new Vector2(0f, 120f);
+
+            var content = CreateEmpty("Content", templateRt);
+            var contentRt = (RectTransform)content.transform;
+            Stretch(contentRt);
+
+            var item = CreateImage("Item", contentRt, Color.clear, _controlSprite);
+            item.raycastTarget = true;
+            var itemRt = item.rectTransform;
+            itemRt.anchorMin = new Vector2(0f, 1f);
+            itemRt.anchorMax = new Vector2(1f, 1f);
+            itemRt.pivot = new Vector2(0.5f, 1f);
+            itemRt.anchoredPosition = Vector2.zero;
+            itemRt.sizeDelta = new Vector2(0f, 24f);
+            var itemToggle = item.gameObject.AddComponent<Toggle>();
+            itemToggle.targetGraphic = item;
+            itemToggle.transition = Selectable.Transition.None;
+
+            var itemLabel = FillLabel(itemRt, "1", 13, OverlaySkin.SettingsText);
+            itemLabel.gameObject.name = "Item Label";
+            itemLabel.alignment = TextAnchor.MiddleLeft;
+            itemLabel.rectTransform.offsetMin = new Vector2(8f, 0f);
+            itemLabel.rectTransform.offsetMax = new Vector2(-8f, 0f);
+
+            var dropdown = background.gameObject.AddComponent<Dropdown>();
+            dropdown.targetGraphic = background;
+            dropdown.captionText = caption;
+            dropdown.template = templateRt;
+            dropdown.itemText = itemLabel;
+            dropdown.options.Add(new Dropdown.OptionData("1"));
+            dropdown.value = 0;
+            dropdown.transition = Selectable.Transition.None;
+            template.gameObject.SetActive(false);
+            return dropdown;
         }
 
         Text AddStatusRow(Transform parent, string id, string title)
@@ -703,14 +942,13 @@ namespace CrazyChat.Overlay
 
         void AddActionRow(Transform parent, string id, string title, bool danger = false)
         {
-            var button = CreateImage(id, parent, danger ? OverlaySprites.Danger : FlatControl,
-                OverlaySprites.RoundedRect);
+            var button = CreateImage(id, parent, Color.clear, _controlSprite);
             button.raycastTarget = true;
             var le = button.gameObject.AddComponent<LayoutElement>();
             le.preferredHeight = ActionRowHeight;
             le.minHeight = ActionRowHeight;
             le.flexibleHeight = 0f;
-            FillLabel(button.rectTransform, title, 14, OverlaySkin.SettingsText);
+            FillLabel(button.rectTransform, title, 13, danger ? OverlaySkin.ThemeDanger(1) : OverlaySkin.SettingsText);
             button.gameObject.AddComponent<Button>();
         }
 
@@ -718,7 +956,7 @@ namespace CrazyChat.Overlay
         {
             var go = CreateEmpty(name, parent);
             var layout = go.AddComponent<HorizontalLayoutGroup>();
-            layout.spacing = 8f;
+            layout.spacing = 6f;
             layout.childAlignment = TextAnchor.MiddleCenter;
             layout.childControlWidth = true;
             layout.childControlHeight = true;
@@ -741,13 +979,13 @@ namespace CrazyChat.Overlay
 
         Image AddRowButton(Transform row, string id, string title, float width, int fontSize)
         {
-            var button = CreateImage(id, row, FlatControl, OverlaySprites.RoundedRect);
+            var button = CreateImage(id, row, Color.clear, _controlSprite);
             button.raycastTarget = true;
             var le = button.gameObject.AddComponent<LayoutElement>();
             le.preferredWidth = width;
             le.minWidth = width;
-            le.minHeight = 26f;
-            le.preferredHeight = 26f;
+            le.minHeight = 24f;
+            le.preferredHeight = 24f;
             le.flexibleHeight = 0f;
             FillLabel(button.rectTransform, title, fontSize, OverlaySkin.SettingsText);
             button.gameObject.AddComponent<Button>();
@@ -773,47 +1011,15 @@ namespace CrazyChat.Overlay
             return label;
         }
 
-        void HoverEnterFromButton()
-        {
-            _hoverButton = true;
-            _hideAt = -1f;
-            ScheduleShow();
-        }
-
-        void HoverLeaveFromButton()
-        {
-            _hoverButton = false;
-            _showAt = -1f;
-            ScheduleHide();
-        }
-
-        void HoverEnterFromCard()
-        {
-            _hoverCard = true;
-            _hideAt = -1f;
-        }
-
-        void HoverLeaveFromCard()
-        {
-            _hoverCard = false;
-            ScheduleHide();
-        }
-
-        void ScheduleShow()
+        void TogglePanel()
         {
             if (_panel != null && _panel.activeSelf)
             {
+                Hide();
                 return;
             }
 
-            var delay = HoverOpenDelay();
-            if (delay <= 0f)
-            {
-                Show();
-                return;
-            }
-
-            _showAt = Time.unscaledTime + delay;
+            Show();
         }
 
         void Show()
@@ -823,7 +1029,6 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            _showAt = -1f;
             _view?.HideInteractMenu();
             _panel.SetActive(true);
             RefreshLabels();
@@ -831,52 +1036,11 @@ namespace CrazyChat.Overlay
 
         public void Hide()
         {
-            _hoverButton = false;
-            _hoverCard = false;
-            _hideAt = -1f;
-            _showAt = -1f;
             CloseAvatarOverlays();
             if (_panel != null)
             {
                 _panel.SetActive(false);
             }
-        }
-
-        void ScheduleHide()
-        {
-            if (_hoverButton || _hoverCard || AvatarOverlayOpen)
-            {
-                return;
-            }
-
-            _hideAt = Time.unscaledTime + 0.22f;
-        }
-
-        void Update()
-        {
-            if (_showAt > 0f && Time.unscaledTime >= _showAt)
-            {
-                _showAt = -1f;
-                if (_hoverButton)
-                {
-                    Show();
-                }
-            }
-
-            if (_panel != null && _panel.activeSelf && _hideAt > 0f && Time.unscaledTime >= _hideAt)
-            {
-                if (!_hoverButton && !_hoverCard && !AvatarOverlayOpen)
-                {
-                    Hide();
-                }
-            }
-        }
-
-        float HoverOpenDelay()
-        {
-            return _view != null && _view.Config != null
-                ? Mathf.Max(0f, _view.Config.hoverOpenSeconds)
-                : 0.2f;
         }
 
         void RefreshLabels()
@@ -912,6 +1076,107 @@ namespace CrazyChat.Overlay
                     : "形象未启用（闲置:" + (hasA ? "有" : "无") + " 动态:" + (hasB ? "有" : "无") + "）";
                 _avatarStatusText.color = ThemeMuted;
             }
+
+            RefreshDisplayOptions();
+        }
+
+        void ApplyIcons()
+        {
+            _settingsIcon = Resources.Load<Sprite>(SettingsIconResource);
+            _closeIcon = Resources.Load<Sprite>(CloseIconResource);
+
+            ApplyIcon(EnsureIcon(_buttonRt, 16f), _settingsIcon);
+            ApplyIcon(EnsureIcon(FindNode(_cardRt, "Header/Close"), 16f), _closeIcon);
+        }
+
+        static Image EnsureIcon(Transform parent, float size)
+        {
+            if (parent == null)
+            {
+                return null;
+            }
+
+            var icon = parent.Find("Icon")?.GetComponent<Image>();
+            if (icon == null)
+            {
+                icon = CreateIconPlaceholder(parent, size);
+            }
+
+            icon.rectTransform.sizeDelta = new Vector2(size, size);
+            return icon;
+        }
+
+        void RestoreTextTabs()
+        {
+            RestoreTextTab("GameTab");
+            RestoreTextTab("SystemTab");
+        }
+
+        void RestoreTextTab(string tabName)
+        {
+            var tab = FindNode(_tabBar, tabName);
+            if (tab == null)
+            {
+                return;
+            }
+
+            var icon = tab.Find("Icon");
+            if (icon != null)
+            {
+                icon.gameObject.SetActive(false);
+            }
+
+            var label = tab.GetComponentInChildren<Text>(true);
+            if (label != null)
+            {
+                label.gameObject.SetActive(true);
+            }
+        }
+
+        void ApplyTypography()
+        {
+            var labels = _cardRt.GetComponentsInChildren<Text>(true);
+            for (var i = 0; i < labels.Length; i++)
+            {
+                var label = labels[i];
+                var parentName = label.transform.parent.name;
+                label.fontSize = parentName == "Header"
+                    ? 14
+                    : parentName == "Close"
+                        ? 14
+                        : (label.gameObject.name == "Muted" || label.gameObject.name == "Status")
+                            ? 12
+                            : 13;
+            }
+
+            var buttons = _cardRt.GetComponentsInChildren<Image>(true);
+            for (var i = 0; i < buttons.Length; i++)
+            {
+                var name = buttons[i].gameObject.name;
+                if (name != "Toggle" && name != "Minus" && name != "Plus")
+                {
+                    continue;
+                }
+
+                var element = buttons[i].GetComponent<LayoutElement>();
+                if (element != null)
+                {
+                    element.minHeight = 24f;
+                    element.preferredHeight = 24f;
+                }
+            }
+        }
+
+        static void ApplyIcon(Image image, Sprite sprite)
+        {
+            if (image == null || sprite == null)
+            {
+                return;
+            }
+
+            image.sprite = sprite;
+            image.type = Image.Type.Simple;
+            image.preserveAspect = true;
         }
 
         void ApplyTheme()
@@ -921,10 +1186,10 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            if (_vsCodeSprite == null)
+            if (_themeSprite == null)
             {
-                _vsCodeSprite = Resources.Load<Sprite>(VsCodeSpriteResource);
-                _journalSprite = Resources.Load<Sprite>(JournalSpriteResource);
+                _themeSprite = Resources.Load<Sprite>(ThemeSpriteResource);
+                _controlSprite = Resources.Load<Sprite>(ControlSpriteResource);
             }
 
             if (_themeImages.Count == 0)
@@ -933,8 +1198,7 @@ namespace CrazyChat.Overlay
                 _themeLabels.AddRange(_cardRt.GetComponentsInChildren<Text>(true));
             }
 
-            var sprite = JournalTheme ? _journalSprite : _vsCodeSprite;
-            if (sprite == null)
+            if (_themeSprite == null || _controlSprite == null)
             {
                 Debug.LogWarning("[Overlay] 缺少设置主题图片。");
                 return;
@@ -948,18 +1212,72 @@ namespace CrazyChat.Overlay
                     continue;
                 }
 
-                image.sprite = sprite;
+                var name = image.gameObject.name;
+                if (name == "Icon")
+                {
+                    image.color = ThemeText;
+                    continue;
+                }
+
+                if (name == "Divider")
+                {
+                    image.sprite = _themeSprite;
+                    image.type = Image.Type.Sliced;
+                    image.color = OverlaySkin.ThemeDivider(ThemeId);
+                    continue;
+                }
+
+                var section = name == "Background" || name == "Header" || name == "TabBar";
+                image.sprite = section ? _themeSprite : _controlSprite;
                 image.type = Image.Type.Sliced;
                 var selectedTab =
-                    image.gameObject.name == "GameTab" && _page == "GamePage" ||
-                    image.gameObject.name == "SystemTab" && _page == "SystemPage";
-                image.color = image.gameObject.name == "Background"
-                    ? ThemeBackground
-                    : image.gameObject.name == "QuitGameRow"
-                        ? (JournalTheme ? new Color(0.65f, 0.3f, 0.27f, 1f) : new Color(0.65f, 0.16f, 0.16f, 1f))
-                        : selectedTab
-                            ? ThemeAccent
-                            : ThemeControl;
+                    name == "GameTab" && _page == "GamePage" ||
+                    name == "SystemTab" && _page == "SystemPage";
+                if (name == "Background")
+                {
+                    image.color = ThemeBackground;
+                }
+                else if (name == "Header")
+                {
+                    image.color = ThemeHeader;
+                }
+                else if (name == "TabBar")
+                {
+                    image.color = ThemeSection;
+                }
+                else if (name == "Template")
+                {
+                    image.color = ThemeBackground;
+                }
+                else if (name == "DisplayDropdown")
+                {
+                    image.color = OverlaySkin.ThemeInputBackground(ThemeId);
+                }
+                else if (name == "Item")
+                {
+                    image.color = Color.clear;
+                }
+                else if (name == "Close")
+                {
+                    image.color = Color.clear;
+                }
+                else if (name == "GameTab" || name == "SystemTab")
+                {
+                    image.color = selectedTab ? WithAlpha(ThemeAccent, 0.3f) : Color.clear;
+                }
+                else if (name == "Toggle")
+                {
+                    image.color = ToggleRestColor(image);
+                }
+                else if (name == "Minus" || name == "Plus" ||
+                         name.EndsWith("Row") && image.GetComponent<Button>() != null)
+                {
+                    image.color = Color.clear;
+                }
+                else
+                {
+                    image.color = ThemeControl;
+                }
             }
 
             for (var i = 0; i < _themeLabels.Count; i++)
@@ -967,18 +1285,30 @@ namespace CrazyChat.Overlay
                 var label = _themeLabels[i];
                 if (label != null)
                 {
-                    label.color = label.gameObject.name == "Muted" || label.gameObject.name == "Status"
-                        ? ThemeMuted
-                        : ThemeText;
+                    label.color = label.transform.parent.name == "QuitGameRow"
+                        ? OverlaySkin.ThemeDanger(ThemeId)
+                        : label.gameObject.name == "Muted" || label.gameObject.name == "Status"
+                            ? ThemeMuted
+                            : ThemeText;
                 }
             }
 
             var outline = _cardRt.GetComponent<Outline>();
             if (outline != null)
             {
-                outline.effectColor = JournalTheme
-                    ? new Color(0.62f, 0.55f, 0.44f, 1f)
-                    : new Color(0.235f, 0.235f, 0.235f, 1f);
+                outline.enabled = false;
+            }
+
+            if (_buttonImage != null)
+            {
+                _buttonImage.sprite = _controlSprite;
+                _buttonImage.type = Image.Type.Sliced;
+                _buttonImage.color = Color.clear;
+                var icon = _buttonRt != null ? _buttonRt.Find("Icon")?.GetComponent<Image>() : null;
+                if (icon != null)
+                {
+                    icon.color = ThemeText;
+                }
             }
         }
 
@@ -991,9 +1321,11 @@ namespace CrazyChat.Overlay
 
             label.text = on ? "开" : "关";
             label.color = ThemeText;
-            OverlaySprites.StyleFill(
-                label.transform.parent.GetComponent<Image>(),
-                on ? ThemeAccent : ThemeControl);
+            var image = label.transform.parent.GetComponent<Image>();
+            if (image != null)
+            {
+                image.color = on ? WithAlpha(ThemeAccent, 0.3f) : Color.clear;
+            }
         }
 
         void LateUpdate()
@@ -1031,7 +1363,8 @@ namespace CrazyChat.Overlay
         {
             var size = _cardRt.sizeDelta * CardVisualScale;
             var chipSize = _view != null && _view.Config != null ? _view.Config.chipSize : 128f;
-            var offsetX = chipSize * 0.5f + 8f + size.x * 0.5f;
+            var avatarScale = _view != null && _view.Settings != null ? _view.Settings.Scale : 1f;
+            var offsetX = chipSize * 0.5f * avatarScale + 8f + size.x * 0.5f;
             if (avatarPos.x + offsetX + size.x * 0.5f > Screen.width - 12f)
             {
                 offsetX = -offsetX;
@@ -1064,6 +1397,33 @@ namespace CrazyChat.Overlay
             image.type = Image.Type.Sliced;
             image.color = color;
             return image;
+        }
+
+        static Image CreateIconPlaceholder(Transform parent, float size)
+        {
+            var icon = CreateImage("Icon", parent, Color.white, null);
+            icon.type = Image.Type.Simple;
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
+            var rt = icon.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(size, size);
+            return icon;
+        }
+
+        void CreateDivider(Transform parent, string name, bool bottom)
+        {
+            var divider = CreateImage(name, parent, OverlaySkin.ThemeDivider(1), _themeSprite);
+            divider.raycastTarget = false;
+            var rt = divider.rectTransform;
+            rt.anchorMin = new Vector2(0f, bottom ? 0f : 1f);
+            rt.anchorMax = new Vector2(1f, bottom ? 0f : 1f);
+            rt.pivot = new Vector2(0.5f, bottom ? 0f : 1f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(0f, 1f);
+            divider.transform.SetAsLastSibling();
         }
 
         static Text FillLabel(Transform parent, string text, int size, Color color)

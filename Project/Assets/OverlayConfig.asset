@@ -21,6 +21,7 @@ MonoBehaviour:
   chipSize: 128
   reactionSeconds: 0.12
   maxMessagesPerFriend: 200
+  maxCompactChatMessages: 5
   unreadCap: 99
   easterEggEvery: 1000
   interactCooldown: 0.1
