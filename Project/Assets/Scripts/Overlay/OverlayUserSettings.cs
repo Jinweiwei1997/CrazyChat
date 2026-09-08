@@ -18,7 +18,8 @@ namespace CrazyChat.Overlay
         const float MinScale = 0.5f;
         const float MaxScale = 2.5f;
         const int MinSettingsTheme = 1;
-        const int MaxSettingsTheme = 2;
+        const int MaxPresetTheme = 2;
+        public const int CustomTheme = 3;
 
         public float Scale { get; private set; } = 1f;
         public bool AlwaysOnTop { get; private set; } = true;
@@ -27,6 +28,8 @@ namespace CrazyChat.Overlay
         public bool AutoStart { get; private set; }
         public bool ShowInputIcons { get; private set; }
         public int SettingsTheme { get; private set; } = MinSettingsTheme;
+        public Color ThemeBackgroundColor { get; private set; } = OverlaySkin.PresetBackground(1);
+        public Color ThemeAccentColor { get; private set; } = OverlaySkin.PresetAccent(1);
         public int TargetDisplayIndex { get; private set; }
         public int AvatarVersion { get; private set; }
 
@@ -57,7 +60,16 @@ namespace CrazyChat.Overlay
                 FlipHorizontal = data.flipHorizontal;
                 AutoStart = data.autoStart;
                 ShowInputIcons = data.showInputIcons;
-                SettingsTheme = Mathf.Clamp(data.settingsTheme, MinSettingsTheme, MaxSettingsTheme);
+                SettingsTheme = Mathf.Clamp(data.settingsTheme, MinSettingsTheme, CustomTheme);
+                var fallbackTheme = SettingsTheme == MaxPresetTheme ? MaxPresetTheme : MinSettingsTheme;
+                ThemeBackgroundColor = ParseColor(data.themeBackgroundColor,
+                    OverlaySkin.PresetBackground(fallbackTheme));
+                ThemeAccentColor = ParseColor(data.themeAccentColor,
+                    OverlaySkin.PresetAccent(fallbackTheme));
+                if (SettingsTheme <= MaxPresetTheme)
+                {
+                    ApplyPresetColors(SettingsTheme);
+                }
                 TargetDisplayIndex = Mathf.Max(0, data.targetDisplayIndex);
                 AvatarVersion = data.avatarVersion;
                 if (!OverlayAvatarRules.IsEnabled(AvatarVersion, OverlayAvatarCodec.LocalPathA,
@@ -83,6 +95,8 @@ namespace CrazyChat.Overlay
                 autoStart = AutoStart,
                 showInputIcons = ShowInputIcons,
                 settingsTheme = SettingsTheme,
+                themeBackgroundColor = "#" + ColorUtility.ToHtmlStringRGB(ThemeBackgroundColor),
+                themeAccentColor = "#" + ColorUtility.ToHtmlStringRGB(ThemeAccentColor),
                 targetDisplayIndex = TargetDisplayIndex,
                 avatarVersion = AvatarVersion
             }, true);
@@ -112,7 +126,24 @@ namespace CrazyChat.Overlay
 
         public void CycleSettingsTheme()
         {
-            SettingsTheme = SettingsTheme >= MaxSettingsTheme ? MinSettingsTheme : SettingsTheme + 1;
+            var next = SettingsTheme == MinSettingsTheme ? MaxPresetTheme : MinSettingsTheme;
+            SettingsTheme = next;
+            ApplyPresetColors(next);
+        }
+
+        public void SetCustomThemeColor(bool background, Color color)
+        {
+            color.a = 1f;
+            if (background)
+            {
+                ThemeBackgroundColor = color;
+            }
+            else
+            {
+                ThemeAccentColor = color;
+            }
+
+            SettingsTheme = CustomTheme;
         }
 
         public bool AvatarEnabled =>
@@ -228,6 +259,19 @@ namespace CrazyChat.Overlay
 #endif
         }
 
+        void ApplyPresetColors(int theme)
+        {
+            ThemeBackgroundColor = OverlaySkin.PresetBackground(theme);
+            ThemeAccentColor = OverlaySkin.PresetAccent(theme);
+        }
+
+        static Color ParseColor(string value, Color fallback)
+        {
+            return !string.IsNullOrEmpty(value) && ColorUtility.TryParseHtmlString(value, out var color)
+                ? new Color(color.r, color.g, color.b, 1f)
+                : fallback;
+        }
+
         [Serializable]
         class PrefsFile
         {
@@ -238,6 +282,8 @@ namespace CrazyChat.Overlay
             public bool autoStart;
             public bool showInputIcons;
             public int settingsTheme = MinSettingsTheme;
+            public string themeBackgroundColor;
+            public string themeAccentColor;
             public int targetDisplayIndex;
             public int avatarVersion;
         }

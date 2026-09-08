@@ -36,6 +36,8 @@ namespace CrazyChat.Overlay
         static Sprite _indGear;
         static Sprite _indTab;
         static Sprite _indToggle;
+        static Color _customBackground = new Color(0.118f, 0.118f, 0.118f, 1f);
+        static Color _customAccent = new Color(0.88f, 0.42f, 0.62f, 1f);
 
         public static string Id => _id;
 
@@ -51,58 +53,90 @@ namespace CrazyChat.Overlay
 
         public static Color SettingsMuted => new Color(1f, 1f, 1f, 0.72f);
 
-        public static Color ThemeBackground(int theme) => theme == 2
+        public static Color PresetBackground(int theme) => theme == 2
             ? new Color(0.98f, 0.98f, 0.98f, 1f)
             : new Color(0.118f, 0.118f, 0.118f, 1f);
 
-        public static Color ThemeHeader(int theme) => theme == 2
-            ? new Color(0.95f, 0.95f, 0.95f, 1f)
-            : new Color(0.094f, 0.094f, 0.094f, 1f);
-
-        public static Color ThemeSection(int theme) => theme == 2
-            ? new Color(0.92f, 0.92f, 0.92f, 1f)
-            : new Color(0.102f, 0.102f, 0.102f, 1f);
-
-        public static Color ThemeControl(int theme) => theme == 2
-            ? new Color(0.88f, 0.88f, 0.88f, 1f)
-            : new Color(0.176f, 0.176f, 0.176f, 1f);
-
-        public static Color ThemeAccent(int theme) => theme == 2
+        public static Color PresetAccent(int theme) => theme == 2
             ? new Color(0.78f, 0.78f, 0.8f, 1f)
             : new Color(0.88f, 0.42f, 0.62f, 1f);
 
-        public static Color ThemeMuted(int theme) => theme == 2
-            ? new Color(0.43f, 0.43f, 0.45f, 1f)
-            : new Color(0.64f, 0.64f, 0.64f, 1f);
+        public static void ConfigureCustomTheme(Color background, Color accent)
+        {
+            background.a = 1f;
+            accent.a = 1f;
+            _customBackground = background;
+            _customAccent = accent;
+        }
 
-        public static Color ThemeHover(int theme) => theme == 2
-            ? new Color(0f, 0f, 0f, 0.06f)
-            : new Color(1f, 1f, 1f, 0.08f);
+        public static Color ThemeBackground(int theme) => BaseBackground(theme);
 
-        public static Color ThemeDivider(int theme) => theme == 2
-            ? new Color(0.86f, 0.86f, 0.86f, 1f)
-            : new Color(0.235f, 0.235f, 0.235f, 1f);
+        public static Color ThemeHeader(int theme) => Shade(BaseBackground(theme), IsLight(theme) ? -0.03f : -0.20f);
 
-        public static Color ThemeInputBackground(int theme) => theme == 2
-            ? Color.white
-            : new Color(0.125f, 0.125f, 0.125f, 1f);
+        public static Color ThemeSection(int theme) => Shade(BaseBackground(theme), IsLight(theme) ? -0.06f : -0.14f);
 
-        public static Color ThemeDanger(int theme) => theme == 2
+        public static Color ThemeControl(int theme) => Shade(BaseBackground(theme), IsLight(theme) ? -0.10f : 0.066f);
+
+        public static Color ThemeAccent(int theme) => theme == OverlayUserSettings.CustomTheme
+            ? _customAccent
+            : PresetAccent(theme);
+
+        public static Color ThemeMuted(int theme) =>
+            Color.Lerp(SettingsThemeText(theme), BaseBackground(theme), 0.42f);
+
+        public static Color ThemeHover(int theme) => WithAlpha(SettingsThemeText(theme), IsLight(theme) ? 0.06f : 0.08f);
+
+        public static Color ThemeDivider(int theme) => Shade(BaseBackground(theme), IsLight(theme) ? -0.12f : 0.133f);
+
+        public static Color ThemeInputBackground(int theme) => Shade(BaseBackground(theme), IsLight(theme) ? 0.02f : 0.007f);
+
+        public static Color ThemeDanger(int theme) => IsLight(theme)
             ? new Color(0.78f, 0.18f, 0.18f, 1f)
             : new Color(0.96f, 0.53f, 0.44f, 1f);
 
         public static Color SettingsThemeText(int theme)
         {
-            return theme == 2
+            return IsLight(theme)
                 ? new Color(0.14f, 0.14f, 0.15f, 1f)
                 : new Color(0.94f, 0.94f, 0.94f, 1f);
         }
 
+        public static Color SettingsEntryIconColor(int theme)
+        {
+            return IsLight(theme)
+                ? new Color(0.94f, 0.94f, 0.94f, 1f)
+                : new Color(0.14f, 0.14f, 0.15f, 1f);
+        }
+
         public static Color InputIconColor(int theme)
         {
-            return theme == 2
+            return IsLight(theme)
                 ? Color.white
                 : new Color(0.14f, 0.14f, 0.15f, 1f);
+        }
+
+        static Color BaseBackground(int theme) => theme == OverlayUserSettings.CustomTheme
+            ? _customBackground
+            : PresetBackground(theme);
+
+        static bool IsLight(int theme)
+        {
+            var color = BaseBackground(theme);
+            return color.r * 0.2126f + color.g * 0.7152f + color.b * 0.0722f >= 0.55f;
+        }
+
+        static Color Shade(Color color, float amount)
+        {
+            var target = amount >= 0f ? Color.white : Color.black;
+            var result = Color.Lerp(color, target, Mathf.Abs(amount));
+            result.a = 1f;
+            return result;
+        }
+
+        static Color WithAlpha(Color color, float alpha)
+        {
+            color.a = alpha;
+            return color;
         }
 
         public static void ApplySettingsPanel(Image image)

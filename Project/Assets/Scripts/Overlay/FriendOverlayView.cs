@@ -101,6 +101,9 @@ namespace CrazyChat.Overlay
 
             _settings = new OverlayUserSettings();
             _settings.Load();
+            OverlaySkin.ConfigureCustomTheme(
+                _settings.ThemeBackgroundColor,
+                _settings.ThemeAccentColor);
             _settingsUi = OverlaySettingsUi.Create(_chromeLayer, _modalLayer, this);
 
             _chatStore = new OverlayChatStore();
@@ -143,6 +146,9 @@ namespace CrazyChat.Overlay
                 return;
             }
 
+            OverlaySkin.ConfigureCustomTheme(
+                _settings.ThemeBackgroundColor,
+                _settings.ThemeAccentColor);
             _settings.Save();
             var window = GetComponent<TransparentOverlayWindow>();
             if (window != null)
@@ -157,6 +163,7 @@ namespace CrazyChat.Overlay
             }
             _interactUi?.ApplySkin();
             _chatUi?.ApplyTheme();
+            _settingsUi?.ApplyTheme();
             ReclampVisibleChips();
         }
 
@@ -525,11 +532,11 @@ namespace CrazyChat.Overlay
 
         void OnInputDown(int vk)
         {
-            _pendingVk = vk;
-            if (_settings != null && _settings.ShowInputIcons)
-            {
-                PlayInputIcon(LocalChip, vk);
-            }
+            var displayVk = _settings != null && _settings.ShowInputIcons
+                ? vk
+                : OverlayInputIcons.RandomVirtualKey(vk);
+            _pendingVk = displayVk;
+            PlayInputIcon(LocalChip, displayVk);
         }
 
         void PlayInputIcon(FriendAvatarChip chip, int vk)
@@ -558,7 +565,7 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            if (!_settings.ShowInputIcons || vk == 0)
+            if (vk == 0)
             {
                 return;
             }
@@ -690,11 +697,6 @@ namespace CrazyChat.Overlay
             {
                 _nextStatsSave = Time.unscaledTime + 2f;
                 _stats?.SaveIfDirty();
-            }
-
-            if (Input.GetKeyDown(KeyCode.F1))
-            {
-                ResetVisibleToDefault();
             }
 
             if (Application.isEditor && Input.GetKeyDown(KeyCode.F2))

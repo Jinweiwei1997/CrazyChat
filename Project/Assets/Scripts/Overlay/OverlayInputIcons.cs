@@ -65,6 +65,22 @@ namespace CrazyChat.Overlay
         };
 
         static readonly Dictionary<string, Sprite> Cache = new Dictionary<string, Sprite>();
+        static readonly int[] RandomKeys = BuildRandomKeys();
+
+        public static int RandomVirtualKey(int exceptVk)
+        {
+            var exceptName = NameFor(exceptVk);
+            for (var attempt = 0; attempt < 8; attempt++)
+            {
+                var candidate = RandomKeys[Random.Range(0, RandomKeys.Length)];
+                if (NameFor(candidate) != exceptName)
+                {
+                    return candidate;
+                }
+            }
+
+            return exceptVk == 0x41 ? 0x42 : 0x41;
+        }
 
         public static Sprite Get(int vk)
         {
@@ -109,6 +125,27 @@ namespace CrazyChat.Overlay
             }
 
             return null;
+        }
+
+        static int[] BuildRandomKeys()
+        {
+            var keys = new List<int>(Names.Keys);
+            for (var vk = 0x30; vk <= 0x39; vk++)
+            {
+                keys.Add(vk);
+            }
+
+            for (var vk = 0x41; vk <= 0x5A; vk++)
+            {
+                keys.Add(vk);
+            }
+
+            for (var vk = 0x70; vk <= 0x7B; vk++)
+            {
+                keys.Add(vk);
+            }
+
+            return keys.ToArray();
         }
 
         static Sprite Load(string name)

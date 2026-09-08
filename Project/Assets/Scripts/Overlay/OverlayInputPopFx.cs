@@ -6,7 +6,7 @@ namespace CrazyChat.Overlay
 {
     public sealed class OverlayInputPopFx : MonoBehaviour
     {
-        const float Size = 32f;
+        const float Size = 48f;
         const float Rise = 42f;
         const float Duration = 0.55f;
         const int PoolSize = 12;

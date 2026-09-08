@@ -10,12 +10,13 @@ namespace CrazyChat.Overlay
         const string PrefabResource = "Prefab/UI/SettingsMenu";
         const string DefaultPage = "GamePage";
         const float CardWidth = 300f * OverlaySkin.SettingsChatWidthScale;
-        const float CardHeight = 358f;
+        const float CardHeight = 422f;
         const float HeaderHeight = 36f;
         const float TabBarHeight = 32f;
         const float RowHeight = 26f;
         const float ActionRowHeight = 28f;
         const float GearSize = 32f;
+        const float SettingsIconSize = 24f;
         const float CloseSize = 28f;
         const float CardVisualScale = (2f / 3f) * OverlaySkin.OpenWindowScale;
         const string ThemeSpriteResource = "Overlay/UI/square_rect";
@@ -38,6 +39,14 @@ namespace CrazyChat.Overlay
         [SerializeField] Text _avatarStatusText;
         [SerializeField] Dropdown _displayDropdown;
         Text _themeText;
+        Image _backgroundColorSwatch;
+        Image _accentColorSwatch;
+        GameObject _colorPicker;
+        readonly Slider[] _colorSliders = new Slider[3];
+        readonly Text[] _colorValues = new Text[3];
+        Image _colorPreview;
+        bool _editingBackgroundColor;
+        Color _draftColor;
         readonly List<Image> _themeImages = new List<Image>();
         readonly List<Text> _themeLabels = new List<Text>();
         Sprite _themeSprite;
@@ -131,6 +140,30 @@ namespace CrazyChat.Overlay
             return row;
         }
 
+        public void EditorEnsureColorRows()
+        {
+            var gamePage = FindNode(_cardRt, "Pages/GamePage");
+            var themeRow = FindNode(_cardRt, "Pages/GamePage/ThemeRow");
+            if (gamePage == null || themeRow == null)
+            {
+                return;
+            }
+
+            if (FindNode(_cardRt, "Pages/GamePage/BackgroundColorRow") == null)
+            {
+                AddColorRow(gamePage, "BackgroundColorRow", "背景颜色");
+            }
+            if (FindNode(_cardRt, "Pages/GamePage/AccentColorRow") == null)
+            {
+                AddColorRow(gamePage, "AccentColorRow", "强调颜色");
+            }
+
+            FindNode(_cardRt, "Pages/GamePage/BackgroundColorRow")
+                ?.SetSiblingIndex(themeRow.GetSiblingIndex() + 1);
+            FindNode(_cardRt, "Pages/GamePage/AccentColorRow")
+                ?.SetSiblingIndex(themeRow.GetSiblingIndex() + 2);
+        }
+
         public Transform EditorEnsureBackdrop()
         {
             var existing = FindNode(_panel != null ? _panel.transform : null, "Backdrop");
@@ -217,10 +250,15 @@ namespace CrazyChat.Overlay
             BindClick(themeRow, () =>
             {
                 _view.Settings.CycleSettingsTheme();
-                ApplyTheme();
                 _view.ApplyUserSettings();
                 RefreshLabels();
             });
+            var backgroundColorRow = FindNode(_cardRt, "Pages/GamePage/BackgroundColorRow");
+            var accentColorRow = FindNode(_cardRt, "Pages/GamePage/AccentColorRow");
+            _backgroundColorSwatch = backgroundColorRow?.Find("Swatch")?.GetComponent<Image>();
+            _accentColorSwatch = accentColorRow?.Find("Swatch")?.GetComponent<Image>();
+            BindClick(backgroundColorRow, () => OpenColorPicker(true));
+            BindClick(accentColorRow, () => OpenColorPicker(false));
             BindClick(FindNode(_cardRt, "Pages/GamePage/AvatarSetupRow"), OpenAvatarSetup);
             BindClick(FindNode(_cardRt, "Pages/GamePage/ResetLayoutRow"), () => _view.ResetVisibleToDefault());
             BindClick(FindNode(_cardRt, "Pages/GamePage/ResetScaleRow"), () =>
@@ -420,7 +458,7 @@ namespace CrazyChat.Overlay
             _buttonRt.anchorMax = new Vector2(0f, 0f);
             _buttonRt.pivot = new Vector2(0.5f, 0.5f);
             _buttonRt.sizeDelta = new Vector2(GearSize, GearSize);
-            CreateIconPlaceholder(_buttonRt, 16f);
+            CreateIconPlaceholder(_buttonRt, SettingsIconSize);
 
             _panel = new GameObject("SettingsPanel", typeof(RectTransform));
             _panel.transform.SetParent(modal != null ? modal : transform, false);
@@ -515,6 +553,8 @@ namespace CrazyChat.Overlay
             _flipText = AddToggleRow(gamePage, "FlipHorizontalRow", "水平翻转");
             _inputIconsText = AddToggleRow(gamePage, "InputIconsRow", "按键图标");
             AddActionRow(gamePage, "ThemeRow", "界面风格 1");
+            AddColorRow(gamePage, "BackgroundColorRow", "背景颜色");
+            AddColorRow(gamePage, "AccentColorRow", "强调颜色");
             _avatarStatusText = AddStatusRow(gamePage, "AvatarStatusRow", "动态形象");
             AddActionRow(gamePage, "AvatarSetupRow", "设置动态图");
             AddActionRow(gamePage, "ResetLayoutRow", "复位头像位置");
@@ -526,6 +566,192 @@ namespace CrazyChat.Overlay
             _autoStartText = AddToggleRow(systemPage, "AutoStartRow", "开机自启");
             _displayDropdown = AddDisplayDropdownRow(systemPage);
             AddActionRow(systemPage, "QuitGameRow", "退出游戏", danger: true);
+        }
+
+        void OpenColorPicker(bool background)
+        {
+            EnsureColorPicker();
+            if (_colorPicker == null || _view == null || _view.Settings == null)
+            {
+                return;
+            }
+
+            _editingBackgroundColor = background;
+            _draftColor = background
+                ? _view.Settings.ThemeBackgroundColor
+                : _view.Settings.ThemeAccentColor;
+            for (var i = 0; i < _colorSliders.Length; i++)
+            {
+                var channel = i == 0 ? _draftColor.r : i == 1 ? _draftColor.g : _draftColor.b;
+                _colorSliders[i].SetValueWithoutNotify(Mathf.Round(channel * 255f));
+            }
+            ApplyColorPickerTheme();
+            RefreshColorPicker();
+            _colorPicker.SetActive(true);
+            _colorPicker.transform.SetAsLastSibling();
+        }
+
+        void EnsureColorPicker()
+        {
+            if (_colorPicker != null)
+            {
+                return;
+            }
+
+            var modal = _panel != null ? _panel.transform.parent : transform;
+            _colorPicker = new GameObject("ThemeColorPicker", typeof(RectTransform));
+            _colorPicker.transform.SetParent(modal, false);
+            Stretch((RectTransform)_colorPicker.transform);
+
+            var dim = CreateImage("Dim", _colorPicker.transform, new Color(0f, 0f, 0f, 0.35f), null);
+            dim.raycastTarget = true;
+            Stretch(dim.rectTransform);
+            dim.gameObject.AddComponent<Button>().onClick.AddListener(() => _colorPicker.SetActive(false));
+
+            var card = CreateImage("Card", _colorPicker.transform, ThemeBackground, _themeSprite);
+            card.raycastTarget = true;
+            var cardRt = card.rectTransform;
+            cardRt.anchorMin = cardRt.anchorMax = new Vector2(0.5f, 0.5f);
+            cardRt.sizeDelta = new Vector2(280f, 240f);
+            cardRt.localScale = new Vector3(
+                OverlaySkin.OpenWindowScale,
+                OverlaySkin.OpenWindowScale,
+                1f);
+
+            PlaceLabel(cardRt, "选择颜色", 14, ThemeText, new Vector2(0f, 100f), new Vector2(220f, 24f));
+            _colorPreview = CreateImage("Preview", cardRt, Color.white, _controlSprite);
+            _colorPreview.raycastTarget = false;
+            var previewRt = _colorPreview.rectTransform;
+            previewRt.anchorMin = previewRt.anchorMax = new Vector2(0.5f, 0.5f);
+            previewRt.anchoredPosition = new Vector2(0f, 68f);
+            previewRt.sizeDelta = new Vector2(220f, 24f);
+
+            _colorSliders[0] = CreateColorSlider(cardRt, "R", 32f, 0);
+            _colorSliders[1] = CreateColorSlider(cardRt, "G", 0f, 1);
+            _colorSliders[2] = CreateColorSlider(cardRt, "B", -32f, 2);
+            AddSetupBtn(cardRt, "Cancel", "取消", new Vector2(-46f, -88f),
+                () => _colorPicker.SetActive(false));
+            AddSetupBtn(cardRt, "Confirm", "确认", new Vector2(46f, -88f), ConfirmColorPicker);
+            _colorPicker.SetActive(false);
+        }
+
+        void ApplyColorPickerTheme()
+        {
+            if (_colorPicker == null)
+            {
+                return;
+            }
+
+            var card = _colorPicker.transform.Find("Card");
+            var images = card != null ? card.GetComponentsInChildren<Image>(true) : null;
+            if (images != null)
+            {
+                for (var i = 0; i < images.Length; i++)
+                {
+                    var image = images[i];
+                    if (image == _colorPreview)
+                    {
+                        continue;
+                    }
+
+                    image.color = image.gameObject.name == "Card"
+                        ? ThemeBackground
+                        : image.gameObject.name == "Fill"
+                            ? ThemeAccent
+                            : image.gameObject.name == "Handle"
+                                ? ThemeText
+                                : ThemeControl;
+                }
+            }
+
+            var labels = card != null ? card.GetComponentsInChildren<Text>(true) : null;
+            if (labels != null)
+            {
+                for (var i = 0; i < labels.Length; i++)
+                {
+                    labels[i].color = ThemeText;
+                }
+            }
+        }
+
+        Slider CreateColorSlider(Transform parent, string channel, float y, int index)
+        {
+            var label = PlaceLabel(parent, channel, 13, ThemeText, new Vector2(-116f, y), new Vector2(20f, 24f));
+            label.alignment = TextAnchor.MiddleCenter;
+
+            var track = CreateImage(channel + "Track", parent, ThemeControl, _controlSprite);
+            track.raycastTarget = true;
+            var trackRt = track.rectTransform;
+            trackRt.anchorMin = trackRt.anchorMax = new Vector2(0.5f, 0.5f);
+            trackRt.anchoredPosition = new Vector2(-4f, y);
+            trackRt.sizeDelta = new Vector2(176f, 12f);
+
+            var fill = CreateImage("Fill", trackRt, ThemeAccent, _controlSprite);
+            fill.raycastTarget = false;
+            var fillRt = fill.rectTransform;
+            fillRt.anchorMin = new Vector2(0f, 0f);
+            fillRt.anchorMax = new Vector2(1f, 1f);
+            fillRt.offsetMin = Vector2.zero;
+            fillRt.offsetMax = Vector2.zero;
+
+            var handle = CreateImage("Handle", trackRt, ThemeText, OverlaySprites.Circle);
+            handle.raycastTarget = true;
+            var handleRt = handle.rectTransform;
+            handleRt.anchorMin = handleRt.anchorMax = new Vector2(0f, 0.5f);
+            handleRt.sizeDelta = new Vector2(14f, 14f);
+
+            var value = PlaceLabel(parent, "0", 12, ThemeMuted, new Vector2(110f, y), new Vector2(38f, 24f));
+            _colorValues[index] = value;
+
+            var slider = track.gameObject.AddComponent<Slider>();
+            slider.targetGraphic = handle;
+            slider.fillRect = fillRt;
+            slider.handleRect = handleRt;
+            slider.direction = Slider.Direction.LeftToRight;
+            slider.minValue = 0f;
+            slider.maxValue = 255f;
+            slider.wholeNumbers = true;
+            slider.transition = Selectable.Transition.None;
+            slider.onValueChanged.AddListener(_ => RefreshColorPicker());
+            return slider;
+        }
+
+        void RefreshColorPicker()
+        {
+            if (_colorSliders[0] == null)
+            {
+                return;
+            }
+
+            _draftColor = new Color(
+                _colorSliders[0].value / 255f,
+                _colorSliders[1].value / 255f,
+                _colorSliders[2].value / 255f,
+                1f);
+            if (_colorPreview != null)
+            {
+                _colorPreview.color = _draftColor;
+            }
+            for (var i = 0; i < _colorValues.Length; i++)
+            {
+                if (_colorValues[i] != null)
+                {
+                    _colorValues[i].text = Mathf.RoundToInt(_colorSliders[i].value).ToString();
+                }
+            }
+        }
+
+        void ConfirmColorPicker()
+        {
+            if (_view == null || _view.Settings == null)
+            {
+                return;
+            }
+
+            _view.Settings.SetCustomThemeColor(_editingBackgroundColor, _draftColor);
+            _view.ApplyUserSettings();
+            RefreshLabels();
+            _colorPicker.SetActive(false);
         }
 
         void EnsureAvatarSetup()
@@ -757,6 +983,11 @@ namespace CrazyChat.Overlay
 
         void CloseAvatarOverlays()
         {
+            if (_colorPicker != null)
+            {
+                _colorPicker.SetActive(false);
+            }
+
             if (_cropUi != null)
             {
                 _cropUi.ForceClose();
@@ -952,6 +1183,30 @@ namespace CrazyChat.Overlay
             button.gameObject.AddComponent<Button>();
         }
 
+        void AddColorRow(Transform parent, string id, string title)
+        {
+            var button = CreateImage(id, parent, Color.clear, _controlSprite);
+            button.raycastTarget = true;
+            var le = button.gameObject.AddComponent<LayoutElement>();
+            le.preferredHeight = ActionRowHeight;
+            le.minHeight = ActionRowHeight;
+            le.flexibleHeight = 0f;
+
+            var label = FillLabel(button.rectTransform, title, 13, OverlaySkin.SettingsText);
+            label.alignment = TextAnchor.MiddleLeft;
+            label.rectTransform.offsetMin = new Vector2(8f, 0f);
+            label.rectTransform.offsetMax = new Vector2(-36f, 0f);
+
+            var swatch = CreateImage("Swatch", button.rectTransform, Color.white, _controlSprite);
+            swatch.raycastTarget = false;
+            var swatchRt = swatch.rectTransform;
+            swatchRt.anchorMin = swatchRt.anchorMax = new Vector2(1f, 0.5f);
+            swatchRt.pivot = new Vector2(1f, 0.5f);
+            swatchRt.anchoredPosition = new Vector2(-8f, 0f);
+            swatchRt.sizeDelta = new Vector2(18f, 18f);
+            button.gameObject.AddComponent<Button>();
+        }
+
         static RectTransform CreateRow(Transform parent, string name, float height)
         {
             var go = CreateEmpty(name, parent);
@@ -1063,7 +1318,18 @@ namespace CrazyChat.Overlay
             SetToggle(_inputIconsText, settings.ShowInputIcons);
             if (_themeText != null)
             {
-                _themeText.text = "界面风格 " + settings.SettingsTheme;
+                _themeText.text = settings.SettingsTheme == OverlayUserSettings.CustomTheme
+                    ? "界面风格 自定义"
+                    : "界面风格 " + settings.SettingsTheme;
+            }
+
+            if (_backgroundColorSwatch != null)
+            {
+                _backgroundColorSwatch.color = settings.ThemeBackgroundColor;
+            }
+            if (_accentColorSwatch != null)
+            {
+                _accentColorSwatch.color = settings.ThemeAccentColor;
             }
 
             if (_avatarStatusText != null)
@@ -1085,7 +1351,7 @@ namespace CrazyChat.Overlay
             _settingsIcon = Resources.Load<Sprite>(SettingsIconResource);
             _closeIcon = Resources.Load<Sprite>(CloseIconResource);
 
-            ApplyIcon(EnsureIcon(_buttonRt, 16f), _settingsIcon);
+            ApplyIcon(EnsureIcon(_buttonRt, SettingsIconSize), _settingsIcon);
             ApplyIcon(EnsureIcon(FindNode(_cardRt, "Header/Close"), 16f), _closeIcon);
         }
 
@@ -1179,7 +1445,7 @@ namespace CrazyChat.Overlay
             image.preserveAspect = true;
         }
 
-        void ApplyTheme()
+        public void ApplyTheme()
         {
             if (_cardRt == null)
             {
@@ -1280,6 +1546,18 @@ namespace CrazyChat.Overlay
                 }
             }
 
+            if (_view != null && _view.Settings != null)
+            {
+                if (_backgroundColorSwatch != null)
+                {
+                    _backgroundColorSwatch.color = _view.Settings.ThemeBackgroundColor;
+                }
+                if (_accentColorSwatch != null)
+                {
+                    _accentColorSwatch.color = _view.Settings.ThemeAccentColor;
+                }
+            }
+
             for (var i = 0; i < _themeLabels.Count; i++)
             {
                 var label = _themeLabels[i];
@@ -1307,7 +1585,7 @@ namespace CrazyChat.Overlay
                 var icon = _buttonRt != null ? _buttonRt.Find("Icon")?.GetComponent<Image>() : null;
                 if (icon != null)
                 {
-                    icon.color = ThemeText;
+                    icon.color = OverlaySkin.SettingsEntryIconColor(ThemeId);
                 }
             }
         }

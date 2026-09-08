@@ -74,13 +74,15 @@ public static class OverlaySettingsMenuPrefabBuilder
                 Debug.LogError("[Overlay] 设置 Prefab 中无法加入 ThemeRow。");
                 return;
             }
+            ui.EditorEnsureColorRows();
             if (ui.EditorEnsureBackdrop() == null)
             {
                 Debug.LogError("[Overlay] 设置 Prefab 中无法加入 Backdrop。");
                 return;
             }
 
-            ((RectTransform)background).localScale = new Vector3(2f / 3f, 2f / 3f, 1f);
+            var scale = (2f / 3f) * OverlaySkin.OpenWindowScale;
+            ((RectTransform)background).localScale = new Vector3(scale, scale, 1f);
             var header = background.Find("Header");
             var tabBar = background.Find("TabBar");
             EnsureSectionImage(header, square, OverlaySkin.ThemeHeader(1));
@@ -239,7 +241,7 @@ public static class OverlaySettingsMenuPrefabBuilder
                 image.preserveAspect = false;
                 image.color = Color.clear;
             }
-            EnsureIcon(settingsButton, settingsIcon, 16f);
+            EnsureIcon(settingsButton, settingsIcon, 24f);
         }
 
         EnsureIcon(header != null ? header.Find("Close") : null, closeIcon, 16f);
