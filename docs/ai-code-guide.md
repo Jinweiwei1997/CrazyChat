@@ -35,6 +35,7 @@ OverlayBootstrap          自动拉起，只组装一次
     OverlayTapStats       敲击计数
     OverlayConfig         策划常量
   TransparentOverlayWindow 透明置顶 + 点击穿透
+  OverlayTrayIcon         Windows 通知区托盘（仅 Standalone）
 OverlaySprites            圆/圆角/字体，UI 共用
 ```
 

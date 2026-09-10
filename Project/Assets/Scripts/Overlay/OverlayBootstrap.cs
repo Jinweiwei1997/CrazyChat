@@ -87,6 +87,12 @@ namespace CrazyChat.Overlay
             var raycaster = view.Build(friends);
             window.BindRaycaster(raycaster);
             friends.Refresh();
+#if UNITY_STANDALONE_WIN
+            if (!Application.isEditor)
+            {
+                gameObject.AddComponent<OverlayTrayIcon>();
+            }
+#endif
         }
 
         static void EnsureSteamManager()
