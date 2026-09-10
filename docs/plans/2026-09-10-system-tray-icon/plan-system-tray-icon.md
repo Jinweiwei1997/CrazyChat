@@ -53,9 +53,9 @@ Unity batchmode exit 0; `Export/tray-compile2.log` — no `error CS`; `OverlayTr
 
 Confirm `OverlaySessionGuard` mutex-fail path still returns before Bootstrap Awake (no tray). Confirm Settings Quit still `Application.Quit()`.
 
-- [ ] **Step 6: Git checkpoint**
+- [x] **Step 6: Git checkpoint**
 
-Commit tray code files only.
+Commit tray code files only. → `97c0e04`
 
 ---
 
@@ -75,9 +75,9 @@ Add concise bullets matching spec 需求边界.
 
 No Editor tray; no force `^` overflow; quit same as 退出游戏.
 
-- [ ] **Step 3: Git checkpoint**
+- [x] **Step 3: Git checkpoint**
 
-Commit docs with code or separate checkpoint if code already committed.
+Committed with implementation in `97c0e04`.
 
 ---
 
