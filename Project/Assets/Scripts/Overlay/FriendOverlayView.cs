@@ -24,6 +24,7 @@ namespace CrazyChat.Overlay
         OverlayInteractFx _interactFx;
         OverlayInputPopFx _inputPop;
         OverlayAvatarPresence _avatarPresence;
+        OverlayStealthController _stealth;
         RectTransform _layer;
         RectTransform _chromeLayer;
         RectTransform _windowLayer;
@@ -42,6 +43,8 @@ namespace CrazyChat.Overlay
         public FriendAvatarChip LocalChip { get; private set; }
 
         public OverlayUserSettings Settings => _settings;
+
+        public OverlayStealthController Stealth => _stealth;
 
         public OverlayConfig Config => _service != null && _service.Config != null
             ? _service.Config
@@ -75,12 +78,17 @@ namespace CrazyChat.Overlay
             eventGo.transform.SetParent(transform, false);
 
             var canvas = canvasGo.transform;
-            _bag = OverlayBagUi.Create(MakeLayer(canvas, "BagLayer"), this);
+            var stealthRoot = new GameObject("StealthContent", typeof(RectTransform), typeof(CanvasGroup));
+            stealthRoot.transform.SetParent(canvas, false);
+            var stealthContent = stealthRoot.GetComponent<CanvasGroup>();
+            Stretch((RectTransform)stealthRoot.transform);
 
-            _layer = MakeLayer(canvas, "FriendLayer");
+            _bag = OverlayBagUi.Create(MakeLayer(stealthRoot.transform, "BagLayer"), this);
+
+            _layer = MakeLayer(stealthRoot.transform, "FriendLayer");
 
             var hintGo = new GameObject("Hint", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-            hintGo.transform.SetParent(canvas, false);
+            hintGo.transform.SetParent(stealthRoot.transform, false);
             _hint = hintGo.GetComponent<Text>();
             _hint.font = OverlaySprites.UiFont;
             _hint.fontSize = 13;
@@ -94,10 +102,11 @@ namespace CrazyChat.Overlay
             hintRt.anchoredPosition = new Vector2(16f, 8f);
             hintRt.sizeDelta = new Vector2(280f, 22f);
 
-            var fxLayer = MakeLayer(canvas, "FxLayer");
-            _chromeLayer = MakeLayer(canvas, "ChromeLayer");
-            _windowLayer = MakeLayer(canvas, "WindowLayer");
-            _modalLayer = MakeLayer(canvas, "ModalLayer");
+            var fxLayer = MakeLayer(stealthRoot.transform, "FxLayer");
+            _chromeLayer = MakeLayer(stealthRoot.transform, "ChromeLayer");
+            _windowLayer = MakeLayer(stealthRoot.transform, "WindowLayer");
+            _modalLayer = MakeLayer(stealthRoot.transform, "ModalLayer");
+            var stealthHudLayer = MakeLayer(canvas, "StealthHudLayer");
 
             _settings = new OverlayUserSettings();
             _settings.Load();
@@ -133,10 +142,20 @@ namespace CrazyChat.Overlay
             _avatarPresence = gameObject.AddComponent<OverlayAvatarPresence>();
             _avatarPresence.Bind(this, _interact, _input, _settings);
 
+            _stealth = gameObject.AddComponent<OverlayStealthController>();
+            _stealth.Bind(this, _input, stealthContent, stealthHudLayer);
+
             _service.Changed += Rebuild;
             Rebuild();
             ApplyUserSettings();
             return canvasGo.GetComponent<GraphicRaycasterHost>();
+        }
+
+        public void CloseTransientPanels()
+        {
+            _chatUi?.Hide();
+            _settingsUi?.Hide();
+            HideInteractMenu();
         }
 
         public void ApplyUserSettings()

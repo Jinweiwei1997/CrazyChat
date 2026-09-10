@@ -36,6 +36,7 @@ OverlayBootstrap          自动拉起，只组装一次
     OverlayConfig         策划常量
   TransparentOverlayWindow 透明置顶 + 点击穿透
   OverlayTrayIcon         Windows 通知区托盘（仅 Standalone）
+  OverlayStealthController 右键长按隐身 / 取消隐身
 OverlaySprites            圆/圆角/字体，UI 共用
 ```
 

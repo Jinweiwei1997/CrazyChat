@@ -29,6 +29,7 @@ namespace CrazyChat.Overlay
         const uint PmRemove = 0x0001;
         const int IdiApplication = 32512;
         const int MenuIdQuit = 1;
+        const int MenuIdReveal = 2;
         const int TrayId = 1;
 
         static readonly IntPtr HwndMessage = new IntPtr(-3);
@@ -41,6 +42,8 @@ namespace CrazyChat.Overlay
         bool _added;
         bool _classRegistered;
         string _className;
+        System.Func<bool> _isHidden;
+        System.Action _onReveal;
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         struct NotifyIconData
@@ -163,6 +166,12 @@ namespace CrazyChat.Overlay
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
         static extern IntPtr GetModuleHandle(string lpModuleName);
+
+        public void BindStealth(System.Func<bool> isHidden, System.Action onReveal)
+        {
+            _isHidden = isHidden;
+            _onReveal = onReveal;
+        }
 
         void OnEnable()
         {
@@ -364,6 +373,11 @@ namespace CrazyChat.Overlay
 
             try
             {
+                if (_isHidden != null && _isHidden())
+                {
+                    AppendMenu(menu, MfString, new UIntPtr(MenuIdReveal), "取消隐藏");
+                }
+
                 AppendMenu(menu, MfString, new UIntPtr(MenuIdQuit), "退出");
                 GetCursorPos(out var pt);
                 SetForegroundWindow(_hwnd);
@@ -376,7 +390,11 @@ namespace CrazyChat.Overlay
                     _hwnd,
                     IntPtr.Zero);
                 PostMessage(_hwnd, WmNull, IntPtr.Zero, IntPtr.Zero);
-                if (cmd == MenuIdQuit)
+                if (cmd == MenuIdReveal)
+                {
+                    _onReveal?.Invoke();
+                }
+                else if (cmd == MenuIdQuit)
                 {
                     QuitGame();
                 }

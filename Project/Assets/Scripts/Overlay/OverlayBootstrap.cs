@@ -90,7 +90,10 @@ namespace CrazyChat.Overlay
 #if UNITY_STANDALONE_WIN
             if (!Application.isEditor)
             {
-                gameObject.AddComponent<OverlayTrayIcon>();
+                var tray = gameObject.AddComponent<OverlayTrayIcon>();
+                tray.BindStealth(
+                    () => view.Stealth != null && view.Stealth.IsHidden,
+                    () => view.Stealth?.RevealNow());
             }
 #endif
         }

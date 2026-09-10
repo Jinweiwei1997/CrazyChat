@@ -26,6 +26,19 @@ namespace CrazyChat.Overlay
 
         public bool IsAnyDown => _anyDown;
 
+        /// <summary>当前是否按住鼠标右键（Windows 下切焦点仍有效）。</summary>
+        public bool IsRightButtonHeld
+        {
+            get
+            {
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+                return _pollInitialized && _down[0x02];
+#else
+                return Input.GetMouseButton(1);
+#endif
+            }
+        }
+
         void Update()
         {
             var taps = 0;
