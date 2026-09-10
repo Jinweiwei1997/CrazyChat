@@ -34,4 +34,4 @@
 
 ### Task 4: Build Export/0.2 + finalize
 
-- [ ] Batch build; commit code+spec+plan+Export; push
+- [x] Batch build; commit code+spec+plan+Export; push (push blocked by GitHub network — local ahead 2)
