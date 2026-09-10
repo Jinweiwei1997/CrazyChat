@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
@@ -41,6 +42,7 @@ namespace CrazyChat.Overlay
         bool _iconOwned;
         bool _added;
         bool _classRegistered;
+        bool _pendingAdd;
         string _className;
         System.Func<bool> _isHidden;
         System.Action _onReveal;
@@ -181,21 +183,30 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            TryAdd();
+            // Defer native tray setup so Awake/AddComponent cannot hard-crash startup.
+            _pendingAdd = true;
         }
 
         void OnDisable()
         {
+            _pendingAdd = false;
             Remove();
         }
 
         void OnDestroy()
         {
+            _pendingAdd = false;
             Remove();
         }
 
         void Update()
         {
+            if (_pendingAdd)
+            {
+                _pendingAdd = false;
+                TryAdd();
+            }
+
             if (_hwnd == IntPtr.Zero)
             {
                 return;
@@ -318,7 +329,7 @@ namespace CrazyChat.Overlay
             owned = false;
             try
             {
-                var exe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                var exe = ResolveExePath();
                 if (!string.IsNullOrEmpty(exe))
                 {
                     var extracted = ExtractIcon(module, exe, 0);
@@ -334,6 +345,45 @@ namespace CrazyChat.Overlay
             }
 
             return LoadIcon(IntPtr.Zero, new IntPtr(IdiApplication));
+        }
+
+        static string ResolveExePath()
+        {
+            try
+            {
+                var args = Environment.GetCommandLineArgs();
+                if (args != null && args.Length > 0 && !string.IsNullOrEmpty(args[0]) && File.Exists(args[0]))
+                {
+                    return Path.GetFullPath(args[0]);
+                }
+            }
+            catch (Exception)
+            {
+            }
+
+            try
+            {
+                var dir = Directory.GetParent(Application.dataPath)?.FullName;
+                if (!string.IsNullOrEmpty(dir))
+                {
+                    var byProduct = Path.Combine(dir, Application.productName + ".exe");
+                    if (File.Exists(byProduct))
+                    {
+                        return byProduct;
+                    }
+
+                    var byName = Path.Combine(dir, "CrazyChat.exe");
+                    if (File.Exists(byName))
+                    {
+                        return byName;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+            }
+
+            return null;
         }
 
         IntPtr WindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
@@ -445,6 +495,10 @@ namespace CrazyChat.Overlay
         void Awake()
         {
             enabled = false;
+        }
+
+        public void BindStealth(System.Func<bool> isHidden, System.Action onReveal)
+        {
         }
 #endif
     }
