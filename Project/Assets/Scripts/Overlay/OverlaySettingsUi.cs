@@ -18,7 +18,7 @@ namespace CrazyChat.Overlay
         const float GearSize = 32f;
         const float SettingsIconSize = 24f;
         const float CloseSize = 28f;
-        const float CardVisualScale = (2f / 3f) * OverlaySkin.OpenWindowScale;
+        const float CardVisualScale = 1f;
         const string ThemeSpriteResource = "Overlay/UI/square_rect";
         const string ControlSpriteResource = "Overlay/UI/control_rect";
         const string SettingsIconResource = "Overlay/UI/codicon_settings";

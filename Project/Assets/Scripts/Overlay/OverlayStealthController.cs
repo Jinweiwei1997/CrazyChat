@@ -9,6 +9,9 @@ namespace CrazyChat.Overlay
     public sealed class OverlayStealthController : MonoBehaviour
     {
         public const float HoldSeconds = 3f;
+        const float RingSize = 22f;
+        const float RingFillSize = 19f;
+        const float RingHoleSize = 13f;
 
         enum Phase
         {
@@ -163,10 +166,8 @@ namespace CrazyChat.Overlay
             track.color = new Color(0f, 0f, 0f, 0.45f);
             track.raycastTarget = false;
             var trackRt = track.rectTransform;
-            trackRt.anchorMin = Vector2.zero;
-            trackRt.anchorMax = Vector2.one;
-            trackRt.offsetMin = Vector2.zero;
-            trackRt.offsetMax = Vector2.zero;
+            trackRt.anchorMin = trackRt.anchorMax = new Vector2(0.5f, 0.5f);
+            trackRt.sizeDelta = new Vector2(RingSize, RingSize);
 
             var fillGo = new GameObject("Fill", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             fillGo.transform.SetParent(_hudRoot, false);
@@ -179,10 +180,8 @@ namespace CrazyChat.Overlay
             _ringFill.color = OverlaySprites.Accent;
             _ringFill.raycastTarget = false;
             var fillRt = _ringFill.rectTransform;
-            fillRt.anchorMin = Vector2.zero;
-            fillRt.anchorMax = Vector2.one;
-            fillRt.offsetMin = new Vector2(6f, 6f);
-            fillRt.offsetMax = new Vector2(-6f, -6f);
+            fillRt.anchorMin = fillRt.anchorMax = new Vector2(0.5f, 0.5f);
+            fillRt.sizeDelta = new Vector2(RingFillSize, RingFillSize);
 
             // Punch a soft hole: center disc so fill reads as a ring.
             var holeGo = new GameObject("Hole", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
@@ -194,7 +193,7 @@ namespace CrazyChat.Overlay
             var holeRt = hole.rectTransform;
             holeRt.anchorMin = new Vector2(0.5f, 0.5f);
             holeRt.anchorMax = new Vector2(0.5f, 0.5f);
-            holeRt.sizeDelta = new Vector2(52f, 52f);
+            holeRt.sizeDelta = new Vector2(RingHoleSize, RingHoleSize);
 
             var labelGo = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
             labelGo.transform.SetParent(_hudRoot, false);
@@ -208,7 +207,7 @@ namespace CrazyChat.Overlay
             labelRt.anchorMin = new Vector2(0.5f, 0.5f);
             labelRt.anchorMax = new Vector2(0.5f, 0.5f);
             labelRt.sizeDelta = new Vector2(72f, 40f);
-            labelRt.anchoredPosition = new Vector2(0f, -52f);
+            labelRt.anchoredPosition = new Vector2(0f, -24f);
 
             _hudRoot.gameObject.SetActive(false);
         }
@@ -247,7 +246,7 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            var pos = (Vector2)Input.mousePosition + new Vector2(36f, 36f);
+            var pos = (Vector2)Input.mousePosition + new Vector2(18f, 18f);
             pos.x = Mathf.Clamp(pos.x, 48f, Screen.width - 48f);
             pos.y = Mathf.Clamp(pos.y, 64f, Screen.height - 48f);
             _hudRoot.position = pos;

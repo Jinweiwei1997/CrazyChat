@@ -81,8 +81,7 @@ public static class OverlaySettingsMenuPrefabBuilder
                 return;
             }
 
-            var scale = (2f / 3f) * OverlaySkin.OpenWindowScale;
-            ((RectTransform)background).localScale = new Vector3(scale, scale, 1f);
+            ((RectTransform)background).localScale = Vector3.one;
             var header = background.Find("Header");
             var tabBar = background.Find("TabBar");
             EnsureSectionImage(header, square, OverlaySkin.ThemeHeader(1));

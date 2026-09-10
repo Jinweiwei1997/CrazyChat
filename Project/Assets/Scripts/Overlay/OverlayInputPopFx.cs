@@ -7,7 +7,6 @@ namespace CrazyChat.Overlay
     public sealed class OverlayInputPopFx : MonoBehaviour
     {
         const float Size = 48f;
-        const float Rise = 42f;
         const float Duration = 0.55f;
         const int PoolSize = 12;
 
@@ -24,7 +23,7 @@ namespace CrazyChat.Overlay
             return fx;
         }
 
-        public void Play(Vector2 head, Sprite icon, Color color, float scale = 1f)
+        public void Play(Vector2 origin, Sprite icon, Color color, float scale = 1f)
         {
             if (icon == null)
             {
@@ -36,8 +35,8 @@ namespace CrazyChat.Overlay
             pop.Image.color = color;
             pop.Group.alpha = 1f;
             scale = Mathf.Max(0.1f, scale);
-            pop.From = head + new Vector2(Random.Range(-8f, 8f), 4f) * scale;
-            pop.Rise = Rise * scale;
+            pop.From = origin + new Vector2(Random.Range(-12f, 12f) * scale, 0f);
+            pop.Drift = new Vector2(0f, 63f) * scale;
             pop.Until = Time.unscaledTime + Duration;
             pop.Rt.sizeDelta = new Vector2(Size, Size) * scale;
             pop.Rt.anchoredPosition = pop.From;
@@ -63,7 +62,7 @@ namespace CrazyChat.Overlay
                 }
 
                 var t = 1f - left / Duration;
-                pop.Rt.anchoredPosition = pop.From + new Vector2(0f, pop.Rise * t);
+                pop.Rt.anchoredPosition = pop.From + pop.Drift * t;
                 pop.Group.alpha = t < 0.25f ? 1f : 1f - (t - 0.25f) / 0.75f;
             }
         }
@@ -131,7 +130,7 @@ namespace CrazyChat.Overlay
             public Image Image;
             public CanvasGroup Group;
             public Vector2 From;
-            public float Rise;
+            public Vector2 Drift;
             public float Until;
         }
     }

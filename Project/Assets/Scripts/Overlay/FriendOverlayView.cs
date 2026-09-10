@@ -572,9 +572,11 @@ namespace CrazyChat.Overlay
             }
 
             var scale = _settings != null ? _settings.Scale : 1f;
-            var head = chip.FollowPosition + new Vector2(0f, ChipSize * 0.5f * scale + 6f);
+            var origin = chip.FollowPosition + new Vector2(
+                ChipSize * 0.44f * scale,
+                (ChipSize * 0.5f + 4f) * scale);
             var theme = _settings != null ? _settings.SettingsTheme : 1;
-            _inputPop.Play(head, icon, OverlaySkin.InputIconColor(theme), scale);
+            _inputPop.Play(origin, icon, OverlaySkin.InputIconColor(theme), scale);
         }
 
         void BroadcastTap(int vk)

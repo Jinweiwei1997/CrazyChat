@@ -95,7 +95,11 @@ namespace CrazyChat.Overlay
                         18);
                     if (_font == null)
                     {
-                        _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                        _font = Resources.Load<Font>("Overlay/Fonts/NotoSansSC");
+                        if (_font == null)
+                        {
+                            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                        }
                     }
                 }
 

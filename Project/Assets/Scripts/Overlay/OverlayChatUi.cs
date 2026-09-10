@@ -14,13 +14,13 @@ namespace CrazyChat.Overlay
         const string SendIconResource = "Overlay/UI/codicon_send";
         const string HistoryIconResource = "Overlay/UI/codicon_history";
         const string CloseIconResource = "Overlay/UI/codicon_close";
-        const float CardVisualScale = (2f / 3f) * OverlaySkin.OpenWindowScale;
+        const float CardVisualScale = 1f;
         const float ChatWidth = 300f * OverlaySkin.SettingsChatWidthScale;
         const float ChatHeight = 360f;
         const float HistoryWidth = 420f * OverlaySkin.SettingsChatWidthScale;
         const float HistoryHeight = 520f;
         const float HeaderHeight = 36f;
-        const float StatusHeight = 14f;
+        const float StatusHeight = 0f;
         const float ComposerHeight = 40f;
         const float CompactMinBodyHeight = 48f;
         const float BubbleMaxWidth = 214f;
@@ -377,6 +377,16 @@ namespace CrazyChat.Overlay
                 _refocusRoutine = null;
             }
 
+            if (_input != null)
+            {
+                _input.DeactivateInputField();
+                if (EventSystem.current != null &&
+                    EventSystem.current.currentSelectedGameObject == _input.gameObject)
+                {
+                    EventSystem.current.SetSelectedGameObject(null);
+                }
+            }
+
             _mode = ChatMode.Closed;
             _friendId = 0;
             _compactStartIndex = 0;
@@ -519,6 +529,7 @@ namespace CrazyChat.Overlay
 
             _status = PlaceAnchoredLabel(_cardRt, "", 12, OverlaySkin.TextMuted, TextAnchor.MiddleCenter);
             _status.gameObject.name = "Status";
+            _status.gameObject.SetActive(false);
             var statusRt = _status.rectTransform;
             statusRt.anchorMin = new Vector2(0f, 0f);
             statusRt.anchorMax = new Vector2(1f, 0f);
@@ -613,13 +624,8 @@ namespace CrazyChat.Overlay
 
             if (_status != null)
             {
-                var statusRt = _status.rectTransform;
-                statusRt.anchorMin = new Vector2(0f, 0f);
-                statusRt.anchorMax = new Vector2(1f, 0f);
-                statusRt.pivot = new Vector2(0.5f, 0f);
-                statusRt.anchoredPosition = new Vector2(0f, ComposerHeight);
-                statusRt.sizeDelta = new Vector2(-20f, StatusHeight);
-                _status.gameObject.SetActive(true);
+                _status.text = string.Empty;
+                _status.gameObject.SetActive(false);
             }
 
             var inputRt = FindNode(_cardRt, "Input") as RectTransform;
@@ -766,13 +772,6 @@ namespace CrazyChat.Overlay
 
             var name = IsOpen ? _view.GetFriendName(_friendId) : "聊天";
             _title.text = Ellipsize(name, 12) + (_mode == ChatMode.History ? " · 历史" : "");
-            if (_status != null)
-            {
-                _status.text = SteamManager.Initialized
-                    ? "双方开着本游戏才能送到"
-                    : "Steam 未连接，消息只会留在本机";
-            }
-
             if (!IsOpen)
             {
                 return;

@@ -9,14 +9,12 @@ namespace CrazyChat.Overlay
     {
         const string ControlSpriteResource = "Overlay/UI/control_rect";
         const float BubbleVisualScale = 1f;
-        const float BubbleBaseWidth = 72f * BubbleVisualScale;
+        const float BubbleWidthRatio = 2f / 3f;
         const float BubbleHeight = 26f * BubbleVisualScale;
-        const float BubbleMinWidth = 32f * BubbleVisualScale;
-        const float BubbleMaxWidth = 180f * BubbleVisualScale;
-        const float BubbleTextPad = 14f * BubbleVisualScale;
         const float BubbleOffsetY = 0f;
         const int BubbleFontSize = 12;
-        const float BubbleRotateSeconds = 3f;
+        const float BubbleRotateSeconds = 1f;
+        const float BubbleSlideSeconds = 0.32f;
 
         float _size = 128f;
 
@@ -38,15 +36,16 @@ namespace CrazyChat.Overlay
         Text _nameText;
         Text _countText;
         Image _bubble;
-        CanvasGroup _bubbleFade;
         Text _bubbleText;
+        Text _bubbleNextText;
         Image _badge;
         Text _badgeText;
-        Image _nameBg;
         string _bubbleContent = "";
         readonly List<string> _bubbleUnread = new List<string>();
         int _bubbleUnreadIndex;
         float _nextBubbleRotateAt;
+        float _bubbleSlideStartedAt = -1f;
+        string _bubbleSlideTarget;
         int _unread;
         bool _selected;
         bool _chatExpanded;
@@ -154,11 +153,8 @@ namespace CrazyChat.Overlay
             _avatar.preserveAspect = true;
             _avatar.raycastTarget = false;
 
-            _nameRoot = new GameObject("NameTag", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            _nameRoot = new GameObject("NameTag", typeof(RectTransform));
             _nameRoot.transform.SetParent(_rect, false);
-            _nameBg = _nameRoot.GetComponent<Image>();
-            OverlaySkin.ApplyButton(_nameBg);
-            _nameBg.raycastTarget = false;
             var nameRt = (RectTransform)_nameRoot.transform;
             nameRt.anchorMin = new Vector2(0f, 0f);
             nameRt.anchorMax = new Vector2(1f, 0f);
@@ -170,19 +166,24 @@ namespace CrazyChat.Overlay
             textGo.transform.SetParent(_nameRoot.transform, false);
             _nameText = textGo.GetComponent<Text>();
             _nameText.font = OverlaySprites.UiFont;
-            _nameText.fontSize = 13;
+            _nameText.fontSize = 15;
+            _nameText.fontStyle = FontStyle.Bold;
             _nameText.resizeTextForBestFit = true;
-            _nameText.resizeTextMinSize = 9;
-            _nameText.resizeTextMaxSize = 13;
+            _nameText.resizeTextMinSize = 12;
+            _nameText.resizeTextMaxSize = 15;
             _nameText.alignment = TextAnchor.MiddleCenter;
             _nameText.color = OverlaySkin.Text;
             _nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
             _nameText.verticalOverflow = VerticalWrapMode.Overflow;
             _nameText.raycastTarget = false;
+            var nameOutline = textGo.AddComponent<Outline>();
+            nameOutline.effectColor = new Color(0f, 0f, 0f, 0.9f);
+            nameOutline.effectDistance = new Vector2(1.5f, -1.5f);
+            nameOutline.useGraphicAlpha = true;
             Stretch((RectTransform)textGo.transform);
             var textRt = (RectTransform)textGo.transform;
-            textRt.offsetMin = new Vector2(8f, 0f);
-            textRt.offsetMax = new Vector2(-8f, 0f);
+            textRt.offsetMin = new Vector2(3f, 0f);
+            textRt.offsetMax = new Vector2(-3f, 0f);
 
             _nameRoot.SetActive(false);
 
@@ -213,10 +214,13 @@ namespace CrazyChat.Overlay
             bubbleRt.anchorMax = new Vector2(0.5f, 1f);
             bubbleRt.pivot = new Vector2(0.5f, 0f);
             bubbleRt.anchoredPosition = new Vector2(0f, BubbleOffsetY);
-            bubbleRt.sizeDelta = new Vector2(BubbleBaseWidth, BubbleHeight);
-            _bubbleFade = _bubble.gameObject.AddComponent<CanvasGroup>();
-            _bubbleFade.blocksRaycasts = true;
-            _bubbleText = FillChipLabel(_bubble.rectTransform, "", BubbleFontSize, OverlaySkin.Text);
+            bubbleRt.sizeDelta = new Vector2(_size * BubbleWidthRatio, BubbleHeight);
+            var textViewport = new GameObject("TextViewport", typeof(RectTransform), typeof(RectMask2D));
+            textViewport.transform.SetParent(_bubble.rectTransform, false);
+            Stretch((RectTransform)textViewport.transform);
+            _bubbleText = FillChipLabel(textViewport.transform, "", BubbleFontSize, OverlaySkin.Text);
+            _bubbleNextText = FillChipLabel(textViewport.transform, "", BubbleFontSize, OverlaySkin.Text);
+            _bubbleNextText.gameObject.SetActive(false);
 
             _badge = CreateImage("Badge", _bubble.rectTransform, new Color(0.92f, 0.28f, 0.28f, 1f), OverlaySprites.Circle);
             _badge.raycastTarget = false;
@@ -403,15 +407,11 @@ namespace CrazyChat.Overlay
         {
             var theme = _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
             var control = Resources.Load<Sprite>(ControlSpriteResource);
-            if (_nameBg != null)
-            {
-                var nameColor = OverlaySkin.ThemeHeader(theme);
-                nameColor.a = 0.92f;
-                ApplyFlatStyle(_nameBg, control, nameColor);
-            }
             if (_bubble != null)
             {
-                ApplyFlatStyle(_bubble, control, OverlaySkin.ThemeControl(theme));
+                var bubbleColor = OverlaySkin.ThemeControl(theme);
+                bubbleColor.a = 0.58f;
+                ApplyFlatStyle(_bubble, control, bubbleColor);
             }
             if (_badge != null)
             {
@@ -419,12 +419,16 @@ namespace CrazyChat.Overlay
             }
             if (_nameText != null)
             {
-                _nameText.color = OverlaySkin.SettingsThemeText(theme);
+                _nameText.color = Color.white;
             }
 
             if (_bubbleText != null)
             {
                 _bubbleText.color = OverlaySkin.SettingsThemeText(theme);
+            }
+            if (_bubbleNextText != null)
+            {
+                _bubbleNextText.color = OverlaySkin.SettingsThemeText(theme);
             }
             if (_badgeText != null)
             {
@@ -463,12 +467,20 @@ namespace CrazyChat.Overlay
             _bubbleUnreadIndex = 0;
             _nextBubbleRotateAt = Time.unscaledTime + BubbleRotateSeconds;
             var next = _bubbleUnread.Count > 0 ? _bubbleUnread[0] : "";
-            if (next != _bubbleContent && _bubbleFade != null)
+            _bubbleSlideStartedAt = -1f;
+            _bubbleSlideTarget = null;
+            _bubbleContent = next;
+            if (_bubbleText != null)
             {
-                _bubbleFade.alpha = 0.15f;
+                _bubbleText.text = next;
+                _bubbleText.rectTransform.anchoredPosition = Vector2.zero;
+            }
+            if (_bubbleNextText != null)
+            {
+                _bubbleNextText.gameObject.SetActive(false);
+                _bubbleNextText.rectTransform.anchoredPosition = new Vector2(0f, -BubbleHeight);
             }
 
-            _bubbleContent = next;
             _unread = unread;
             RefreshChatChrome();
         }
@@ -499,9 +511,11 @@ namespace CrazyChat.Overlay
                 _bubble.gameObject.SetActive(showBubble);
                 if (showBubble && _bubbleText != null)
                 {
-                    _bubbleText.text = _bubbleContent;
-                    var width = Mathf.Clamp(_bubbleText.preferredWidth + BubbleTextPad, BubbleMinWidth, BubbleMaxWidth);
-                    _bubble.rectTransform.sizeDelta = new Vector2(width, BubbleHeight);
+                    if (_bubbleSlideStartedAt < 0f)
+                    {
+                        _bubbleText.text = _bubbleContent;
+                    }
+                    _bubble.rectTransform.sizeDelta = new Vector2(_size * BubbleWidthRatio, BubbleHeight);
                 }
             }
 
@@ -588,22 +602,58 @@ namespace CrazyChat.Overlay
             var baseFlip = IsLocal && _view != null && _view.Settings != null && _view.Settings.FlipHorizontal ? -1f : 1f;
             _body.anchoredPosition = Vector2.zero;
             _body.localScale = new Vector3(hover * baseFlip, hover, 1f);
-            if (_bubbleFade != null && _bubbleFade.alpha < 1f)
-            {
-                _bubbleFade.alpha = Mathf.MoveTowards(_bubbleFade.alpha, 1f, Time.unscaledDeltaTime * 4f);
-            }
+            UpdateBubbleSlide();
 
-            if (!_chatExpanded && _bubbleUnread.Count > 1 && Time.unscaledTime >= _nextBubbleRotateAt)
+            if (!_chatExpanded && _bubbleSlideStartedAt < 0f &&
+                _bubbleUnread.Count > 1 && Time.unscaledTime >= _nextBubbleRotateAt)
             {
                 _bubbleUnreadIndex = (_bubbleUnreadIndex + 1) % _bubbleUnread.Count;
-                _bubbleContent = _bubbleUnread[_bubbleUnreadIndex];
                 _nextBubbleRotateAt = Time.unscaledTime + BubbleRotateSeconds;
-                if (_bubbleFade != null)
-                {
-                    _bubbleFade.alpha = 0.15f;
-                }
-                RefreshChatChrome();
+                BeginBubbleSlide(_bubbleUnread[_bubbleUnreadIndex]);
             }
+        }
+
+        void BeginBubbleSlide(string next)
+        {
+            if (_bubbleText == null || _bubbleNextText == null || string.IsNullOrEmpty(next))
+            {
+                return;
+            }
+
+            _bubbleSlideTarget = next;
+            _bubbleSlideStartedAt = Time.unscaledTime;
+            _bubbleText.rectTransform.anchoredPosition = Vector2.zero;
+            _bubbleNextText.text = next;
+            _bubbleNextText.rectTransform.anchoredPosition = new Vector2(0f, -BubbleHeight);
+            _bubbleNextText.gameObject.SetActive(true);
+        }
+
+        void UpdateBubbleSlide()
+        {
+            if (_bubbleSlideStartedAt < 0f || _bubbleText == null || _bubbleNextText == null)
+            {
+                return;
+            }
+
+            var t = Mathf.Clamp01((Time.unscaledTime - _bubbleSlideStartedAt) / BubbleSlideSeconds);
+            var eased = t * t * (3f - 2f * t);
+            _bubbleText.rectTransform.anchoredPosition = new Vector2(0f, BubbleHeight * eased);
+            _bubbleNextText.rectTransform.anchoredPosition = new Vector2(0f, -BubbleHeight * (1f - eased));
+            if (t < 1f)
+            {
+                return;
+            }
+
+            _bubbleText.gameObject.SetActive(false);
+            var oldText = _bubbleText;
+            _bubbleText = _bubbleNextText;
+            _bubbleNextText = oldText;
+            _bubbleText.rectTransform.anchoredPosition = Vector2.zero;
+            _bubbleNextText.rectTransform.anchoredPosition = new Vector2(0f, -BubbleHeight);
+            _bubbleNextText.gameObject.SetActive(false);
+            _bubbleContent = _bubbleSlideTarget ?? "";
+            _bubbleSlideTarget = null;
+            _bubbleSlideStartedAt = -1f;
         }
 
         void OnDestroy()
