@@ -10,19 +10,24 @@ namespace CrazyChat.Overlay
     /// </summary>
     public sealed class OverlayAvatarCropUi : MonoBehaviour, IDragHandler, IScrollHandler
     {
+        // 1 = shorter edge fills the square (cover); below that would letterbox.
         const float MinZoom = 1f;
         const float MaxZoom = 4f;
+        const float ZoomStep = 1.15f;
+        const float HoldRepeatDelay = 0.28f;
+        const float HoldRepeatRate = 6f;
 
         RectTransform _imageRt;
         RawImage _image;
         Text _hint;
         Texture2D _source;
         float _zoom = 1f;
-        float _uiScale = 1f;
         Vector2 _pan;
         Action<byte[]> _onConfirm;
         Action _onCancel;
         float _cropPx = 240f;
+        float _holdZoomSign;
+        float _holdZoomStartedAt = -1f;
 
         public static OverlayAvatarCropUi Create(Transform modal)
         {
@@ -58,11 +63,27 @@ namespace CrazyChat.Overlay
             _source.wrapMode = TextureWrapMode.Clamp;
             _zoom = 1f;
             _pan = Vector2.zero;
-            _uiScale = 1f;
+            StopZoomHold();
             _image.texture = _source;
             gameObject.SetActive(true);
             transform.SetAsLastSibling();
             ApplyLayout();
+        }
+
+        void Update()
+        {
+            if (_holdZoomSign == 0f || _source == null)
+            {
+                return;
+            }
+
+            if (Time.unscaledTime - _holdZoomStartedAt < HoldRepeatDelay)
+            {
+                return;
+            }
+
+            var steps = HoldRepeatRate * Time.unscaledDeltaTime;
+            SetZoom(_zoom * Mathf.Pow(ZoomStep, _holdZoomSign * steps));
         }
 
         void Build()
@@ -84,7 +105,7 @@ namespace CrazyChat.Overlay
                 1f);
 
             PlaceLabel(cardRt, "截取方形头像", 16, OverlaySkin.Text, new Vector2(0f, 180f), new Vector2(280f, 24f));
-            _hint = PlaceLabel(cardRt, "拖动移动 · 滚轮缩放画面 · +/- 放大窗口", 12, OverlaySkin.TextMuted,
+            _hint = PlaceLabel(cardRt, "拖动移动 · 滚轮缩放 · 按住缩小/放大", 12, OverlaySkin.TextMuted,
                 new Vector2(0f, 152f), new Vector2(320f, 20f));
 
             var stage = new GameObject("Stage", typeof(RectTransform));
@@ -118,10 +139,8 @@ namespace CrazyChat.Overlay
             var drag = frame.gameObject.AddComponent<CropDragRelay>();
             drag.Owner = this;
 
-            AddBtn(cardRt, "－", new Vector2(-110f, -150f), () => SetUiScale(_uiScale / 1.15f));
-            AddBtn(cardRt, "＋", new Vector2(-50f, -150f), () => SetUiScale(_uiScale * 1.15f));
-            AddBtn(cardRt, "缩小", new Vector2(30f, -150f), () => SetZoom(_zoom / 1.15f));
-            AddBtn(cardRt, "放大", new Vector2(100f, -150f), () => SetZoom(_zoom * 1.15f));
+            AddHoldZoomBtn(cardRt, "缩小", new Vector2(-60f, -150f), -1f);
+            AddHoldZoomBtn(cardRt, "放大", new Vector2(60f, -150f), 1f);
             AddBtn(cardRt, "取消", new Vector2(-60f, -190f), Cancel);
             AddBtn(cardRt, "确认", new Vector2(60f, -190f), Confirm, accent: true);
         }
@@ -143,23 +162,17 @@ namespace CrazyChat.Overlay
             ApplyLayout();
         }
 
-        void SetUiScale(float s)
+        void BeginZoomHold(float sign)
         {
-            _uiScale = Mathf.Clamp(s, 0.75f, 1.6f);
-            _cropPx = 240f * _uiScale;
-            var card = transform.Find("Card") as RectTransform;
-            if (card != null)
-            {
-                card.sizeDelta = new Vector2(360f * _uiScale, 420f * _uiScale);
-            }
+            _holdZoomSign = sign;
+            _holdZoomStartedAt = Time.unscaledTime;
+            SetZoom(_zoom * (sign > 0f ? ZoomStep : 1f / ZoomStep));
+        }
 
-            var stage = transform.Find("Card/Stage") as RectTransform;
-            if (stage != null)
-            {
-                stage.sizeDelta = new Vector2(280f * _uiScale, 280f * _uiScale);
-            }
-
-            ApplyLayout();
+        void StopZoomHold()
+        {
+            _holdZoomSign = 0f;
+            _holdZoomStartedAt = -1f;
         }
 
         void ApplyLayout()
@@ -285,6 +298,7 @@ namespace CrazyChat.Overlay
                 _image.texture = null;
             }
 
+            StopZoomHold();
             gameObject.SetActive(false);
             _onConfirm = null;
             _onCancel = null;
@@ -310,6 +324,21 @@ namespace CrazyChat.Overlay
             rt.sizeDelta = new Vector2(56f, 28f);
             FillLabel(rt, title, 13, OverlaySkin.Text);
             img.gameObject.AddComponent<Button>().onClick.AddListener(click);
+        }
+
+        void AddHoldZoomBtn(Transform parent, string title, Vector2 pos, float sign)
+        {
+            var img = CreateImage(title, parent, OverlaySprites.Button, OverlaySprites.RoundedRect);
+            OverlaySkin.ApplyButton(img);
+            img.raycastTarget = true;
+            var rt = img.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = new Vector2(56f, 28f);
+            FillLabel(rt, title, 13, OverlaySkin.Text);
+            var hold = img.gameObject.AddComponent<CropZoomHold>();
+            hold.Owner = this;
+            hold.Sign = sign;
         }
 
         static Image CreateImage(string name, Transform parent, Color color, Sprite sprite)
@@ -375,6 +404,27 @@ namespace CrazyChat.Overlay
             public void OnScroll(PointerEventData eventData)
             {
                 Owner?.OnScroll(eventData);
+            }
+        }
+
+        sealed class CropZoomHold : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
+        {
+            public OverlayAvatarCropUi Owner;
+            public float Sign;
+
+            public void OnPointerDown(PointerEventData eventData)
+            {
+                Owner?.BeginZoomHold(Sign);
+            }
+
+            public void OnPointerUp(PointerEventData eventData)
+            {
+                Owner?.StopZoomHold();
+            }
+
+            public void OnPointerExit(PointerEventData eventData)
+            {
+                Owner?.StopZoomHold();
             }
         }
     }
