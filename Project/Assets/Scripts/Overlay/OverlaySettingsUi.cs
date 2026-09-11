@@ -200,6 +200,18 @@ namespace CrazyChat.Overlay
             }
         }
 
+        void HideDisableDragRow()
+        {
+            // Keep DisableDrag settings/logic; hide the control from the settings UI.
+            var row = FindNode(_cardRt, "Pages/GamePage/DisableDragRow");
+            if (row != null)
+            {
+                row.gameObject.SetActive(false);
+            }
+
+            _dragText = null;
+        }
+
         int ThemeId => _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
         Color ThemeBackground => OverlaySkin.ThemeBackground(ThemeId);
         Color ThemeHeader => OverlaySkin.ThemeHeader(ThemeId);
@@ -227,12 +239,7 @@ namespace CrazyChat.Overlay
                 _view.ApplyUserSettings();
                 RefreshLabels();
             });
-            BindClick(FindNode(_cardRt, "Pages/GamePage/DisableDragRow/Toggle"), () =>
-            {
-                _view.Settings.SetDisableDrag(!_view.Settings.DisableDrag);
-                _view.ApplyUserSettings();
-                RefreshLabels();
-            });
+            HideDisableDragRow();
             BindClick(FindNode(_cardRt, "Pages/GamePage/FlipHorizontalRow/Toggle"), () =>
             {
                 _view.Settings.SetFlipHorizontal(!_view.Settings.FlipHorizontal);
@@ -549,7 +556,6 @@ namespace CrazyChat.Overlay
 
             var gamePage = CreatePage(_pagesRoot, "GamePage");
             _scaleText = AddScaleRow(gamePage);
-            _dragText = AddToggleRow(gamePage, "DisableDragRow", "禁止拖动");
             _flipText = AddToggleRow(gamePage, "FlipHorizontalRow", "水平翻转");
             _inputIconsText = AddToggleRow(gamePage, "InputIconsRow", "按键图标");
             AddActionRow(gamePage, "ThemeRow", "界面风格 1");
