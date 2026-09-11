@@ -141,6 +141,11 @@ namespace CrazyChat.Overlay.Interact
                 return label;
             }
 
+            if (label.StartsWith("测试"))
+            {
+                return "测试";
+            }
+
             return label.StartsWith("扔") && label.Length > 1 ? label.Substring(1) : label;
         }
 
@@ -315,6 +320,12 @@ namespace CrazyChat.Overlay.Interact
 
             var cooldown = _view.Config != null ? Mathf.Max(0f, _view.Config.interactCooldown) : 0.1f;
             _nextUse = Time.unscaledTime + cooldown;
+            if (action.Id == "test_message")
+            {
+                _view.SimulateIncomingChat(_openFor);
+                return;
+            }
+
             action.Play(_fx, _view.LocalChip.FollowPosition, target.FollowPosition);
             if (action.Id == "tomato")
             {

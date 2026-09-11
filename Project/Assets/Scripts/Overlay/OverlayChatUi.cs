@@ -584,7 +584,6 @@ namespace CrazyChat.Overlay
                 new Vector2(HistoryButtonWidth, ToolbarButtonSize));
             CreateIconPlaceholder(history.rectTransform, 16f);
             _historyButton = history.gameObject;
-            CreateDivider(_cardRt, "ComposerDivider", ComposerHeight + StatusHeight);
         }
 
         void ApplyLayout()
@@ -612,6 +611,12 @@ namespace CrazyChat.Overlay
 
         void ApplyComposerLayout()
         {
+            var composerDivider = FindNode(_cardRt, "ComposerDivider");
+            if (composerDivider != null)
+            {
+                composerDivider.gameObject.SetActive(false);
+            }
+
             var body = FindNode(_cardRt, "Body") as RectTransform;
             if (body != null)
             {
@@ -730,6 +735,7 @@ namespace CrazyChat.Overlay
                 return;
             }
 
+            _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput();
             EventSystem.current?.SetSelectedGameObject(_input.gameObject);
             _input.ActivateInputField();
             _input.Select();

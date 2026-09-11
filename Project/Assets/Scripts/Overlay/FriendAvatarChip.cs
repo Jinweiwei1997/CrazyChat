@@ -12,8 +12,8 @@ namespace CrazyChat.Overlay
         const float BubbleWidthRatio = 2f / 3f;
         const float BubbleHeight = 26f * BubbleVisualScale;
         const float BubbleOffsetY = 0f;
-        const int BubbleFontSize = 12;
-        const float BubbleRotateSeconds = 1f;
+        const int BubbleFontSize = 16;
+        const float BubbleRotateSeconds = 5f;
         const float BubbleSlideSeconds = 0.32f;
 
         float _size = 128f;
@@ -222,15 +222,15 @@ namespace CrazyChat.Overlay
             _bubbleNextText = FillChipLabel(textViewport.transform, "", BubbleFontSize, OverlaySkin.Text);
             _bubbleNextText.gameObject.SetActive(false);
 
-            _badge = CreateImage("Badge", _bubble.rectTransform, new Color(0.92f, 0.28f, 0.28f, 1f), OverlaySprites.Circle);
+            _badge = CreateImage("Badge", _bubble.rectTransform, new Color32(250, 81, 81, 255), OverlaySprites.Circle);
             _badge.raycastTarget = false;
             var badgeRt = _badge.rectTransform;
             badgeRt.anchorMin = new Vector2(1f, 0.5f);
             badgeRt.anchorMax = new Vector2(1f, 0.5f);
             badgeRt.pivot = new Vector2(0.5f, 0.5f);
             badgeRt.anchoredPosition = new Vector2(2f, 0f);
-            badgeRt.sizeDelta = new Vector2(18f, 18f);
-            _badgeText = FillChipLabel(_badge.rectTransform, "1", 9, Color.white);
+            badgeRt.sizeDelta = new Vector2(20f, 20f);
+            _badgeText = FillChipLabel(_badge.rectTransform, "1", 11, Color.white);
             _badge.gameObject.SetActive(false);
         }
 
@@ -415,7 +415,7 @@ namespace CrazyChat.Overlay
             }
             if (_badge != null)
             {
-                _badge.color = OverlaySkin.ThemeAccent(theme);
+                _badge.color = new Color32(250, 81, 81, 255);
             }
             if (_nameText != null)
             {
@@ -432,7 +432,7 @@ namespace CrazyChat.Overlay
             }
             if (_badgeText != null)
             {
-                _badgeText.color = OverlaySkin.SettingsThemeText(theme);
+                _badgeText.color = Color.white;
             }
         }
 

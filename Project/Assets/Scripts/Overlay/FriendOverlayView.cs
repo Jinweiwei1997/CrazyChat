@@ -396,6 +396,17 @@ namespace CrazyChat.Overlay
             LocalChip?.SetTapCount(_stats.Count);
         }
 
+        public void SimulateIncomingChat(ulong friendId)
+        {
+            if (_chatStore == null || !IsPresent(friendId))
+            {
+                return;
+            }
+
+            var text = UnityEngine.Random.Range(0, int.MaxValue).ToString();
+            _chatStore.Add(friendId, text, false, friendId);
+        }
+
         public void OpenChat(ulong friendId)
         {
             if (!IsPresent(friendId))

@@ -8,7 +8,7 @@ namespace CrazyChat.Overlay
     /// </summary>
     public sealed class OverlayStealthController : MonoBehaviour
     {
-        public const float HoldSeconds = 3f;
+        public const float HoldSeconds = 2f;
         const float RingSize = 22f;
         const float RingFillSize = 19f;
         const float RingHoleSize = 13f;

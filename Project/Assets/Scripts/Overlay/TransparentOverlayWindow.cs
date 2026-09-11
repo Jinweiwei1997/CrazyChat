@@ -74,6 +74,15 @@ namespace CrazyChat.Overlay
         [DllImport("user32.dll", SetLastError = true)]
         static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
 
+        [DllImport("user32.dll")]
+        static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        static extern IntPtr SetActiveWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        static extern IntPtr SetFocus(IntPtr hWnd);
+
         [DllImport("Dwmapi.dll")]
         static extern int DwmExtendFrameIntoClientArea(IntPtr hWnd, ref Margins pMarInset);
 
@@ -180,6 +189,21 @@ namespace CrazyChat.Overlay
         {
         }
 #endif
+
+        public void FocusForTextInput()
+        {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            if (!_applied || _hwnd == IntPtr.Zero)
+            {
+                return;
+            }
+
+            SetClickThrough(false);
+            SetForegroundWindow(_hwnd);
+            SetActiveWindow(_hwnd);
+            SetFocus(_hwnd);
+#endif
+        }
 
         IEnumerator Start()
         {

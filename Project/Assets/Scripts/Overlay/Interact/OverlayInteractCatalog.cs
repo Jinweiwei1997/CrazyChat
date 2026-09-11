@@ -9,7 +9,8 @@ namespace CrazyChat.Overlay.Interact
     {
         static readonly IOverlayInteractAction[] Actions =
         {
-            new TomatoInteractAction()
+            new TomatoInteractAction(),
+            new TestMessageInteractAction()
         };
 
         public static IReadOnlyList<IOverlayInteractAction> All => Actions;
