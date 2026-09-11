@@ -1,15 +1,8 @@
-#if !(UNITY_STANDALONE_WIN || UNITY_STANDALONE_LINUX || UNITY_STANDALONE_OSX || STEAMWORKS_WIN || STEAMWORKS_LIN_OSX)
-#define DISABLESTEAMWORKS
-#endif
-
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using UnityEngine;
-#if !DISABLESTEAMWORKS
-using Steamworks;
-#endif
 
 namespace CrazyChat.Overlay
 {
@@ -28,11 +21,7 @@ namespace CrazyChat.Overlay
         public void Load()
         {
             _normalized.Clear();
-            var json = ReadSteamCloud();
-            if (string.IsNullOrEmpty(json))
-            {
-                json = ReadLocal();
-            }
+            var json = ReadLocal();
 
             if (string.IsNullOrEmpty(json))
             {
@@ -111,7 +100,6 @@ namespace CrazyChat.Overlay
 
             var json = JsonUtility.ToJson(data, true);
             WriteLocal(json);
-            WriteSteamCloud(json);
         }
 
         public static Vector2 LocalDefaultPixel(float size = 128f)
@@ -152,54 +140,6 @@ namespace CrazyChat.Overlay
             {
                 Debug.LogWarning("[Overlay] 写入本地存档失败: " + e.Message);
             }
-        }
-
-        static string ReadSteamCloud()
-        {
-            if (!OverlayConfig.SteamCloud)
-            {
-                return null;
-            }
-
-#if !DISABLESTEAMWORKS
-            if (!SteamManager.Initialized || !SteamRemoteStorage.FileExists(FileName))
-            {
-                return null;
-            }
-
-            var size = SteamRemoteStorage.GetFileSize(FileName);
-            if (size <= 0)
-            {
-                return null;
-            }
-
-            var buffer = new byte[size];
-            var read = SteamRemoteStorage.FileRead(FileName, buffer, size);
-            return read > 0 ? Encoding.UTF8.GetString(buffer, 0, read) : null;
-#else
-            return null;
-#endif
-        }
-
-        static void WriteSteamCloud(string json)
-        {
-            if (!OverlayConfig.SteamCloud)
-            {
-                return;
-            }
-
-#if !DISABLESTEAMWORKS
-            if (!SteamManager.Initialized)
-            {
-                return;
-            }
-
-            var bytes = Encoding.UTF8.GetBytes(json);
-            if (!SteamRemoteStorage.FileWrite(FileName, bytes, bytes.Length))
-            {
-                Debug.LogWarning("[Overlay] Steam 云存档写入失败。请在 Steamworks 后台打开 Cloud，并勾选账号的云存档。");
-            }
-#endif
         }
 
         [Serializable]

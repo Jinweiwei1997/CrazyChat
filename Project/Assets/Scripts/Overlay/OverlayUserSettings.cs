@@ -1,14 +1,7 @@
-#if !(UNITY_STANDALONE_WIN || UNITY_STANDALONE_LINUX || UNITY_STANDALONE_OSX || STEAMWORKS_WIN || STEAMWORKS_LIN_OSX)
-#define DISABLESTEAMWORKS
-#endif
-
 using System;
 using System.IO;
 using System.Text;
 using UnityEngine;
-#if !DISABLESTEAMWORKS
-using Steamworks;
-#endif
 
 namespace CrazyChat.Overlay
 {
@@ -27,6 +20,7 @@ namespace CrazyChat.Overlay
         public bool FlipHorizontal { get; private set; }
         public bool AutoStart { get; private set; }
         public bool ShowInputIcons { get; private set; }
+        public bool TestMode { get; private set; }
         public int SettingsTheme { get; private set; } = MinSettingsTheme;
         public Color ThemeBackgroundColor { get; private set; } = OverlaySkin.PresetBackground(1);
         public Color ThemeAccentColor { get; private set; } = OverlaySkin.PresetAccent(1);
@@ -35,11 +29,7 @@ namespace CrazyChat.Overlay
 
         public void Load()
         {
-            var json = ReadSteamCloud();
-            if (string.IsNullOrEmpty(json))
-            {
-                json = ReadLocal();
-            }
+            var json = ReadLocal();
 
             if (string.IsNullOrEmpty(json))
             {
@@ -60,6 +50,7 @@ namespace CrazyChat.Overlay
                 FlipHorizontal = data.flipHorizontal;
                 AutoStart = data.autoStart;
                 ShowInputIcons = data.showInputIcons;
+                TestMode = data.testMode;
                 SettingsTheme = Mathf.Clamp(data.settingsTheme, MinSettingsTheme, CustomTheme);
                 var fallbackTheme = SettingsTheme == MaxPresetTheme ? MaxPresetTheme : MinSettingsTheme;
                 ThemeBackgroundColor = ParseColor(data.themeBackgroundColor,
@@ -94,6 +85,7 @@ namespace CrazyChat.Overlay
                 flipHorizontal = FlipHorizontal,
                 autoStart = AutoStart,
                 showInputIcons = ShowInputIcons,
+                testMode = TestMode,
                 settingsTheme = SettingsTheme,
                 themeBackgroundColor = "#" + ColorUtility.ToHtmlStringRGB(ThemeBackgroundColor),
                 themeAccentColor = "#" + ColorUtility.ToHtmlStringRGB(ThemeAccentColor),
@@ -101,7 +93,6 @@ namespace CrazyChat.Overlay
                 avatarVersion = AvatarVersion
             }, true);
             WriteLocal(json);
-            WriteSteamCloud(json);
         }
 
         public void AddScale(float delta)
@@ -121,6 +112,8 @@ namespace CrazyChat.Overlay
         public void SetFlipHorizontal(bool value) => FlipHorizontal = value;
 
         public void SetShowInputIcons(bool value) => ShowInputIcons = value;
+
+        public void SetTestMode(bool value) => TestMode = value;
 
         public void SetTargetDisplayIndex(int value) => TargetDisplayIndex = Mathf.Max(0, value);
 
@@ -214,51 +207,6 @@ namespace CrazyChat.Overlay
             }
         }
 
-        static string ReadSteamCloud()
-        {
-            if (!OverlayConfig.SteamCloud)
-            {
-                return null;
-            }
-
-#if !DISABLESTEAMWORKS
-            if (!SteamManager.Initialized || !SteamRemoteStorage.FileExists(FileName))
-            {
-                return null;
-            }
-
-            var size = SteamRemoteStorage.GetFileSize(FileName);
-            if (size <= 0)
-            {
-                return null;
-            }
-
-            var buffer = new byte[size];
-            var read = SteamRemoteStorage.FileRead(FileName, buffer, size);
-            return read > 0 ? Encoding.UTF8.GetString(buffer, 0, read) : null;
-#else
-            return null;
-#endif
-        }
-
-        static void WriteSteamCloud(string json)
-        {
-            if (!OverlayConfig.SteamCloud)
-            {
-                return;
-            }
-
-#if !DISABLESTEAMWORKS
-            if (!SteamManager.Initialized)
-            {
-                return;
-            }
-
-            var bytes = Encoding.UTF8.GetBytes(json);
-            SteamRemoteStorage.FileWrite(FileName, bytes, bytes.Length);
-#endif
-        }
-
         void ApplyPresetColors(int theme)
         {
             ThemeBackgroundColor = OverlaySkin.PresetBackground(theme);
@@ -281,6 +229,7 @@ namespace CrazyChat.Overlay
             public bool flipHorizontal;
             public bool autoStart;
             public bool showInputIcons;
+            public bool testMode;
             public int settingsTheme = MinSettingsTheme;
             public string themeBackgroundColor;
             public string themeAccentColor;

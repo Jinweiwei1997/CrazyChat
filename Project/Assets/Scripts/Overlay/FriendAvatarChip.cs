@@ -13,7 +13,6 @@ namespace CrazyChat.Overlay
         const float BubbleHeight = 26f * BubbleVisualScale;
         const float BubbleOffsetY = 0f;
         const int BubbleFontSize = 16;
-        const float BubbleRotateSeconds = 5f;
         const float BubbleSlideSeconds = 0.32f;
 
         float _size = 128f;
@@ -29,6 +28,10 @@ namespace CrazyChat.Overlay
         Sprite _presenceB;
         bool _presenceOwnedA;
         bool _presenceOwnedB;
+
+        float BubbleRotateSeconds => _view != null && _view.Config != null
+            ? Mathf.Max(0.1f, _view.Config.bubbleRotateSeconds)
+            : 5f;
         bool _presenceActive;
         bool _presenceMode;
         Image _ring;

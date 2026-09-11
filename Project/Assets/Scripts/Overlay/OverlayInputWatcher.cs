@@ -20,11 +20,17 @@ namespace CrazyChat.Overlay
 
         readonly bool[] _down = new bool[256];
         readonly bool[] _eligible = new bool[256];
+        OverlayConfig _config;
         float _lastCtrl;
         bool _anyDown;
         bool _pollInitialized;
 
         public bool IsAnyDown => _anyDown;
+
+        void Awake()
+        {
+            _config = OverlayConfig.LoadOrDefault();
+        }
 
         /// <summary>当前是否按住鼠标右键（Windows 下切焦点仍有效）。</summary>
         public bool IsRightButtonHeld
@@ -158,7 +164,8 @@ namespace CrazyChat.Overlay
         {
             if (vk == 0x11)
             {
-                if (Time.unscaledTime - _lastCtrl <= 0.4f)
+                var interval = _config != null ? Mathf.Max(0.1f, _config.doubleControlSeconds) : 0.4f;
+                if (Time.unscaledTime - _lastCtrl <= interval)
                 {
                     DoubleControl?.Invoke();
                 }
@@ -189,7 +196,8 @@ namespace CrazyChat.Overlay
         {
             if (Input.GetKeyDown(KeyCode.LeftControl) || Input.GetKeyDown(KeyCode.RightControl))
             {
-                if (Time.unscaledTime - _lastCtrl <= 0.4f)
+                var interval = _config != null ? Mathf.Max(0.1f, _config.doubleControlSeconds) : 0.4f;
+                if (Time.unscaledTime - _lastCtrl <= interval)
                 {
                     DoubleControl?.Invoke();
                 }

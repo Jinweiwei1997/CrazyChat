@@ -56,7 +56,7 @@ namespace CrazyChat.Overlay.Interact
 
         public void Send(ulong friendId, string actionId)
         {
-            if (friendId == 0 || string.IsNullOrEmpty(actionId))
+            if (friendId == 0 || PlayingFriendsService.IsTestFriend(friendId) || string.IsNullOrEmpty(actionId))
             {
                 return;
             }

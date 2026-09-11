@@ -8,7 +8,6 @@ namespace CrazyChat.Overlay
     /// </summary>
     public sealed class OverlayStealthController : MonoBehaviour
     {
-        public const float HoldSeconds = 2f;
         const float RingSize = 22f;
         const float RingFillSize = 19f;
         const float RingHoleSize = 13f;
@@ -33,6 +32,10 @@ namespace CrazyChat.Overlay
         System.Action _hiddenChanged;
 
         public bool IsHidden => _phase == Phase.Hidden || _phase == Phase.Showing;
+
+        float HoldSeconds => _view != null && _view.Config != null
+            ? Mathf.Max(0.1f, _view.Config.stealthHoldSeconds)
+            : 2f;
 
         public void Bind(FriendOverlayView view, OverlayInputWatcher input, CanvasGroup content, RectTransform hudLayer)
         {

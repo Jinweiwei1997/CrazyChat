@@ -37,6 +37,7 @@ namespace CrazyChat.Overlay
         readonly List<PlayingFriend> _bagged = new List<PlayingFriend>();
         readonly List<ulong> _targets = new List<ulong>();
         bool _targeting;
+        bool _appliedTestMode;
         ulong _targetId;
         Vector2 _lastOverlaySize;
 
@@ -110,6 +111,7 @@ namespace CrazyChat.Overlay
 
             _settings = new OverlayUserSettings();
             _settings.Load();
+            ApplyTestMode();
             OverlaySkin.ConfigureCustomTheme(
                 _settings.ThemeBackgroundColor,
                 _settings.ThemeAccentColor);
@@ -168,6 +170,7 @@ namespace CrazyChat.Overlay
             OverlaySkin.ConfigureCustomTheme(
                 _settings.ThemeBackgroundColor,
                 _settings.ThemeAccentColor);
+            ApplyTestMode();
             _settings.Save();
             var window = GetComponent<TransparentOverlayWindow>();
             if (window != null)
@@ -184,6 +187,43 @@ namespace CrazyChat.Overlay
             _chatUi?.ApplyTheme();
             _settingsUi?.ApplyTheme();
             ReclampVisibleChips();
+        }
+
+        void ApplyTestMode()
+        {
+            if (_settings == null || _service == null || _settings.TestMode == _appliedTestMode)
+            {
+                return;
+            }
+
+            _appliedTestMode = _settings.TestMode;
+            if (_appliedTestMode && _store != null)
+            {
+                var ids = new[]
+                {
+                    PlayingFriendsService.TestFriendId1,
+                    PlayingFriendsService.TestFriendId2,
+                    PlayingFriendsService.TestFriendId3
+                };
+                var changed = false;
+                for (var i = 0; i < ids.Length; i++)
+                {
+                    if (_store.Has(ids[i]))
+                    {
+                        continue;
+                    }
+
+                    _store.SetPixel(ids[i], OverlayLayoutStore.DefaultPixel(i, ChipSize));
+                    changed = true;
+                }
+
+                if (changed)
+                {
+                    _store.Save();
+                }
+            }
+
+            _service.SetTestMode(_appliedTestMode);
         }
 
         public void NotifyAvatarPresenceChanged()
@@ -267,6 +307,7 @@ namespace CrazyChat.Overlay
             EnsureDesktopSlot();
             _store.SetPixel(friendId, Clamp(pixel));
             _store.Save();
+            _service?.Refresh();
             Rebuild();
         }
 
@@ -731,10 +772,6 @@ namespace CrazyChat.Overlay
                 _stats?.SaveIfDirty();
             }
 
-            if (Application.isEditor && Input.GetKeyDown(KeyCode.F2))
-            {
-                _service.ToggleEditorRequireSameGame();
-            }
         }
 
         void Rebuild()
@@ -845,13 +882,9 @@ namespace CrazyChat.Overlay
             {
                 _hint.text = SteamManager.Initialized ? "暂无在线好友" : "Steam 未连接";
             }
-            else if (_service.RequireSameGame)
-            {
-                _hint.text = playingFriends + " 位好友在玩 · 麻袋 " + _bagged.Count;
-            }
             else
             {
-                _hint.text = playingFriends + " 位在线 · 麻袋 " + _bagged.Count;
+                _hint.text = playingFriends + " 位好友在玩 · 麻袋 " + _bagged.Count;
             }
         }
 

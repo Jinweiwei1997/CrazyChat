@@ -71,7 +71,7 @@ public static class OverlaySettingsMenuPrefabBuilder
             var themeRow = ui != null ? ui.EditorEnsureThemeRow() : null;
             if (themeRow == null)
             {
-                Debug.LogError("[Overlay] 设置 Prefab 中无法加入 ThemeRow。");
+                Debug.LogError("[Overlay] 设置 Prefab 中找不到 ThemeRow。");
                 return;
             }
             ui.EditorEnsureColorRows();
@@ -99,6 +99,30 @@ public static class OverlaySettingsMenuPrefabBuilder
                 if (name == "Icon")
                 {
                     image.color = OverlaySkin.SettingsThemeText(1);
+                    continue;
+                }
+                if (name == "Preview")
+                {
+                    image.color = Color.white;
+                    continue;
+                }
+                if (name == "Frame" || name == "Mask")
+                {
+                    continue;
+                }
+                if (name == "Fill")
+                {
+                    image.color = OverlaySkin.ThemeAccent(1);
+                    continue;
+                }
+                if (name == "Handle")
+                {
+                    image.color = OverlaySkin.SettingsThemeText(1);
+                    continue;
+                }
+                if (name == "TipBg")
+                {
+                    image.color = new Color(0f, 0f, 0f, 0.65f);
                     continue;
                 }
                 if (name == "Divider")
@@ -149,7 +173,10 @@ public static class OverlaySettingsMenuPrefabBuilder
                     selected.a = 0.3f;
                     image.color = selected;
                 }
-                else if (name == "SystemTab" || name == "Toggle" || name == "Minus" || name == "Plus" ||
+                else if (name == "DisplayTab" || name == "DynamicTab" || name == "SystemTab" ||
+                         name == "Toggle" || name == "Minus" || name == "Plus" ||
+                         name == "Reset" || name == "Confirm" || name == "Cancel" ||
+                         name == "Shrink" || name == "Grow" || name == "Clear" ||
                          name.EndsWith("Row") && image.GetComponent<Button>() != null)
                 {
                     image.color = Color.clear;
@@ -179,16 +206,18 @@ public static class OverlaySettingsMenuPrefabBuilder
             for (var i = 0; i < labels.Length; i++)
             {
                 var name = labels[i].gameObject.name;
-                labels[i].color = labels[i].transform.parent.name == "QuitGameRow"
+                labels[i].color = name == "Tip"
+                    ? Color.white
+                    : labels[i].transform.parent.name == "QuitGameRow"
                     ? OverlaySkin.ThemeDanger(1)
-                    : name == "Muted" || name == "Status"
+                    : name == "Muted" || name == "Status" || name == "Hint"
                         ? OverlaySkin.ThemeMuted(1)
                         : OverlaySkin.SettingsThemeText(1);
                 labels[i].fontSize = labels[i].transform.parent.name == "Header"
                     ? 14
                     : labels[i].transform.parent.name == "Close"
                         ? 14
-                        : name == "Muted" || name == "Status"
+                        : name == "Muted" || name == "Status" || name == "Hint"
                             ? 12
                             : 13;
             }
@@ -245,6 +274,8 @@ public static class OverlaySettingsMenuPrefabBuilder
 
         EnsureIcon(header != null ? header.Find("Close") : null, closeIcon, 16f);
         RestoreTextTab(tabBar != null ? tabBar.Find("GameTab") : null);
+        RestoreTextTab(tabBar != null ? tabBar.Find("DisplayTab") : null);
+        RestoreTextTab(tabBar != null ? tabBar.Find("DynamicTab") : null);
         RestoreTextTab(tabBar != null ? tabBar.Find("SystemTab") : null);
     }
 

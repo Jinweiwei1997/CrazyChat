@@ -12,10 +12,12 @@ namespace CrazyChat.Overlay
     /// </summary>
     public sealed class TransparentOverlayWindow : MonoBehaviour
     {
-        [SerializeField] float topmostRefreshSeconds = 2f;
+        const float TopmostRefreshSeconds = 2f;
 
         GraphicRaycasterHost _raycasterHost;
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         bool _clickThrough = true;
+#endif
         float _nextTopmostTime;
         bool _applied;
         bool _alwaysOnTop = true;
@@ -76,6 +78,18 @@ namespace CrazyChat.Overlay
 
         [DllImport("user32.dll")]
         static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr processId);
+
+        [DllImport("user32.dll")]
+        static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach);
+
+        [DllImport("user32.dll")]
+        static extern bool BringWindowToTop(IntPtr hWnd);
 
         [DllImport("user32.dll")]
         static extern IntPtr SetActiveWindow(IntPtr hWnd);
@@ -199,9 +213,29 @@ namespace CrazyChat.Overlay
             }
 
             SetClickThrough(false);
-            SetForegroundWindow(_hwnd);
-            SetActiveWindow(_hwnd);
-            SetFocus(_hwnd);
+            var foreground = GetForegroundWindow();
+            var windowThread = GetWindowThreadProcessId(_hwnd, IntPtr.Zero);
+            var foregroundThread = foreground != IntPtr.Zero
+                ? GetWindowThreadProcessId(foreground, IntPtr.Zero)
+                : 0;
+            var attached = windowThread != 0 && foregroundThread != 0 && foregroundThread != windowThread &&
+                           AttachThreadInput(windowThread, foregroundThread, true);
+            try
+            {
+                SetWindowPos(_hwnd, _alwaysOnTop ? HwndTopmost : HwndNoTopmost, 0, 0, 0, 0,
+                    SwpNoMove | SwpNoSize | SwpShowWindow);
+                BringWindowToTop(_hwnd);
+                SetForegroundWindow(_hwnd);
+                SetActiveWindow(_hwnd);
+                SetFocus(_hwnd);
+            }
+            finally
+            {
+                if (attached)
+                {
+                    AttachThreadInput(windowThread, foregroundThread, false);
+                }
+            }
 #endif
         }
 
@@ -234,7 +268,7 @@ namespace CrazyChat.Overlay
             if (_alwaysOnTop && !_suspendTopmost && Time.unscaledTime >= _nextTopmostTime)
             {
                 ApplyTopmost();
-                _nextTopmostTime = Time.unscaledTime + topmostRefreshSeconds;
+                _nextTopmostTime = Time.unscaledTime + TopmostRefreshSeconds;
             }
 #endif
         }

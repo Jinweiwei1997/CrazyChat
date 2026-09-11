@@ -24,19 +24,20 @@ namespace CrazyChat.Overlay
     /// </summary>
     public sealed class PlayingFriendsService : MonoBehaviour
     {
+        public const ulong TestFriendId1 = 2;
+        public const ulong TestFriendId2 = 3;
+        public const ulong TestFriendId3 = 4;
+
         public event Action Changed;
 
         public IReadOnlyList<PlayingFriend> Friends => _visible;
 
         public OverlayConfig Config { get; private set; }
 
-        public bool RequireSameGame => _requireSameGameOverride ?? (Config != null && Config.requireSameGame);
-
-        bool? _requireSameGameOverride;
+        bool _testMode;
 
         readonly List<PlayingFriend> _visible = new List<PlayingFriend>(8);
         readonly Dictionary<ulong, Texture2D> _avatars = new Dictionary<ulong, Texture2D>();
-        float _nextPoll;
 
 #if !DISABLESTEAMWORKS
         Callback<PersonaStateChange_t> _personaCallback;
@@ -53,7 +54,6 @@ namespace CrazyChat.Overlay
                 SteamFriends.SetRichPresence("status", "桌面挂件");
             }
 #endif
-            _nextPoll = 0f;
         }
 
         void OnDisable()
@@ -79,32 +79,25 @@ namespace CrazyChat.Overlay
             _avatars.Clear();
         }
 
-        void Update()
-        {
-            if (Time.unscaledTime < _nextPoll)
-            {
-                return;
-            }
-
-            _nextPoll = Time.unscaledTime + (Config != null ? Config.pollSeconds : 3f);
-            Refresh();
-        }
-
         public void BindConfig(OverlayConfig config)
         {
             Config = config != null ? config : OverlayConfig.LoadOrDefault();
         }
 
-        public void ToggleEditorRequireSameGame()
+        public void SetTestMode(bool enabled)
         {
-            if (!Application.isEditor)
+            if (_testMode == enabled)
             {
                 return;
             }
 
-            _requireSameGameOverride = !RequireSameGame;
-            _nextPoll = 0f;
+            _testMode = enabled;
             Refresh();
+        }
+
+        public static bool IsTestFriend(ulong steamId)
+        {
+            return steamId == TestFriendId1 || steamId == TestFriendId2 || steamId == TestFriendId3;
         }
 
         public void OpenProfile(ulong steamId)
@@ -158,6 +151,11 @@ namespace CrazyChat.Overlay
                 CollectEditorPlaceholders();
             }
 
+            if (_testMode)
+            {
+                CollectTestFriends();
+            }
+
             if (before != Snapshot())
             {
                 Changed?.Invoke();
@@ -168,14 +166,10 @@ namespace CrazyChat.Overlay
         void CollectSteamFriends()
         {
             var localId = SteamUser.GetSteamID();
-            if (Config == null || Config.includeLocalPlayer)
-            {
-                AddFriend(localId, SteamFriends.GetPersonaName(), true);
-            }
+            AddFriend(localId, SteamFriends.GetPersonaName(), true);
 
             var myApp = SteamUtils.GetAppID();
             var maxCollect = Config != null ? Config.maxCollectFriends : 64;
-            var onlineOnly = Config == null || Config.onlineOnly;
             var count = SteamFriends.GetFriendCount(EFriendFlags.k_EFriendFlagImmediate);
             for (var i = 0; i < count && _visible.Count < maxCollect; i++)
             {
@@ -186,18 +180,15 @@ namespace CrazyChat.Overlay
                 }
 
                 var state = SteamFriends.GetFriendPersonaState(id);
-                if (onlineOnly && (state == EPersonaState.k_EPersonaStateOffline || state == EPersonaState.k_EPersonaStateInvisible))
+                if (state == EPersonaState.k_EPersonaStateOffline || state == EPersonaState.k_EPersonaStateInvisible)
                 {
                     continue;
                 }
 
-                if (RequireSameGame)
+                var inThisGame = SteamFriends.GetFriendGamePlayed(id, out var info) && info.m_gameID.AppID() == myApp;
+                if (!inThisGame)
                 {
-                    var inThisGame = SteamFriends.GetFriendGamePlayed(id, out var info) && info.m_gameID.AppID() == myApp;
-                    if (!inThisGame)
-                    {
-                        continue;
-                    }
+                    continue;
                 }
 
                 SteamFriends.RequestUserInformation(id, false);
@@ -283,20 +274,20 @@ namespace CrazyChat.Overlay
                                       EPersonaChange.k_EPersonaChangeName |
                                       EPersonaChange.k_EPersonaChangeAvatar)) != 0)
             {
-                _nextPoll = 0f;
+                Refresh();
             }
         }
 
         void OnAvatarLoaded(AvatarImageLoaded_t ev)
         {
             _avatars.Remove(ev.m_steamID.m_SteamID);
-            _nextPoll = 0f;
+            Refresh();
         }
 #endif
 
         void CollectEditorPlaceholders()
         {
-            if (!Application.isEditor)
+            if (!Application.isEditor && !_testMode)
             {
                 return;
             }
@@ -308,18 +299,29 @@ namespace CrazyChat.Overlay
                 Avatar = Placeholder(1, new Color(0.35f, 0.62f, 0.95f)),
                 IsLocal = true
             });
+        }
+
+        void CollectTestFriends()
+        {
             _visible.Add(new PlayingFriend
             {
-                SteamId = 2,
-                Name = "示例好友",
-                Avatar = Placeholder(2, new Color(0.95f, 0.55f, 0.35f)),
+                SteamId = TestFriendId1,
+                Name = "测试好友 1",
+                Avatar = Placeholder(TestFriendId1, new Color(0.95f, 0.55f, 0.35f)),
                 IsLocal = false
             });
             _visible.Add(new PlayingFriend
             {
-                SteamId = 3,
-                Name = "示例好友2",
-                Avatar = Placeholder(3, new Color(0.45f, 0.78f, 0.55f)),
+                SteamId = TestFriendId2,
+                Name = "测试好友 2",
+                Avatar = Placeholder(TestFriendId2, new Color(0.45f, 0.78f, 0.55f)),
+                IsLocal = false
+            });
+            _visible.Add(new PlayingFriend
+            {
+                SteamId = TestFriendId3,
+                Name = "测试好友 3",
+                Avatar = Placeholder(TestFriendId3, new Color(0.72f, 0.48f, 0.88f)),
                 IsLocal = false
             });
         }

@@ -12,4 +12,4 @@ alwaysApply: true
 - UI 迁移按界面逐个进行：设置使用 `Resources/Prefab/UI/SettingsMenu.prefab`，聊天使用 `Resources/Prefab/UI/ChatPanel.prefab`，两者的 `Create()` 都只加载和接线；其他界面保持现状
 - UI 统一使用 uGUI `Text` 并挂已有层；已接入 Prefab 的界面不要再保留运行时 fallback 第二套结构
 - 互动：Catalog 登记 + Fx + 通道 2；聊天通道 1
-- 需求不清时：无房间、只做桌上头像、对方必须开着本游戏
+- 需求不清时：无房间；麻袋只沿用现有摘要、未读和聊天入口，其他玩法只做桌上头像；对方必须开着本游戏

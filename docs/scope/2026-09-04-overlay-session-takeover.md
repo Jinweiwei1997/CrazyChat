@@ -14,13 +14,13 @@
 - **支持**：跨设备游戏会话顶号（后开者获胜）；本机进程互斥（含 Unity Editor Play 与 Standalone/Export）；被顶方短提示后退出进程（Editor 则结束 Play）；Steam 云不可用时降级放行（跨设备顶号暂时失效，本机互斥仍生效）。
 - **正常行为**：仅本机一份进程可持有互斥；跨设备后开实例覆盖会话租约，先开实例在轮询中发现后提示并退出；心跳超时后旧租约失效，不误踢新实例。
 - **失败行为**：云读写失败 → 不阻断启动；抢不到本机互斥 → 提示后退出/停 Play。
-- **明确不做**：阻止或改写 Steam 客户端多端登录挤线；自建鉴权服务器；新增 P2P/聊天通道；修改 `SteamManager` / `com.rlabrecque.steamworks.net`；开启或依赖设置项 `OverlayConfig.SteamCloud`（会话文件单独走 Remote Storage）。
+- **明确不做**：阻止或改写 Steam 客户端多端登录挤线；自建鉴权服务器；新增 P2P/聊天通道；修改 `SteamManager` / `com.rlabrecque.steamworks.net`；让普通设置、布局或点击统计依赖 Steam Cloud（会话文件单独走 Remote Storage）。
 - **兼容**：现有 Overlay 装配入口仍为 `OverlayBootstrap`；好友/聊天/互动行为不因顶号逻辑改变协议。
 
 ### 技术决策
 
 - **本机互斥**：Windows 命名互斥；Editor 与 Standalone 共用同一逻辑；第二实例抢锁失败即退出路径。
-- **跨设备租约**：Steam Remote Storage 独立会话文件（不绑定 `OverlayConfig.SteamCloud`）；启动生成 `sessionId` 并覆盖租约（后开者获胜）；周期性心跳续期；周期性读租约，发现「外来且更新的有效租约」则本端退出；对端崩溃靠心跳超时判定租约失效。
+- **跨设备租约**：Steam Remote Storage 独立会话文件；启动生成 `sessionId` 并覆盖租约（后开者获胜）；周期性心跳续期；周期性读租约，发现「外来且更新的有效租约」则本端退出；对端崩溃靠心跳超时判定租约失效。
 - **延迟预期**：跨设备顶号约数秒到十几秒（受 Steam 云同步影响）。
 - **职责归属**：挂在现有 Overlay 启动链（`OverlayBootstrap` 及其邻近 Overlay 脚本）；禁止新 Bootstrap/Manager/通道；不改 Steamworks.NET 与 `SteamManager.cs`。
 - **云降级**：Remote Storage 不可用时跳过跨设备租约，仅保留本机互斥。

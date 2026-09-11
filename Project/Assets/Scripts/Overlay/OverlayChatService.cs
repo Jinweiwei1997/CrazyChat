@@ -77,7 +77,7 @@ namespace CrazyChat.Overlay
             Store.Add(friendId, text, true, localId);
 
 #if !DISABLESTEAMWORKS
-            if (SteamManager.Initialized)
+            if (SteamManager.Initialized && !PlayingFriendsService.IsTestFriend(friendId))
             {
                 SendP2P(friendId, text);
             }

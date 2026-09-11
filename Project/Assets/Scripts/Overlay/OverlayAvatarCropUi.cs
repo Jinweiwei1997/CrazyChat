@@ -6,38 +6,53 @@ using UnityEngine.UI;
 namespace CrazyChat.Overlay
 {
     /// <summary>
-    /// Square crop UI: pan/zoom source image, confirm writes cropped PNG bytes.
+    /// Square crop UI embedded in the settings Dynamic page: pan/zoom, confirm writes cropped PNG bytes.
     /// </summary>
-    public sealed class OverlayAvatarCropUi : MonoBehaviour, IDragHandler, IScrollHandler
+    public sealed class OverlayAvatarCropUi : MonoBehaviour
     {
-        // 1 = shorter edge fills the square (cover); below that would letterbox.
         const float MinZoom = 1f;
         const float MaxZoom = 4f;
         const float ZoomStep = 1.15f;
         const float HoldRepeatDelay = 0.28f;
         const float HoldRepeatRate = 6f;
+        const float StageSize = 168f;
 
+        RectTransform _stageRt;
         RectTransform _imageRt;
         RawImage _image;
-        Text _hint;
         Texture2D _source;
         float _zoom = 1f;
         Vector2 _pan;
         Action<byte[]> _onConfirm;
         Action _onCancel;
-        float _cropPx = 240f;
+        float _cropPx = StageSize;
         float _holdZoomSign;
         float _holdZoomStartedAt = -1f;
 
-        public static OverlayAvatarCropUi Create(Transform modal)
+        public static OverlayAvatarCropUi CreateEmbedded(Transform host)
         {
-            var go = new GameObject("AvatarCropUi", typeof(RectTransform));
-            go.transform.SetParent(modal, false);
+            var go = new GameObject("AvatarCrop", typeof(RectTransform));
+            go.transform.SetParent(host, false);
             Stretch((RectTransform)go.transform);
             var ui = go.AddComponent<OverlayAvatarCropUi>();
-            ui.Build();
+            ui.BuildEmbedded();
             go.SetActive(false);
             return ui;
+        }
+
+        public void Bind()
+        {
+            _stageRt = FindNode(transform, "Stage") as RectTransform;
+            _imageRt = FindNode(transform, "Stage/Frame/Mask/Photo") as RectTransform;
+            _image = _imageRt != null ? _imageRt.GetComponent<RawImage>() : null;
+
+            var frame = FindNode(transform, "Stage/Frame");
+            BindEvent(frame, EventTriggerType.Drag, data => OnDrag((PointerEventData)data));
+            BindEvent(frame, EventTriggerType.Scroll, data => OnScroll((PointerEventData)data));
+            BindHold(FindNode(transform, "Shrink"), -1f);
+            BindHold(FindNode(transform, "Grow"), 1f);
+            BindClick(FindNode(transform, "Cancel"), Cancel);
+            BindClick(FindNode(transform, "Confirm"), Confirm);
         }
 
         public void Open(byte[] imageBytes, Action<byte[]> onConfirm, Action onCancel = null)
@@ -56,7 +71,18 @@ namespace CrazyChat.Overlay
                 Destroy(_source);
                 _source = null;
                 Debug.LogWarning("[Overlay] 无法读取选中的图片。");
-                _onCancel?.Invoke();
+                var cancel = _onCancel;
+                Close();
+                cancel?.Invoke();
+                return;
+            }
+
+            if (_image == null || _imageRt == null || _stageRt == null)
+            {
+                Debug.LogError("[Overlay] 设置 Prefab 的动态页裁剪节点不完整。");
+                var cancel = _onCancel;
+                Close();
+                cancel?.Invoke();
                 return;
             }
 
@@ -64,9 +90,13 @@ namespace CrazyChat.Overlay
             _zoom = 1f;
             _pan = Vector2.zero;
             StopZoomHold();
-            _image.texture = _source;
+            if (_image != null)
+            {
+                _image.texture = _source;
+            }
+
             gameObject.SetActive(true);
-            transform.SetAsLastSibling();
+            RefreshCropSize();
             ApplyLayout();
         }
 
@@ -86,42 +116,30 @@ namespace CrazyChat.Overlay
             SetZoom(_zoom * Mathf.Pow(ZoomStep, _holdZoomSign * steps));
         }
 
-        void Build()
+        void BuildEmbedded()
         {
-            var dim = CreateImage("Dim", transform, new Color(0f, 0f, 0f, 0.55f), OverlaySprites.RoundedRect);
-            dim.raycastTarget = true;
-            Stretch(dim.rectTransform);
-            dim.gameObject.AddComponent<Button>().onClick.AddListener(Cancel);
-
-            var card = CreateImage("Card", transform, OverlaySprites.Panel, OverlaySprites.RoundedRect);
-            OverlaySkin.ApplyPanel(card);
-            card.raycastTarget = true;
-            var cardRt = card.rectTransform;
-            cardRt.anchorMin = cardRt.anchorMax = new Vector2(0.5f, 0.5f);
-            cardRt.sizeDelta = new Vector2(360f, 420f);
-            cardRt.localScale = new Vector3(
-                OverlaySkin.OpenWindowScale,
-                OverlaySkin.OpenWindowScale,
-                1f);
-
-            PlaceLabel(cardRt, "截取方形头像", 16, OverlaySkin.Text, new Vector2(0f, 180f), new Vector2(280f, 24f));
-            _hint = PlaceLabel(cardRt, "拖动移动 · 滚轮缩放 · 按住缩小/放大", 12, OverlaySkin.TextMuted,
-                new Vector2(0f, 152f), new Vector2(320f, 20f));
-
+            var hint = PlaceLabel(transform, "拖动移动 · 滚轮缩放 · 按住缩小/放大", 12, OverlaySkin.TextMuted);
+            hint.gameObject.name = "Hint";
+            var hintRt = hint.rectTransform;
+            hintRt.anchorMin = new Vector2(0f, 1f);
+            hintRt.anchorMax = new Vector2(1f, 1f);
+            hintRt.pivot = new Vector2(0.5f, 1f);
+            hintRt.anchoredPosition = new Vector2(0f, -4f);
+            hintRt.sizeDelta = new Vector2(0f, 20f);
             var stage = new GameObject("Stage", typeof(RectTransform));
-            stage.transform.SetParent(cardRt, false);
-            var stageRt = (RectTransform)stage.transform;
-            stageRt.anchorMin = stageRt.anchorMax = new Vector2(0.5f, 0.5f);
-            stageRt.anchoredPosition = new Vector2(0f, 10f);
-            stageRt.sizeDelta = new Vector2(280f, 280f);
+            stage.transform.SetParent(transform, false);
+            _stageRt = (RectTransform)stage.transform;
+            _stageRt.anchorMin = _stageRt.anchorMax = new Vector2(0.5f, 0.5f);
+            _stageRt.pivot = new Vector2(0.5f, 0.5f);
+            _stageRt.anchoredPosition = new Vector2(0f, 16f);
+            _stageRt.sizeDelta = new Vector2(StageSize, StageSize);
 
-            var frame = CreateImage("Frame", stageRt, new Color(0.1f, 0.1f, 0.12f, 1f), OverlaySprites.RoundedSquare);
+            var frame = CreateImage("Frame", _stageRt, new Color(0.1f, 0.1f, 0.12f, 1f), OverlaySprites.RoundedSquare);
             frame.raycastTarget = true;
-            var frameRt = frame.rectTransform;
-            Stretch(frameRt);
+            Stretch(frame.rectTransform);
 
             var maskGo = new GameObject("Mask", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Mask));
-            maskGo.transform.SetParent(frameRt, false);
+            maskGo.transform.SetParent(frame.rectTransform, false);
             Stretch((RectTransform)maskGo.transform);
             var maskImg = maskGo.GetComponent<Image>();
             maskImg.sprite = OverlaySprites.RoundedSquare;
@@ -136,23 +154,27 @@ namespace CrazyChat.Overlay
             _image = imgGo.GetComponent<RawImage>();
             _image.raycastTarget = true;
 
-            var drag = frame.gameObject.AddComponent<CropDragRelay>();
-            drag.Owner = this;
+            frame.gameObject.AddComponent<EventTrigger>();
 
-            AddHoldZoomBtn(cardRt, "缩小", new Vector2(-60f, -150f), -1f);
-            AddHoldZoomBtn(cardRt, "放大", new Vector2(60f, -150f), 1f);
-            AddBtn(cardRt, "取消", new Vector2(-60f, -190f), Cancel);
-            AddBtn(cardRt, "确认", new Vector2(60f, -190f), Confirm, accent: true);
+            AddHoldZoomBtn(transform, "Shrink", "缩小", new Vector2(-40f, 44f));
+            AddHoldZoomBtn(transform, "Grow", "放大", new Vector2(40f, 44f));
+            AddBtn(transform, "Cancel", "取消", new Vector2(-40f, 12f));
+            AddBtn(transform, "Confirm", "确认", new Vector2(40f, 12f));
         }
 
-        public void OnDrag(PointerEventData eventData)
+        void OnDrag(PointerEventData eventData)
         {
             _pan += eventData.delta;
             ApplyLayout();
         }
 
-        public void OnScroll(PointerEventData eventData)
+        void OnScroll(PointerEventData eventData)
         {
+            if (Mathf.Approximately(eventData.scrollDelta.y, 0f))
+            {
+                return;
+            }
+
             SetZoom(_zoom * (eventData.scrollDelta.y > 0f ? 1.1f : 1f / 1.1f));
         }
 
@@ -175,6 +197,18 @@ namespace CrazyChat.Overlay
             _holdZoomStartedAt = -1f;
         }
 
+        void RefreshCropSize()
+        {
+            if (_stageRt == null)
+            {
+                _cropPx = StageSize;
+                return;
+            }
+
+            var width = _stageRt.rect.width;
+            _cropPx = Mathf.Max(64f, width > 1f ? width : _stageRt.sizeDelta.x);
+        }
+
         void ApplyLayout()
         {
             if (_source == null || _imageRt == null)
@@ -182,6 +216,7 @@ namespace CrazyChat.Overlay
                 return;
             }
 
+            RefreshCropSize();
             var crop = _cropPx;
             var minEdge = Mathf.Min(_source.width, _source.height);
             var fit = crop / minEdge;
@@ -204,6 +239,7 @@ namespace CrazyChat.Overlay
 
             var png = BakeCrop();
             var cb = _onConfirm;
+            var cancel = _onCancel;
             Close();
             if (png != null)
             {
@@ -212,7 +248,7 @@ namespace CrazyChat.Overlay
             else
             {
                 Debug.LogWarning("[Overlay] 截取失败。");
-                _onCancel?.Invoke();
+                cancel?.Invoke();
             }
         }
 
@@ -312,33 +348,98 @@ namespace CrazyChat.Overlay
             }
         }
 
-        void AddBtn(Transform parent, string title, Vector2 pos, UnityEngine.Events.UnityAction click,
-            bool accent = false)
+        void AddBtn(Transform parent, string id, string title, Vector2 pos)
         {
-            var img = CreateImage(title, parent, OverlaySprites.Button, OverlaySprites.RoundedRect);
-            OverlaySkin.ApplyButton(img, accent: accent);
-            img.raycastTarget = true;
-            var rt = img.rectTransform;
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = pos;
-            rt.sizeDelta = new Vector2(56f, 28f);
-            FillLabel(rt, title, 13, OverlaySkin.Text);
-            img.gameObject.AddComponent<Button>().onClick.AddListener(click);
-        }
-
-        void AddHoldZoomBtn(Transform parent, string title, Vector2 pos, float sign)
-        {
-            var img = CreateImage(title, parent, OverlaySprites.Button, OverlaySprites.RoundedRect);
+            var img = CreateImage(id, parent, OverlaySprites.Button, OverlaySprites.RoundedRect);
             OverlaySkin.ApplyButton(img);
             img.raycastTarget = true;
             var rt = img.rectTransform;
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
+            rt.pivot = new Vector2(0.5f, 0f);
             rt.anchoredPosition = pos;
-            rt.sizeDelta = new Vector2(56f, 28f);
+            rt.sizeDelta = new Vector2(64f, 28f);
             FillLabel(rt, title, 13, OverlaySkin.Text);
-            var hold = img.gameObject.AddComponent<CropZoomHold>();
-            hold.Owner = this;
-            hold.Sign = sign;
+            img.gameObject.AddComponent<Button>();
+        }
+
+        void AddHoldZoomBtn(Transform parent, string id, string title, Vector2 pos)
+        {
+            var img = CreateImage(id, parent, OverlaySprites.Button, OverlaySprites.RoundedRect);
+            OverlaySkin.ApplyButton(img);
+            img.raycastTarget = true;
+            var rt = img.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
+            rt.pivot = new Vector2(0.5f, 0f);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = new Vector2(64f, 28f);
+            FillLabel(rt, title, 13, OverlaySkin.Text);
+            img.gameObject.AddComponent<EventTrigger>();
+        }
+
+        void BindHold(Transform node, float sign)
+        {
+            if (node == null)
+            {
+                return;
+            }
+
+            BindEvent(node, EventTriggerType.PointerDown, _ => BeginZoomHold(sign));
+            BindEvent(node, EventTriggerType.PointerUp, _ => StopZoomHold());
+            BindEvent(node, EventTriggerType.PointerExit, _ => StopZoomHold());
+        }
+
+        static void BindEvent(
+            Transform node,
+            EventTriggerType type,
+            UnityEngine.Events.UnityAction<BaseEventData> action)
+        {
+            if (node == null)
+            {
+                return;
+            }
+
+            var trigger = node.GetComponent<EventTrigger>();
+            if (trigger == null)
+            {
+                Debug.LogError("[Overlay] 设置 Prefab 缺少事件节点: " + node.name);
+                return;
+            }
+
+            if (trigger.triggers == null)
+            {
+                trigger.triggers = new System.Collections.Generic.List<EventTrigger.Entry>();
+            }
+
+            for (var i = trigger.triggers.Count - 1; i >= 0; i--)
+            {
+                if (trigger.triggers[i].eventID == type)
+                {
+                    trigger.triggers.RemoveAt(i);
+                }
+            }
+
+            var entry = new EventTrigger.Entry { eventID = type };
+            entry.callback.AddListener(action);
+            trigger.triggers.Add(entry);
+        }
+
+        void BindClick(Component graphic, UnityEngine.Events.UnityAction action)
+        {
+            if (graphic == null)
+            {
+                return;
+            }
+
+            var button = graphic.GetComponent<Button>();
+            if (button == null)
+            {
+                Debug.LogError("[Overlay] 设置 Prefab 缺少按钮组件: " + graphic.name);
+                return;
+            }
+
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(action);
+            button.transition = Selectable.Transition.None;
         }
 
         static Image CreateImage(string name, Transform parent, Color color, Sprite sprite)
@@ -352,7 +453,7 @@ namespace CrazyChat.Overlay
             return image;
         }
 
-        static Text PlaceLabel(Transform parent, string text, int size, Color color, Vector2 pos, Vector2 sizeDelta)
+        static Text PlaceLabel(Transform parent, string text, int size, Color color)
         {
             var go = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
             go.transform.SetParent(parent, false);
@@ -363,10 +464,6 @@ namespace CrazyChat.Overlay
             label.color = color;
             label.text = text;
             label.raycastTarget = false;
-            var rt = (RectTransform)go.transform;
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = pos;
-            rt.sizeDelta = sizeDelta;
             return label;
         }
 
@@ -384,6 +481,11 @@ namespace CrazyChat.Overlay
             Stretch((RectTransform)go.transform);
         }
 
+        static Transform FindNode(Transform root, string path)
+        {
+            return root != null ? root.Find(path) : null;
+        }
+
         static void Stretch(RectTransform rt)
         {
             rt.anchorMin = Vector2.zero;
@@ -392,40 +494,5 @@ namespace CrazyChat.Overlay
             rt.offsetMax = Vector2.zero;
         }
 
-        sealed class CropDragRelay : MonoBehaviour, IDragHandler, IScrollHandler
-        {
-            public OverlayAvatarCropUi Owner;
-
-            public void OnDrag(PointerEventData eventData)
-            {
-                Owner?.OnDrag(eventData);
-            }
-
-            public void OnScroll(PointerEventData eventData)
-            {
-                Owner?.OnScroll(eventData);
-            }
-        }
-
-        sealed class CropZoomHold : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
-        {
-            public OverlayAvatarCropUi Owner;
-            public float Sign;
-
-            public void OnPointerDown(PointerEventData eventData)
-            {
-                Owner?.BeginZoomHold(Sign);
-            }
-
-            public void OnPointerUp(PointerEventData eventData)
-            {
-                Owner?.StopZoomHold();
-            }
-
-            public void OnPointerExit(PointerEventData eventData)
-            {
-                Owner?.StopZoomHold();
-            }
-        }
     }
 }
