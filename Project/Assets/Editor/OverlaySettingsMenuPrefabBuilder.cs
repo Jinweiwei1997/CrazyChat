@@ -101,6 +101,10 @@ public static class OverlaySettingsMenuPrefabBuilder
                     image.color = OverlaySkin.SettingsThemeText(1);
                     continue;
                 }
+                if (name == "HueSwatch" || name == "HueHandle" || name == "IntensityHandle")
+                {
+                    continue;
+                }
                 if (name == "Preview")
                 {
                     image.color = Color.white;
@@ -155,9 +159,13 @@ public static class OverlaySettingsMenuPrefabBuilder
                 {
                     image.color = OverlaySkin.ThemeBackground(1);
                 }
-                else if (name == "DisplayDropdown")
+                else if (name == "DisplayDropdown" || name == "ThemeDropdown")
                 {
                     image.color = OverlaySkin.ThemeInputBackground(1);
+                }
+                else if (name == "HueTrack" || name == "IntensityTrack")
+                {
+                    image.color = OverlaySkin.ThemeDivider(1);
                 }
                 else if (name == "Item")
                 {
@@ -206,18 +214,20 @@ public static class OverlaySettingsMenuPrefabBuilder
             for (var i = 0; i < labels.Length; i++)
             {
                 var name = labels[i].gameObject.name;
-                labels[i].color = name == "Tip"
+                labels[i].color = name == "Check"
+                    ? Color.white
+                    : name == "Tip"
                     ? Color.white
                     : labels[i].transform.parent.name == "QuitGameRow"
                     ? OverlaySkin.ThemeDanger(1)
-                    : name == "Muted" || name == "Status" || name == "Hint"
+                    : name == "Muted" || name == "Status" || name.EndsWith("Hint")
                         ? OverlaySkin.ThemeMuted(1)
                         : OverlaySkin.SettingsThemeText(1);
                 labels[i].fontSize = labels[i].transform.parent.name == "Header"
                     ? 14
                     : labels[i].transform.parent.name == "Close"
                         ? 14
-                        : name == "Muted" || name == "Status" || name == "Hint"
+                        : name == "Muted" || name == "Status" || name.EndsWith("Hint")
                             ? 12
                             : 13;
             }
@@ -451,7 +461,13 @@ public static class OverlaySettingsMenuPrefabBuilder
                     continue;
                 }
 
-                var height = row.name == "AvatarStatusRow" ? 22f : 26f;
+                var height = row.name == "ThemeRow"
+                    ? 72f
+                    : row.name == "ColorRow"
+                        ? 136f
+                        : row.name == "AvatarStatusRow"
+                            ? 22f
+                            : 26f;
                 element.minHeight = height;
                 element.preferredHeight = height;
             }

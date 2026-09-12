@@ -112,9 +112,9 @@ namespace CrazyChat.Overlay
             _settings = new OverlayUserSettings();
             _settings.Load();
             ApplyTestMode();
-            OverlaySkin.ConfigureCustomTheme(
-                _settings.ThemeBackgroundColor,
-                _settings.ThemeAccentColor);
+            OverlaySkin.ConfigureAppearance(
+                _settings.ThemeHue,
+                _settings.ThemeIntensity);
             _settingsUi = OverlaySettingsUi.Create(_chromeLayer, _modalLayer, this);
 
             _chatStore = new OverlayChatStore();
@@ -167,9 +167,9 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            OverlaySkin.ConfigureCustomTheme(
-                _settings.ThemeBackgroundColor,
-                _settings.ThemeAccentColor);
+            OverlaySkin.ConfigureAppearance(
+                _settings.ThemeHue,
+                _settings.ThemeIntensity);
             ApplyTestMode();
             _settings.Save();
             var window = GetComponent<TransparentOverlayWindow>();

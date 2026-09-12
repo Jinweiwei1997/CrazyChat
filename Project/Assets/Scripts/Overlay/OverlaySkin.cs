@@ -36,8 +36,8 @@ namespace CrazyChat.Overlay
         static Sprite _indGear;
         static Sprite _indTab;
         static Sprite _indToggle;
-        static Color _customBackground = new Color(0.118f, 0.118f, 0.118f, 1f);
-        static Color _customAccent = new Color(0.88f, 0.42f, 0.62f, 1f);
+        static float _themeHue = 0.95f;
+        static float _themeIntensity = 0.24f;
 
         public static string Id => _id;
 
@@ -57,38 +57,44 @@ namespace CrazyChat.Overlay
             ? new Color(0.98f, 0.98f, 0.98f, 1f)
             : new Color(0.118f, 0.118f, 0.118f, 1f);
 
-        public static Color PresetAccent(int theme) => theme == 2
-            ? new Color(0.78f, 0.78f, 0.8f, 1f)
-            : new Color(0.88f, 0.42f, 0.62f, 1f);
-
-        public static void ConfigureCustomTheme(Color background, Color accent)
+        public static void ConfigureAppearance(float hue, float intensity)
         {
-            background.a = 1f;
-            accent.a = 1f;
-            _customBackground = background;
-            _customAccent = accent;
+            _themeHue = Mathf.Repeat(hue, 1f);
+            _themeIntensity = Mathf.Clamp01(intensity);
         }
 
-        public static Color ThemeBackground(int theme) => BaseBackground(theme);
+        public static bool ReduceTransparency => false;
 
-        public static Color ThemeHeader(int theme) => Shade(BaseBackground(theme), IsLight(theme) ? -0.03f : -0.20f);
+        public static Color ThemeBackground(int theme) => Tint(BaseBackground(theme));
 
-        public static Color ThemeSection(int theme) => Shade(BaseBackground(theme), IsLight(theme) ? -0.06f : -0.14f);
+        public static Color ThemeHeader(int theme) =>
+            Shade(Tint(BaseBackground(theme)), IsLight(theme) ? -0.015f : -0.20f);
 
-        public static Color ThemeControl(int theme) => Shade(BaseBackground(theme), IsLight(theme) ? -0.10f : 0.066f);
+        public static Color ThemeSection(int theme) =>
+            Shade(Tint(BaseBackground(theme)), IsLight(theme) ? -0.03f : -0.14f);
 
-        public static Color ThemeAccent(int theme) => theme == OverlayUserSettings.CustomTheme
-            ? _customAccent
-            : PresetAccent(theme);
+        public static Color ThemeControl(int theme) =>
+            Shade(Tint(BaseBackground(theme)), IsLight(theme) ? -0.04f : 0.066f);
 
-        public static Color ThemeMuted(int theme) =>
-            Color.Lerp(SettingsThemeText(theme), BaseBackground(theme), 0.42f);
+        public static Color ThemeAccent(int theme) =>
+            Color.Lerp(NeutralAccent(theme), HueColor(_themeHue), _themeIntensity);
 
-        public static Color ThemeHover(int theme) => WithAlpha(SettingsThemeText(theme), IsLight(theme) ? 0.06f : 0.08f);
+        public static Color ThemeMuted(int theme) => IsLight(theme)
+            ? new Color(0.34f, 0.34f, 0.34f, 1f)
+            : Color.Lerp(SettingsThemeText(theme), Tint(BaseBackground(theme)), 0.42f);
 
-        public static Color ThemeDivider(int theme) => Shade(BaseBackground(theme), IsLight(theme) ? -0.12f : 0.133f);
+        public static Color ThemeHover(int theme) => WithAlpha(
+            Color.Lerp(
+                SettingsThemeText(theme),
+                ThemeAccent(theme),
+                _themeIntensity * 0.35f),
+            IsLight(theme) ? 0.06f : 0.08f);
 
-        public static Color ThemeInputBackground(int theme) => Shade(BaseBackground(theme), IsLight(theme) ? 0.02f : 0.007f);
+        public static Color ThemeDivider(int theme) =>
+            Shade(Tint(BaseBackground(theme)), IsLight(theme) ? -0.07f : 0.133f);
+
+        public static Color ThemeInputBackground(int theme) =>
+            Shade(Tint(BaseBackground(theme)), IsLight(theme) ? -0.025f : 0.007f);
 
         public static Color ThemeDanger(int theme) => IsLight(theme)
             ? new Color(0.78f, 0.18f, 0.18f, 1f)
@@ -97,8 +103,8 @@ namespace CrazyChat.Overlay
         public static Color SettingsThemeText(int theme)
         {
             return IsLight(theme)
-                ? new Color(0.14f, 0.14f, 0.15f, 1f)
-                : new Color(0.94f, 0.94f, 0.94f, 1f);
+                ? Color.black
+                : Color.white;
         }
 
         public static Color SettingsEntryIconColor(int theme)
@@ -115,14 +121,43 @@ namespace CrazyChat.Overlay
                 : new Color(0.14f, 0.14f, 0.15f, 1f);
         }
 
-        static Color BaseBackground(int theme) => theme == OverlayUserSettings.CustomTheme
-            ? _customBackground
-            : PresetBackground(theme);
+        static Color BaseBackground(int theme) => PresetBackground(theme);
+
+        public static Color ColorFromHue(float hue)
+        {
+            return HueColor(hue);
+        }
+
+        public static Color ColorFromHue(float hue, float intensity)
+        {
+            return Color.Lerp(
+                new Color(0.58f, 0.58f, 0.58f, 1f),
+                HueColor(hue),
+                Mathf.Clamp01(intensity));
+        }
+
+        static Color HueColor(float hue) =>
+            Color.HSVToRGB(Mathf.Repeat(hue, 1f), 0.90f, 0.96f);
+
+        static Color NeutralAccent(int theme) => IsLight(theme)
+            ? new Color(0.42f, 0.42f, 0.42f, 1f)
+            : new Color(0.58f, 0.58f, 0.58f, 1f);
+
+        static Color Tint(Color neutral)
+        {
+            Color.RGBToHSV(neutral, out _, out _, out var value);
+            var tintSaturation = IsLightColor(neutral) ? 0.07f : 0.45f;
+            var tint = Color.HSVToRGB(_themeHue, tintSaturation, value);
+            tint.a = neutral.a;
+            return Color.Lerp(neutral, tint, _themeIntensity);
+        }
+
+        static bool IsLightColor(Color color) =>
+            color.r * 0.2126f + color.g * 0.7152f + color.b * 0.0722f >= 0.55f;
 
         static bool IsLight(int theme)
         {
-            var color = BaseBackground(theme);
-            return color.r * 0.2126f + color.g * 0.7152f + color.b * 0.0722f >= 0.55f;
+            return IsLightColor(BaseBackground(theme));
         }
 
         static Color Shade(Color color, float amount)

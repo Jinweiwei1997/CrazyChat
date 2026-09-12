@@ -21,13 +21,14 @@ namespace CrazyChat.Overlay
         const float HistoryHeight = 520f;
         const float HeaderHeight = 36f;
         const float StatusHeight = 0f;
-        const float ComposerHeight = 40f;
+        const float ComposerHeight = 44f;
         const float CompactMinBodyHeight = 48f;
         const float BubbleMaxWidth = 214f;
         const float ToolbarButtonSize = 28f;
         const float SendButtonWidth = ToolbarButtonSize;
         const float HistoryButtonWidth = ToolbarButtonSize;
-        const float ComposerGap = 4f;
+        const float ComposerGap = 6f;
+        const float WindowInset = 8f;
 
         FriendOverlayView _view;
         OverlayChatService _chat;
@@ -261,16 +262,23 @@ namespace CrazyChat.Overlay
                     continue;
                 }
 
-                image.sprite = name == "ChatCard" || name == "Header" || name == "Body"
-                    ? _themeSprite
-                    : _controlSprite;
-                image.type = Image.Type.Sliced;
+                var toolbarButton = name == "Send" || name == "History" || name == "Close";
+                var roundedSurface =
+                    name == "ChatCard" || name == "Header" || name == "Body" ||
+                    name == "Input" || name == "Bubble";
+                image.sprite = toolbarButton
+                    ? OverlaySprites.Circle
+                    : roundedSurface
+                        ? OverlaySprites.RoundedRect
+                        : _controlSprite;
+                image.type = toolbarButton ? Image.Type.Simple : Image.Type.Sliced;
+                image.preserveAspect = toolbarButton;
                 image.color = name == "ChatCard"
                     ? OverlaySkin.ThemeBackground(theme)
                     : name == "Header"
-                        ? OverlaySkin.ThemeHeader(theme)
+                        ? OverlaySkin.ThemeBackground(theme)
                         : name == "Body"
-                            ? OverlaySkin.ThemeSection(theme)
+                            ? OverlaySkin.ThemeBackground(theme)
                             : name == "Input"
                                 ? OverlaySkin.ThemeInputBackground(theme)
                                 : name == "Send" || name == "History" || name == "Close"
@@ -502,8 +510,8 @@ namespace CrazyChat.Overlay
             var bodyRt = body.rectTransform;
             bodyRt.anchorMin = new Vector2(0f, 0f);
             bodyRt.anchorMax = new Vector2(1f, 1f);
-            bodyRt.offsetMin = new Vector2(4f, ComposerHeight + StatusHeight);
-            bodyRt.offsetMax = new Vector2(-4f, -HeaderHeight - 1f);
+            bodyRt.offsetMin = new Vector2(WindowInset, ComposerHeight + StatusHeight);
+            bodyRt.offsetMax = new Vector2(-WindowInset, -HeaderHeight - 1f);
             body.gameObject.AddComponent<RectMask2D>();
 
             _content = new GameObject("Content", typeof(RectTransform)).GetComponent<RectTransform>();
@@ -543,8 +551,8 @@ namespace CrazyChat.Overlay
             inputRt.anchorMin = new Vector2(0f, 0f);
             inputRt.anchorMax = new Vector2(1f, 0f);
             inputRt.pivot = new Vector2(0f, 0f);
-            inputRt.anchoredPosition = new Vector2(6f, 6f);
-            inputRt.sizeDelta = new Vector2(-44f, 28f);
+            inputRt.anchoredPosition = new Vector2(WindowInset, WindowInset);
+            inputRt.sizeDelta = new Vector2(-84f, 28f);
 
             var placeholder = PlaceAnchoredLabel(inputRt, "输入消息", 13, OverlaySkin.TextMuted, TextAnchor.MiddleLeft);
             placeholder.gameObject.name = "Placeholder";
@@ -574,13 +582,13 @@ namespace CrazyChat.Overlay
             var send = CreateImage("Send", _cardRt, Color.clear, _controlSprite);
             send.raycastTarget = true;
             PinBottomRight(send.rectTransform,
-                new Vector2(-(6f + HistoryButtonWidth + ComposerGap), 6f),
+                new Vector2(-(WindowInset + HistoryButtonWidth + ComposerGap), WindowInset),
                 new Vector2(SendButtonWidth, ToolbarButtonSize));
             CreateIconPlaceholder(send.rectTransform, 16f);
 
             var history = CreateImage("History", _cardRt, Color.clear, _controlSprite);
             history.raycastTarget = true;
-            PinBottomRight(history.rectTransform, new Vector2(-6f, 6f),
+            PinBottomRight(history.rectTransform, new Vector2(-WindowInset, WindowInset),
                 new Vector2(HistoryButtonWidth, ToolbarButtonSize));
             CreateIconPlaceholder(history.rectTransform, 16f);
             _historyButton = history.gameObject;
@@ -623,8 +631,8 @@ namespace CrazyChat.Overlay
                 body.anchorMin = Vector2.zero;
                 body.anchorMax = Vector2.one;
                 body.pivot = new Vector2(0.5f, 0.5f);
-                body.offsetMin = new Vector2(4f, ComposerHeight + StatusHeight);
-                body.offsetMax = new Vector2(-4f, -HeaderHeight - 1f);
+                body.offsetMin = new Vector2(WindowInset, ComposerHeight + StatusHeight);
+                body.offsetMax = new Vector2(-WindowInset, -HeaderHeight - 1f);
             }
 
             if (_status != null)
@@ -639,8 +647,8 @@ namespace CrazyChat.Overlay
                 inputRt.anchorMin = new Vector2(0f, 0f);
                 inputRt.anchorMax = new Vector2(1f, 0f);
                 inputRt.pivot = new Vector2(0f, 0f);
-                inputRt.anchoredPosition = new Vector2(6f, 6f);
-                var reserved = 44f + HistoryButtonWidth + ComposerGap;
+                inputRt.anchoredPosition = new Vector2(WindowInset, WindowInset);
+                var reserved = 50f + HistoryButtonWidth + ComposerGap;
                 inputRt.sizeDelta = new Vector2(-reserved, 28f);
                 InsetStretch(inputRt.Find("Placeholder") as RectTransform, 8f);
                 InsetStretch(inputRt.Find("Text") as RectTransform, 8f);
@@ -649,14 +657,15 @@ namespace CrazyChat.Overlay
             var send = FindNode(_cardRt, "Send") as RectTransform;
             if (send != null)
             {
-                var sendX = -(6f + HistoryButtonWidth + ComposerGap);
-                PinBottomRight(send, new Vector2(sendX, 6f), new Vector2(SendButtonWidth, ToolbarButtonSize));
+                var sendX = -(WindowInset + HistoryButtonWidth + ComposerGap);
+                PinBottomRight(send, new Vector2(sendX, WindowInset),
+                    new Vector2(SendButtonWidth, ToolbarButtonSize));
             }
 
             var history = FindNode(_cardRt, "History") as RectTransform;
             if (history != null)
             {
-                PinBottomRight(history, new Vector2(-6f, 6f),
+                PinBottomRight(history, new Vector2(-WindowInset, WindowInset),
                     new Vector2(HistoryButtonWidth, ToolbarButtonSize));
                 history.gameObject.SetActive(_mode != ChatMode.Closed);
                 _historyButton = history.gameObject;
@@ -816,7 +825,7 @@ namespace CrazyChat.Overlay
                 _rows.Add(CreateRow());
             }
 
-            var y = 8f;
+            var y = 10f;
             for (var i = 0; i < _rows.Count; i++)
             {
                 var row = _rows[i];
@@ -831,7 +840,7 @@ namespace CrazyChat.Overlay
                 var height = BindRow(row, msg);
                 row.Rt.anchoredPosition = new Vector2(0f, -y);
                 row.Rt.sizeDelta = new Vector2(0f, height);
-                y += height + 4f;
+                y += height + 6f;
             }
 
             var contentHeight = Mathf.Max(8f, y + 2f);
@@ -889,6 +898,7 @@ namespace CrazyChat.Overlay
             rt.pivot = new Vector2(0.5f, 1f);
 
             var bubble = CreateImage("Bubble", rt, OverlaySprites.Button, OverlaySprites.RoundedRect);
+            bubble.type = Image.Type.Sliced;
             bubble.raycastTarget = false;
             var bubbleRt = bubble.rectTransform;
             bubbleRt.anchorMin = bubbleRt.anchorMax = new Vector2(0f, 1f);
@@ -898,8 +908,8 @@ namespace CrazyChat.Overlay
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
             text.verticalOverflow = VerticalWrapMode.Overflow;
             Stretch(text.rectTransform);
-            text.rectTransform.offsetMin = new Vector2(6f, 4f);
-            text.rectTransform.offsetMax = new Vector2(-6f, -4f);
+            text.rectTransform.offsetMin = new Vector2(8f, 6f);
+            text.rectTransform.offsetMax = new Vector2(-8f, -6f);
 
             return new ChatRow
             {
@@ -918,22 +928,25 @@ namespace CrazyChat.Overlay
             var theme = _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
             row.Text.text = text;
             row.Text.alignment = TextAnchor.UpperLeft;
-            row.Bubble.sprite = _controlSprite != null ? _controlSprite : OverlaySprites.RoundedRect;
+            row.Bubble.sprite = OverlaySprites.RoundedRect;
             row.Bubble.type = Image.Type.Sliced;
             row.Bubble.color = mine
-                ? OverlaySkin.ThemeAccent(theme)
+                ? Color.Lerp(
+                    OverlaySkin.ThemeControl(theme),
+                    OverlaySkin.ThemeAccent(theme),
+                    theme == 2 ? 0.22f : 0.42f)
                 : OverlaySkin.ThemeControl(theme);
             row.Text.color = OverlaySkin.SettingsThemeText(theme);
 
             var windowWidth = _mode == ChatMode.History ? HistoryWidth : ChatWidth;
             var maxWidth = Mathf.Min(BubbleMaxWidth, windowWidth - 24f);
-            var bubbleW = Mathf.Clamp(row.Text.preferredWidth + 12f, 32f, maxWidth);
+            var bubbleW = Mathf.Clamp(row.Text.preferredWidth + 16f, 36f, maxWidth);
             row.BubbleRt.anchorMin = row.BubbleRt.anchorMax = mine ? new Vector2(1f, 1f) : new Vector2(0f, 1f);
             row.BubbleRt.pivot = mine ? new Vector2(1f, 1f) : new Vector2(0f, 1f);
-            row.BubbleRt.anchoredPosition = new Vector2(mine ? -8f : 8f, 0f);
+            row.BubbleRt.anchoredPosition = new Vector2(mine ? -10f : 10f, 0f);
             row.BubbleRt.sizeDelta = new Vector2(bubbleW, 40f);
             var textH = Mathf.Max(16f, row.Text.preferredHeight);
-            var bubbleH = textH + 8f;
+            var bubbleH = textH + 12f;
             row.BubbleRt.sizeDelta = new Vector2(bubbleW, bubbleH);
             return bubbleH;
         }

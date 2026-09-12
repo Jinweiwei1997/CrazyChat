@@ -413,7 +413,7 @@ namespace CrazyChat.Overlay
             if (_bubble != null)
             {
                 var bubbleColor = OverlaySkin.ThemeControl(theme);
-                bubbleColor.a = 0.58f;
+                bubbleColor.a = OverlaySkin.ReduceTransparency ? 1f : 0.58f;
                 ApplyFlatStyle(_bubble, control, bubbleColor);
             }
             if (_badge != null)
