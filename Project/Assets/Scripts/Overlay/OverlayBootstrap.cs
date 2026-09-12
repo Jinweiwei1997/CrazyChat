@@ -145,8 +145,7 @@ namespace CrazyChat.Overlay
 
             _steamSessionOpen = false;
 #if !DISABLESTEAMWORKS
-            var steam = FindObjectOfType<SteamManager>();
-            if (steam != null)
+            if (FindObjectOfType<SteamManager>() != null)
             {
                 try
                 {
@@ -155,17 +154,6 @@ namespace CrazyChat.Overlay
                 catch (System.Exception)
                 {
                 }
-
-                DestroyImmediate(steam.gameObject);
-                return;
-            }
-
-            try
-            {
-                SteamAPI.Shutdown();
-            }
-            catch (System.Exception)
-            {
             }
 #endif
         }

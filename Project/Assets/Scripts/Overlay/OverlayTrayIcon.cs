@@ -6,28 +6,26 @@ using UnityEngine;
 namespace CrazyChat.Overlay
 {
     /// <summary>
-    /// Windows Standalone 通知区托盘图标：悬停 CrazyChat，右键退出，左键无操作。
+    /// Windows Standalone 通知区托盘图标：右键可取消隐藏或退出。
     /// </summary>
     public sealed class OverlayTrayIcon : MonoBehaviour
     {
 #if UNITY_STANDALONE_WIN
-        const uint NimAdd = 0x00000000;
-        const uint NimDelete = 0x00000002;
-        const uint NifMessage = 0x00000001;
-        const uint NifIcon = 0x00000002;
-        const uint NifTip = 0x00000004;
-        const uint WmApp = 0x8000;
-        const uint TrayCallback = WmApp + 1;
+        const uint NimAdd = 0;
+        const uint NimDelete = 2;
+        const uint NifMessage = 1;
+        const uint NifIcon = 2;
+        const uint NifTip = 4;
+        const uint TrayCallback = 0x8001;
         const uint WmRButtonUp = 0x0205;
         const uint WmContextMenu = 0x007B;
-        const uint WmCommand = 0x0111;
         const uint WmDestroy = 0x0002;
-        const uint WmNull = 0x0000;
-        const uint MfString = 0x00000000;
-        const uint TpmLeftAlign = 0x0000;
-        const uint TpmRightButton = 0x0002;
+        const uint WmNull = 0;
+        const uint MfString = 0;
+        const uint TpmLeftAlign = 0;
+        const uint TpmRightButton = 2;
         const uint TpmReturnCmd = 0x0100;
-        const uint PmRemove = 0x0001;
+        const uint PmRemove = 1;
         const int IdiApplication = 32512;
         const int MenuIdQuit = 1;
         const int MenuIdReveal = 2;
@@ -36,7 +34,6 @@ namespace CrazyChat.Overlay
         static readonly IntPtr HwndMessage = new IntPtr(-3);
 
         WndProc _wndProc;
-        IntPtr _wndProcPtr;
         IntPtr _hwnd;
         IntPtr _hIcon;
         bool _iconOwned;
@@ -44,8 +41,8 @@ namespace CrazyChat.Overlay
         bool _classRegistered;
         bool _pendingAdd;
         string _className;
-        System.Func<bool> _isHidden;
-        System.Action _onReveal;
+        Func<bool> _isHidden;
+        Action _onReveal;
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         struct NotifyIconData
@@ -98,78 +95,70 @@ namespace CrazyChat.Overlay
         delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-        static extern bool Shell_NotifyIcon(uint dwMessage, ref NotifyIconData lpData);
+        static extern bool Shell_NotifyIcon(uint message, ref NotifyIconData data);
 
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-        static extern IntPtr ExtractIcon(IntPtr hInst, string lpszExeFileName, int nIconIndex);
+        static extern IntPtr ExtractIcon(IntPtr instance, string path, int index);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        static extern ushort RegisterClassEx(ref WndClassEx lpwcx);
+        static extern ushort RegisterClassEx(ref WndClassEx windowClass);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        static extern bool UnregisterClass(string lpClassName, IntPtr hInstance);
+        static extern bool UnregisterClass(string className, IntPtr instance);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         static extern IntPtr CreateWindowEx(
-            uint dwExStyle,
-            string lpClassName,
-            string lpWindowName,
-            uint dwStyle,
-            int x,
-            int y,
-            int nWidth,
-            int nHeight,
-            IntPtr hWndParent,
-            IntPtr hMenu,
-            IntPtr hInstance,
-            IntPtr lpParam);
+            uint exStyle, string className, string windowName, uint style,
+            int x, int y, int width, int height, IntPtr parent, IntPtr menu,
+            IntPtr instance, IntPtr parameter);
 
         [DllImport("user32.dll", SetLastError = true)]
-        static extern bool DestroyWindow(IntPtr hWnd);
+        static extern bool DestroyWindow(IntPtr window);
 
         [DllImport("user32.dll")]
-        static extern IntPtr DefWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+        static extern IntPtr DefWindowProc(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
 
         [DllImport("user32.dll")]
-        static extern bool PeekMessage(out Msg lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax, uint wRemoveMsg);
+        static extern bool PeekMessage(out Msg message, IntPtr window, uint min, uint max, uint remove);
 
         [DllImport("user32.dll")]
-        static extern bool TranslateMessage(ref Msg lpMsg);
+        static extern bool TranslateMessage(ref Msg message);
 
         [DllImport("user32.dll")]
-        static extern IntPtr DispatchMessage(ref Msg lpMsg);
+        static extern IntPtr DispatchMessage(ref Msg message);
 
         [DllImport("user32.dll")]
         static extern IntPtr CreatePopupMenu();
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        static extern bool AppendMenu(IntPtr hMenu, uint uFlags, UIntPtr uIDNewItem, string lpNewItem);
+        static extern bool AppendMenu(IntPtr menu, uint flags, UIntPtr id, string text);
 
         [DllImport("user32.dll")]
-        static extern bool DestroyMenu(IntPtr hMenu);
+        static extern bool DestroyMenu(IntPtr menu);
 
         [DllImport("user32.dll")]
-        static extern uint TrackPopupMenu(IntPtr hMenu, uint uFlags, int x, int y, int nReserved, IntPtr hWnd, IntPtr prcRect);
+        static extern uint TrackPopupMenu(
+            IntPtr menu, uint flags, int x, int y, int reserved, IntPtr window, IntPtr rect);
 
         [DllImport("user32.dll")]
-        static extern bool GetCursorPos(out Point lpPoint);
+        static extern bool GetCursorPos(out Point point);
 
         [DllImport("user32.dll")]
-        static extern bool SetForegroundWindow(IntPtr hWnd);
+        static extern bool SetForegroundWindow(IntPtr window);
 
         [DllImport("user32.dll")]
-        static extern bool DestroyIcon(IntPtr hIcon);
+        static extern bool DestroyIcon(IntPtr icon);
 
         [DllImport("user32.dll")]
-        static extern IntPtr LoadIcon(IntPtr hInstance, IntPtr lpIconName);
+        static extern IntPtr LoadIcon(IntPtr instance, IntPtr iconName);
 
         [DllImport("user32.dll", SetLastError = true)]
-        static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+        static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-        static extern IntPtr GetModuleHandle(string lpModuleName);
+        static extern IntPtr GetModuleHandle(string moduleName);
 
-        public void BindStealth(System.Func<bool> isHidden, System.Action onReveal)
+        public void BindStealth(Func<bool> isHidden, Action onReveal)
         {
             _isHidden = isHidden;
             _onReveal = onReveal;
@@ -183,20 +172,8 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            // Defer native tray setup so Awake/AddComponent cannot hard-crash startup.
+            // 不在 AddComponent/OnEnable 调用栈里创建原生窗口。
             _pendingAdd = true;
-        }
-
-        void OnDisable()
-        {
-            _pendingAdd = false;
-            Remove();
-        }
-
-        void OnDestroy()
-        {
-            _pendingAdd = false;
-            Remove();
         }
 
         void Update()
@@ -212,11 +189,23 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            while (PeekMessage(out var msg, _hwnd, 0, 0, PmRemove))
+            while (PeekMessage(out var message, _hwnd, 0, 0, PmRemove))
             {
-                TranslateMessage(ref msg);
-                DispatchMessage(ref msg);
+                TranslateMessage(ref message);
+                DispatchMessage(ref message);
             }
+        }
+
+        void OnDisable()
+        {
+            _pendingAdd = false;
+            Remove();
+        }
+
+        void OnDestroy()
+        {
+            _pendingAdd = false;
+            Remove();
         }
 
         void TryAdd()
@@ -231,17 +220,15 @@ namespace CrazyChat.Overlay
                 var module = GetModuleHandle(null);
                 _className = "CrazyChat.OverlayTray." + GetInstanceID();
                 _wndProc = WindowProc;
-                _wndProcPtr = Marshal.GetFunctionPointerForDelegate(_wndProc);
-
-                var wc = new WndClassEx
+                var windowClass = new WndClassEx
                 {
                     cbSize = (uint)Marshal.SizeOf(typeof(WndClassEx)),
-                    lpfnWndProc = _wndProcPtr,
+                    lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
                     hInstance = module,
                     lpszClassName = _className
                 };
 
-                if (RegisterClassEx(ref wc) == 0)
+                if (RegisterClassEx(ref windowClass) == 0)
                 {
                     Debug.LogWarning("[CrazyChat] RegisterClassEx for tray failed.");
                     return;
@@ -249,23 +236,12 @@ namespace CrazyChat.Overlay
 
                 _classRegistered = true;
                 _hwnd = CreateWindowEx(
-                    0,
-                    _className,
-                    "CrazyChatTray",
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    HwndMessage,
-                    IntPtr.Zero,
-                    module,
-                    IntPtr.Zero);
-
+                    0, _className, "CrazyChatTray", 0,
+                    0, 0, 0, 0, HwndMessage, IntPtr.Zero, module, IntPtr.Zero);
                 if (_hwnd == IntPtr.Zero)
                 {
                     Debug.LogWarning("[CrazyChat] CreateWindowEx for tray failed.");
-                    CleanupNative(keepIcon: false);
+                    CleanupNative();
                     return;
                 }
 
@@ -274,7 +250,7 @@ namespace CrazyChat.Overlay
                 if (!Shell_NotifyIcon(NimAdd, ref data))
                 {
                     Debug.LogWarning("[CrazyChat] Shell_NotifyIcon NIM_ADD failed.");
-                    CleanupNative(keepIcon: false);
+                    CleanupNative();
                     return;
                 }
 
@@ -283,31 +259,8 @@ namespace CrazyChat.Overlay
             catch (Exception ex)
             {
                 Debug.LogWarning("[CrazyChat] Tray icon setup failed: " + ex.Message);
-                CleanupNative(keepIcon: false);
+                CleanupNative();
             }
-        }
-
-        void Remove()
-        {
-            if (!_added && _hwnd == IntPtr.Zero && !_classRegistered)
-            {
-                return;
-            }
-
-            try
-            {
-                if (_added && _hwnd != IntPtr.Zero)
-                {
-                    var data = BuildNotifyData();
-                    Shell_NotifyIcon(NimDelete, ref data);
-                    _added = false;
-                }
-            }
-            catch (Exception)
-            {
-            }
-
-            CleanupNative(keepIcon: false);
         }
 
         NotifyIconData BuildNotifyData()
@@ -329,14 +282,14 @@ namespace CrazyChat.Overlay
             owned = false;
             try
             {
-                var exe = ResolveExePath();
-                if (!string.IsNullOrEmpty(exe))
+                var path = ResolveExePath();
+                if (!string.IsNullOrEmpty(path))
                 {
-                    var extracted = ExtractIcon(module, exe, 0);
-                    if (extracted != IntPtr.Zero && extracted != new IntPtr(1))
+                    var icon = ExtractIcon(module, path, 0);
+                    if (icon != IntPtr.Zero && icon != new IntPtr(1))
                     {
                         owned = true;
-                        return extracted;
+                        return icon;
                     }
                 }
             }
@@ -352,31 +305,9 @@ namespace CrazyChat.Overlay
             try
             {
                 var args = Environment.GetCommandLineArgs();
-                if (args != null && args.Length > 0 && !string.IsNullOrEmpty(args[0]) && File.Exists(args[0]))
+                if (args != null && args.Length > 0 && File.Exists(args[0]))
                 {
                     return Path.GetFullPath(args[0]);
-                }
-            }
-            catch (Exception)
-            {
-            }
-
-            try
-            {
-                var dir = Directory.GetParent(Application.dataPath)?.FullName;
-                if (!string.IsNullOrEmpty(dir))
-                {
-                    var byProduct = Path.Combine(dir, Application.productName + ".exe");
-                    if (File.Exists(byProduct))
-                    {
-                        return byProduct;
-                    }
-
-                    var byName = Path.Combine(dir, "CrazyChat.exe");
-                    if (File.Exists(byName))
-                    {
-                        return byName;
-                    }
                 }
             }
             catch (Exception)
@@ -386,34 +317,28 @@ namespace CrazyChat.Overlay
             return null;
         }
 
-        IntPtr WindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+        IntPtr WindowProc(IntPtr window, uint message, IntPtr wParam, IntPtr lParam)
         {
-            if (msg == TrayCallback)
+            if (message == TrayCallback)
             {
-                var mouse = (uint)lParam.ToInt64();
-                if (mouse == WmRButtonUp || mouse == WmContextMenu)
+                var mouseMessage = (uint)lParam.ToInt64();
+                if (mouseMessage == WmRButtonUp || mouseMessage == WmContextMenu)
                 {
-                    ShowQuitMenu();
+                    ShowMenu();
                 }
 
                 return IntPtr.Zero;
             }
 
-            if (msg == WmCommand && wParam.ToInt32() == MenuIdQuit)
-            {
-                QuitGame();
-                return IntPtr.Zero;
-            }
-
-            if (msg == WmDestroy)
+            if (message == WmDestroy)
             {
                 return IntPtr.Zero;
             }
 
-            return DefWindowProc(hWnd, msg, wParam, lParam);
+            return DefWindowProc(window, message, wParam, lParam);
         }
 
-        void ShowQuitMenu()
+        void ShowMenu()
         {
             var menu = CreatePopupMenu();
             if (menu == IntPtr.Zero)
@@ -429,24 +354,19 @@ namespace CrazyChat.Overlay
                 }
 
                 AppendMenu(menu, MfString, new UIntPtr(MenuIdQuit), "退出");
-                GetCursorPos(out var pt);
+                GetCursorPos(out var point);
                 SetForegroundWindow(_hwnd);
-                var cmd = TrackPopupMenu(
-                    menu,
-                    TpmLeftAlign | TpmRightButton | TpmReturnCmd,
-                    pt.X,
-                    pt.Y,
-                    0,
-                    _hwnd,
-                    IntPtr.Zero);
+                var command = TrackPopupMenu(
+                    menu, TpmLeftAlign | TpmRightButton | TpmReturnCmd,
+                    point.X, point.Y, 0, _hwnd, IntPtr.Zero);
                 PostMessage(_hwnd, WmNull, IntPtr.Zero, IntPtr.Zero);
-                if (cmd == MenuIdReveal)
+                if (command == MenuIdReveal)
                 {
                     _onReveal?.Invoke();
                 }
-                else if (cmd == MenuIdQuit)
+                else if (command == MenuIdQuit)
                 {
-                    QuitGame();
+                    Application.Quit();
                 }
             }
             finally
@@ -455,12 +375,25 @@ namespace CrazyChat.Overlay
             }
         }
 
-        static void QuitGame()
+        void Remove()
         {
-            Application.Quit();
+            if (_added && _hwnd != IntPtr.Zero)
+            {
+                try
+                {
+                    var data = BuildNotifyData();
+                    Shell_NotifyIcon(NimDelete, ref data);
+                }
+                catch (Exception)
+                {
+                }
+            }
+
+            _added = false;
+            CleanupNative();
         }
 
-        void CleanupNative(bool keepIcon)
+        void CleanupNative()
         {
             if (_hwnd != IntPtr.Zero)
             {
@@ -475,29 +408,17 @@ namespace CrazyChat.Overlay
                 _className = null;
             }
 
-            if (!keepIcon && _hIcon != IntPtr.Zero)
+            if (_iconOwned && _hIcon != IntPtr.Zero)
             {
-                // ExtractIcon returns a copy that must be destroyed; LoadIcon shared icons must not.
-                if (_iconOwned)
-                {
-                    DestroyIcon(_hIcon);
-                }
-
-                _hIcon = IntPtr.Zero;
-                _iconOwned = false;
+                DestroyIcon(_hIcon);
             }
 
+            _hIcon = IntPtr.Zero;
+            _iconOwned = false;
             _wndProc = null;
-            _wndProcPtr = IntPtr.Zero;
-            _added = false;
         }
 #else
-        void Awake()
-        {
-            enabled = false;
-        }
-
-        public void BindStealth(System.Func<bool> isHidden, System.Action onReveal)
+        public void BindStealth(Func<bool> isHidden, Action onReveal)
         {
         }
 #endif

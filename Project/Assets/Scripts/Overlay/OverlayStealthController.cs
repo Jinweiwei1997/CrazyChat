@@ -133,9 +133,9 @@ namespace CrazyChat.Overlay
 
         void SetPhase(Phase next)
         {
-            var wasHiddenMenu = IsHidden;
+            var wasHidden = IsHidden;
             _phase = next;
-            if (wasHiddenMenu != IsHidden)
+            if (wasHidden != IsHidden)
             {
                 _hiddenChanged?.Invoke();
             }
@@ -186,7 +186,6 @@ namespace CrazyChat.Overlay
             fillRt.anchorMin = fillRt.anchorMax = new Vector2(0.5f, 0.5f);
             fillRt.sizeDelta = new Vector2(RingFillSize, RingFillSize);
 
-            // Punch a soft hole: center disc so fill reads as a ring.
             var holeGo = new GameObject("Hole", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             holeGo.transform.SetParent(_hudRoot, false);
             var hole = holeGo.GetComponent<Image>();
@@ -194,8 +193,7 @@ namespace CrazyChat.Overlay
             hole.color = new Color(0.08f, 0.09f, 0.11f, 0.92f);
             hole.raycastTarget = false;
             var holeRt = hole.rectTransform;
-            holeRt.anchorMin = new Vector2(0.5f, 0.5f);
-            holeRt.anchorMax = new Vector2(0.5f, 0.5f);
+            holeRt.anchorMin = holeRt.anchorMax = new Vector2(0.5f, 0.5f);
             holeRt.sizeDelta = new Vector2(RingHoleSize, RingHoleSize);
 
             var labelGo = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
@@ -207,8 +205,7 @@ namespace CrazyChat.Overlay
             _label.color = Color.white;
             _label.raycastTarget = false;
             var labelRt = _label.rectTransform;
-            labelRt.anchorMin = new Vector2(0.5f, 0.5f);
-            labelRt.anchorMax = new Vector2(0.5f, 0.5f);
+            labelRt.anchorMin = labelRt.anchorMax = new Vector2(0.5f, 0.5f);
             labelRt.sizeDelta = new Vector2(72f, 40f);
             labelRt.anchoredPosition = new Vector2(0f, -24f);
 
@@ -231,7 +228,6 @@ namespace CrazyChat.Overlay
             if (_ringFill != null)
             {
                 _ringFill.fillAmount = Mathf.Clamp01(progress);
-                _ringFill.color = OverlaySprites.Accent;
             }
 
             if (_label != null && text != null)

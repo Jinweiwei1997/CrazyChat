@@ -61,6 +61,9 @@ namespace CrazyChat.Overlay
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
 
+        [DllImport("user32.dll")]
+        static extern bool IsWindow(IntPtr hWnd);
+
         [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
         static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
 
@@ -182,7 +185,7 @@ namespace CrazyChat.Overlay
         public void SuspendTopmostForDialog(bool suspend)
         {
             _suspendTopmost = suspend;
-            if (!_applied || _hwnd == IntPtr.Zero)
+            if (!_applied || !EnsureWindowHandle())
             {
                 return;
             }
@@ -207,7 +210,7 @@ namespace CrazyChat.Overlay
         public void FocusForTextInput()
         {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-            if (!_applied || _hwnd == IntPtr.Zero)
+            if (!_applied || !EnsureWindowHandle())
             {
                 return;
             }
@@ -277,12 +280,12 @@ namespace CrazyChat.Overlay
         void ApplyChrome()
         {
             _hwnd = GetActiveWindow();
-            if (_hwnd == IntPtr.Zero)
+            if (_hwnd == IntPtr.Zero || !IsWindow(_hwnd))
             {
                 _hwnd = FindWindow("UnityWndClass", Application.productName);
             }
 
-            if (_hwnd == IntPtr.Zero)
+            if (!EnsureWindowHandle())
             {
                 Debug.LogWarning("[Overlay] 找不到游戏窗口，无法启用置顶透明。");
                 return;
@@ -332,6 +335,13 @@ namespace CrazyChat.Overlay
                 yield return move;
             }
 
+            _hwnd = IntPtr.Zero;
+            if (!EnsureWindowHandle())
+            {
+                _moveDisplayRoutine = null;
+                yield break;
+            }
+
             SetWindowPos(_hwnd, _alwaysOnTop ? HwndTopmost : HwndNoTopmost, 0, 0, 0, 0,
                 SwpNoMove | SwpNoSize | SwpFrameChanged | SwpShowWindow);
             _appliedDisplayIndex = index;
@@ -340,7 +350,7 @@ namespace CrazyChat.Overlay
 
         void SetClickThrough(bool clickThrough)
         {
-            if (_hwnd == IntPtr.Zero || _clickThrough == clickThrough)
+            if (_clickThrough == clickThrough || !EnsureWindowHandle())
             {
                 return;
             }
@@ -351,7 +361,7 @@ namespace CrazyChat.Overlay
 
         void ApplyTopmost()
         {
-            if (_hwnd == IntPtr.Zero)
+            if (!EnsureWindowHandle())
             {
                 return;
             }
@@ -362,6 +372,11 @@ namespace CrazyChat.Overlay
 
         void ApplyExStyle(bool clickThrough)
         {
+            if (!EnsureWindowHandle())
+            {
+                return;
+            }
+
             var ex = (ulong)GetWindowLongPtr(_hwnd, GwlExStyle).ToInt64();
             ex |= WsExLayered | WsExToolWindow;
             if (_alwaysOnTop)
@@ -383,6 +398,17 @@ namespace CrazyChat.Overlay
             }
 
             SetWindowLongPtr(_hwnd, GwlExStyle, new IntPtr((long)ex));
+        }
+
+        bool EnsureWindowHandle()
+        {
+            if (_hwnd != IntPtr.Zero && IsWindow(_hwnd))
+            {
+                return true;
+            }
+
+            _hwnd = FindWindow("UnityWndClass", Application.productName);
+            return _hwnd != IntPtr.Zero && IsWindow(_hwnd);
         }
 #endif
     }
