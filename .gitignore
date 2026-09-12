@@ -4,6 +4,9 @@
 # Root-level VS Code Codicons source checkout
 /vscode-codicons-main/
 
+# Release archives stay local; commit the unpacked export folder instead.
+*.rar
+
 .utmp/
 /Project/[Ll]ibrary/
 /Project/[Tt]emp/
