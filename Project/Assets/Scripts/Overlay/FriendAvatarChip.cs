@@ -34,7 +34,6 @@ namespace CrazyChat.Overlay
             : 5f;
         bool _presenceActive;
         bool _presenceMode;
-        Image _ring;
         GameObject _nameRoot;
         Text _nameText;
         Text _countText;
@@ -127,18 +126,6 @@ namespace CrazyChat.Overlay
             _body.pivot = new Vector2(0.5f, 0.5f);
             _body.sizeDelta = new Vector2(_size, _size);
             _body.anchoredPosition = Vector2.zero;
-
-            var shadow = CreateImage("Shadow", _body, new Color(0f, 0f, 0f, 0.35f), OverlaySprites.RoundedSquare);
-            var shadowRt = shadow.rectTransform;
-            shadowRt.anchorMin = Vector2.zero;
-            shadowRt.anchorMax = Vector2.one;
-            shadowRt.offsetMin = new Vector2(4f, -6f);
-            shadowRt.offsetMax = new Vector2(4f, -6f);
-            shadow.raycastTarget = false;
-
-            _ring = CreateImage("Ring", _body, new Color(0.35f, 0.9f, 0.45f, 1f), OverlaySprites.RoundedSquare);
-            Stretch(_ring.rectTransform);
-            _ring.raycastTarget = false;
 
             var maskGo = new GameObject("Mask", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Mask));
             maskGo.transform.SetParent(_body, false);
@@ -284,10 +271,6 @@ namespace CrazyChat.Overlay
                     ? new Color(0.35f, 0.62f, 0.95f)
                     : new Color(0.55f, 0.58f, 0.65f);
             }
-
-            _ring.color = _friend.IsLocal
-                ? new Color(0.95f, 0.78f, 0.28f, 1f)
-                : new Color(0.35f, 0.9f, 0.45f, 1f);
 
             var label = _friend.IsLocal ? _friend.Name + "（你）" : _friend.Name;
             _nameText.text = label;
@@ -491,7 +474,7 @@ namespace CrazyChat.Overlay
         public void SetSelected(bool selected)
         {
             _selected = selected;
-            RefreshChatChrome();
+            RefreshNameVisibility();
         }
 
         public void SetChatExpanded(bool expanded)
@@ -534,16 +517,6 @@ namespace CrazyChat.Overlay
                 }
             }
 
-            if (_ring != null && _friend != null)
-            {
-                _ring.color = _selected && !_friend.IsLocal
-                    ? OverlaySkin.ThemeAccent(_view != null && _view.Settings != null
-                        ? _view.Settings.SettingsTheme
-                        : 1)
-                    : _friend.IsLocal
-                        ? new Color(0.95f, 0.78f, 0.28f, 1f)
-                        : new Color(0.35f, 0.9f, 0.45f, 1f);
-            }
         }
 
         string FormatUnread(int count)
@@ -671,7 +644,7 @@ namespace CrazyChat.Overlay
         public void OnPointerEnter(PointerEventData eventData)
         {
             _hover = true;
-            _nameRoot.SetActive(true);
+            RefreshNameVisibility();
             if (!IsLocal)
             {
                 _view?.OnChipHoverEnter(this);
@@ -681,10 +654,18 @@ namespace CrazyChat.Overlay
         public void OnPointerExit(PointerEventData eventData)
         {
             _hover = false;
-            _nameRoot.SetActive(false);
+            RefreshNameVisibility();
             if (!IsLocal)
             {
                 _view?.OnChipHoverExit(this);
+            }
+        }
+
+        void RefreshNameVisibility()
+        {
+            if (_nameRoot != null)
+            {
+                _nameRoot.SetActive(_hover || (_selected && !IsLocal));
             }
         }
 
