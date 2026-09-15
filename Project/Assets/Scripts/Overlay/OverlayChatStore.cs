@@ -167,13 +167,6 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            var latest = GetLatest(friendId);
-            if (latest != null && latest.mine == mine && latest.text == text &&
-                DateTimeOffset.UtcNow.ToUnixTimeSeconds() - latest.time < 2)
-            {
-                return;
-            }
-
             if (!_threads.TryGetValue(friendId, out var list))
             {
                 list = new List<OverlayChatMessage>();

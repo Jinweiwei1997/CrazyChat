@@ -710,8 +710,10 @@ namespace CrazyChat.Overlay
             }
 
             var text = _input.text;
-            _input.text = string.Empty;
-            _chat.Send(_friendId, text);
+            if (_chat.Send(_friendId, text))
+            {
+                _input.text = string.Empty;
+            }
             KeepInputFocused();
         }
 

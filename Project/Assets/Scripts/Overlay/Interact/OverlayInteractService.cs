@@ -18,6 +18,8 @@ namespace CrazyChat.Overlay.Interact
     public sealed class OverlayInteractService : MonoBehaviour
     {
         const int Channel = 2;
+        // Includes the 12,000-character A/B image chunks and their protocol headers.
+        const int MaxPayloadBytes = 16384;
         const string Prefix = "IX1|";
 
         public event Action<ulong, string> Received;
@@ -70,14 +72,21 @@ namespace CrazyChat.Overlay.Interact
             var identity = new SteamNetworkingIdentity();
             identity.SetSteamID64(friendId);
             var bytes = Encoding.UTF8.GetBytes(Prefix + actionId);
+            if (bytes.Length > MaxPayloadBytes) return;
             var handle = GCHandle.Alloc(bytes, GCHandleType.Pinned);
-            SteamNetworkingMessages.SendMessageToUser(
-                ref identity,
-                handle.AddrOfPinnedObject(),
-                (uint)bytes.Length,
-                Constants.k_nSteamNetworkingSend_Reliable | Constants.k_nSteamNetworkingSend_AutoRestartBrokenSession,
-                Channel);
-            handle.Free();
+            try
+            {
+                SteamNetworkingMessages.SendMessageToUser(
+                    ref identity,
+                    handle.AddrOfPinnedObject(),
+                    (uint)bytes.Length,
+                    Constants.k_nSteamNetworkingSend_Reliable | Constants.k_nSteamNetworkingSend_AutoRestartBrokenSession,
+                    Channel);
+            }
+            finally
+            {
+                handle.Free();
+            }
 #endif
         }
 
@@ -96,7 +105,11 @@ namespace CrazyChat.Overlay.Interact
         void OnSessionRequest(SteamNetworkingMessagesSessionRequest_t ev)
         {
             var identity = ev.m_identityRemote;
-            SteamNetworkingMessages.AcceptSessionWithUser(ref identity);
+            if (SteamFriends.GetFriendRelationship(new CSteamID(identity.GetSteamID64())) ==
+                EFriendRelationship.k_EFriendRelationshipFriend)
+            {
+                SteamNetworkingMessages.AcceptSessionWithUser(ref identity);
+            }
         }
 
         void ReceiveP2P()
@@ -110,21 +123,33 @@ namespace CrazyChat.Overlay.Interact
                     continue;
                 }
 
-                var message = SteamNetworkingMessage_t.FromIntPtr(ptr);
-                var identity = message.m_identityPeer;
-                var friendId = identity.GetSteamID64();
-                var actionId = Decode(message.m_pData, message.m_cbSize);
-                SteamNetworkingMessage_t.Release(ptr);
-                if (!string.IsNullOrEmpty(actionId))
+                try
                 {
-                    Received?.Invoke(friendId, actionId);
+                    var message = SteamNetworkingMessage_t.FromIntPtr(ptr);
+                    var identity = message.m_identityPeer;
+                    var friendId = identity.GetSteamID64();
+                    if (SteamFriends.GetFriendRelationship(new CSteamID(friendId)) !=
+                        EFriendRelationship.k_EFriendRelationshipFriend)
+                    {
+                        continue;
+                    }
+                    var actionId = Decode(message.m_pData, message.m_cbSize);
+
+                    if (!string.IsNullOrEmpty(actionId))
+                    {
+                        Received?.Invoke(friendId, actionId);
+                    }
+                }
+                finally
+                {
+                    SteamNetworkingMessage_t.Release(ptr);
                 }
             }
         }
 
         static string Decode(IntPtr data, int size)
         {
-            if (data == IntPtr.Zero || size <= 0)
+            if (data == IntPtr.Zero || size <= Prefix.Length || size > MaxPayloadBytes)
             {
                 return null;
             }
@@ -132,7 +157,7 @@ namespace CrazyChat.Overlay.Interact
             var bytes = new byte[size];
             Marshal.Copy(data, bytes, 0, size);
             var raw = Encoding.UTF8.GetString(bytes);
-            return raw.StartsWith(Prefix, StringComparison.Ordinal) ? raw.Substring(Prefix.Length) : raw;
+            return raw.StartsWith(Prefix, StringComparison.Ordinal) ? raw.Substring(Prefix.Length) : null;
         }
 #endif
     }

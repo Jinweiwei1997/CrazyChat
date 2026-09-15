@@ -544,7 +544,7 @@ namespace CrazyChat.Overlay
             {
                 if (pair.Value != null)
                 {
-                    pair.Value.SetSelected(pair.Key == selected);
+                    pair.Value.SetSelected(pair.Key == selected, _targeting);
                     pair.Value.SetChatExpanded(_chatUi != null && _chatUi.IsOpen && pair.Key == _chatUi.OpenFriendId);
                 }
             }
@@ -689,10 +689,27 @@ namespace CrazyChat.Overlay
 
         void StepTarget(int delta)
         {
-            if (!_targeting || IsTyping() || _targets.Count == 0)
+            if (!_targeting || IsTyping())
             {
                 return;
             }
+
+            RebuildTargetList();
+            if (_targets.Count == 0)
+            {
+                StopTargeting();
+                return;
+            }
+
+            _targets.Sort((a, b) =>
+            {
+                var pa = _chips[a].LayoutPosition;
+                var pb = _chips[b].LayoutPosition;
+                var horizontal = pa.x.CompareTo(pb.x);
+                if (horizontal != 0) return horizontal;
+                var vertical = pb.y.CompareTo(pa.y);
+                return vertical != 0 ? vertical : a.CompareTo(b);
+            });
 
             var index = _targets.IndexOf(_targetId);
             if (index < 0)

@@ -12,6 +12,7 @@ namespace CrazyChat.Overlay
         public static readonly Color Danger = new Color(0.80f, 0.33f, 0.35f, 1f);
         public static readonly Color TextMuted = new Color(1f, 1f, 1f, 0.42f);
         static Sprite _circle;
+        static Sprite _sparkles;
         static Sprite _dashedCircle;
         static Sprite _roundedRect;
         static Sprite _roundedSquare;
@@ -31,6 +32,26 @@ namespace CrazyChat.Overlay
             }
         }
 
+        public static Sprite Sparkles
+        {
+            get
+            {
+                if (_sparkles == null)
+                {
+                    var texture = Resources.Load<Texture2D>("Overlay/UI/selection_sparkles");
+                    if (texture == null)
+                    {
+                        Debug.LogError("Missing selection marker: Overlay/UI/selection_sparkles");
+                        return null;
+                    }
+                    _sparkles = Sprite.Create(texture,
+                        new Rect(0f, 0f, texture.width, texture.height),
+                        new Vector2(0.5f, 0.5f), 100f);
+                    _sparkles.name = "OverlaySparkles";
+                }
+                return _sparkles;
+            }
+        }
         public static Sprite DashedCircle
         {
             get

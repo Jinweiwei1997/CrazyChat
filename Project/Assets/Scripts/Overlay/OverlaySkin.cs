@@ -79,6 +79,9 @@ namespace CrazyChat.Overlay
         public static Color ThemeAccent(int theme) =>
             Color.Lerp(NeutralAccent(theme), HueColor(_themeHue), _themeIntensity);
 
+        public static Color ThemeAccentText(int theme) =>
+            IsLightColor(ThemeAccent(theme)) ? Color.black : Color.white;
+
         public static Color ThemeMuted(int theme) => IsLight(theme)
             ? new Color(0.34f, 0.34f, 0.34f, 1f)
             : Color.Lerp(SettingsThemeText(theme), Tint(BaseBackground(theme)), 0.42f);
@@ -116,9 +119,7 @@ namespace CrazyChat.Overlay
 
         public static Color InputIconColor(int theme)
         {
-            return IsLight(theme)
-                ? Color.white
-                : new Color(0.14f, 0.14f, 0.15f, 1f);
+            return ThemeAccent(theme);
         }
 
         static Color BaseBackground(int theme) => PresetBackground(theme);

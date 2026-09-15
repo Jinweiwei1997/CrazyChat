@@ -7,7 +7,6 @@ namespace CrazyChat.Overlay
 {
     public sealed class FriendAvatarChip : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
-        const string ControlSpriteResource = "Overlay/UI/control_rect";
         const float BubbleVisualScale = 1f;
         const float BubbleWidthRatio = 2f / 3f;
         const float BubbleHeight = 26f * BubbleVisualScale;
@@ -41,6 +40,7 @@ namespace CrazyChat.Overlay
         Image _bubble;
         Text _bubbleText;
         Text _bubbleNextText;
+        Image _selectionMarker;
         Image _badge;
         Text _badgeText;
         string _bubbleContent = "";
@@ -213,6 +213,17 @@ namespace CrazyChat.Overlay
             _bubbleNextText = FillChipLabel(textViewport.transform, "", BubbleFontSize, OverlaySkin.Text);
             _bubbleNextText.gameObject.SetActive(false);
 
+            _selectionMarker = CreateImage("SelectionMarker", bubbleRt,
+                Color.white, OverlaySprites.Sparkles);
+            _selectionMarker.raycastTarget = false;
+            _selectionMarker.type = Image.Type.Simple;
+            var markerRt = _selectionMarker.rectTransform;
+            markerRt.anchorMin = markerRt.anchorMax = new Vector2(0f, 0.5f);
+            markerRt.pivot = new Vector2(0.5f, 0.5f);
+            markerRt.sizeDelta = new Vector2(20f, 20f);
+            markerRt.anchoredPosition = new Vector2(-2f, 0f);
+            _selectionMarker.gameObject.SetActive(false);
+
             _badge = CreateImage("Badge", _bubble.rectTransform, new Color32(250, 81, 81, 255), OverlaySprites.Circle);
             _badge.raycastTarget = false;
             var badgeRt = _badge.rectTransform;
@@ -273,7 +284,7 @@ namespace CrazyChat.Overlay
                     : new Color(0.55f, 0.58f, 0.65f);
             }
 
-            var label = _friend.IsLocal ? _friend.Name + "（你）" : _friend.Name;
+            var label = _friend.Name;
             _nameText.text = label;
             RefreshCount();
             RefreshChatChrome();
@@ -393,12 +404,11 @@ namespace CrazyChat.Overlay
         public void ApplySkin()
         {
             var theme = _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
-            var control = Resources.Load<Sprite>(ControlSpriteResource);
             if (_bubble != null)
             {
-                var bubbleColor = OverlaySkin.ThemeControl(theme);
+                var bubbleColor = OverlaySkin.ThemeAccent(theme);
                 bubbleColor.a = OverlaySkin.ReduceTransparency ? 1f : 0.58f;
-                ApplyFlatStyle(_bubble, control, bubbleColor);
+                ApplyFlatStyle(_bubble, OverlaySprites.RoundedRect, bubbleColor);
             }
             if (_badge != null)
             {
@@ -411,11 +421,11 @@ namespace CrazyChat.Overlay
 
             if (_bubbleText != null)
             {
-                _bubbleText.color = OverlaySkin.SettingsThemeText(theme);
+                _bubbleText.color = OverlaySkin.ThemeAccentText(theme);
             }
             if (_bubbleNextText != null)
             {
-                _bubbleNextText.color = OverlaySkin.SettingsThemeText(theme);
+                _bubbleNextText.color = OverlaySkin.ThemeAccentText(theme);
             }
             if (_badgeText != null)
             {
@@ -432,6 +442,7 @@ namespace CrazyChat.Overlay
 
             image.sprite = sprite != null ? sprite : OverlaySprites.RoundedRect;
             image.type = Image.Type.Sliced;
+            image.pixelsPerUnitMultiplier = 1f;
             image.preserveAspect = false;
             image.color = color;
         }
@@ -446,7 +457,7 @@ namespace CrazyChat.Overlay
                     var text = unreadMessages[i] != null ? unreadMessages[i].text : null;
                     if (!string.IsNullOrEmpty(text))
                     {
-                        _bubbleUnread.Add(Ellipsize(text, 8));
+                        _bubbleUnread.Add(Ellipsize(text, 5));
                     }
                 }
             }
@@ -472,9 +483,13 @@ namespace CrazyChat.Overlay
             RefreshChatChrome();
         }
 
-        public void SetSelected(bool selected)
+        public void SetSelected(bool selected, bool keyboardTarget = false)
         {
             _selected = selected;
+            if (_selectionMarker != null)
+            {
+                _selectionMarker.gameObject.SetActive(selected && keyboardTarget && !IsLocal);
+            }
             RefreshNameVisibility();
         }
 

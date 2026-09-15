@@ -13,16 +13,12 @@ namespace CrazyChat.Overlay
     public sealed class TransparentOverlayWindow : MonoBehaviour
     {
         const float TopmostRefreshSeconds = 2f;
-        const float ClickThroughLeaveDelaySeconds = 0.12f;
         const float FocusMinIntervalSeconds = 0.75f;
         const float HeartbeatSeconds = 1f;
 
         GraphicRaycasterHost _raycasterHost;
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         bool _clickThrough = true;
-        bool _pendingClickThrough = true;
-        bool _hasPendingClickThrough;
-        float _clickThroughStableSince;
         float _lastFocusAt = -999f;
 #endif
         float _nextTopmostTime;
@@ -212,8 +208,8 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            // Need hits immediately while typing; do not wait for leave debounce.
-            SetClickThrough(false, immediate: true);
+            // Text input needs mouse interaction immediately.
+            SetClickThrough(false);
 
             var now = Time.unscaledTime;
             if (now - _lastFocusAt < FocusMinIntervalSeconds)
@@ -265,14 +261,13 @@ namespace CrazyChat.Overlay
             if (now >= _nextHeartbeatAt)
             {
                 _nextHeartbeatAt = now + HeartbeatSeconds;
-                OverlayDebugTrace.Log(
+                OverlayDebugTrace.LogVerbose(
                     "heartbeat clickThrough=" + _clickThrough +
-                    " pending=" + (_hasPendingClickThrough ? _pendingClickThrough.ToString() : "none") +
                     " fgSelf=" + (GetForegroundWindow() == _hwnd));
             }
 
             var overUi = _raycasterHost != null && _raycasterHost.IsPointerOverInteractive();
-            RequestClickThrough(!overUi);
+            SetClickThrough(!overUi);
             OverlayDebugTrace.LogClickThrough(_clickThrough, overUi);
 
             if (_alwaysOnTop && !_suspendTopmost && now >= _nextTopmostTime)
@@ -355,34 +350,8 @@ namespace CrazyChat.Overlay
             _moveDisplayRoutine = null;
         }
 
-        void RequestClickThrough(bool clickThrough)
+        void SetClickThrough(bool clickThrough)
         {
-            if (!_hasPendingClickThrough || _pendingClickThrough != clickThrough)
-            {
-                _hasPendingClickThrough = true;
-                _pendingClickThrough = clickThrough;
-                _clickThroughStableSince = Time.unscaledTime;
-            }
-
-            // Entering UI must be immediate; leaving waits so edge jitter does not thrash styles.
-            var delay = clickThrough ? ClickThroughLeaveDelaySeconds : 0f;
-            if (Time.unscaledTime - _clickThroughStableSince < delay)
-            {
-                return;
-            }
-
-            SetClickThrough(clickThrough, immediate: true);
-        }
-
-        void SetClickThrough(bool clickThrough, bool immediate = false)
-        {
-            if (immediate)
-            {
-                _hasPendingClickThrough = true;
-                _pendingClickThrough = clickThrough;
-                _clickThroughStableSince = Time.unscaledTime;
-            }
-
             if (_clickThrough == clickThrough || !EnsureWindowHandle())
             {
                 return;

@@ -11,6 +11,7 @@ namespace CrazyChat.Overlay
     /// </summary>
     public static class OverlayDebugTrace
     {
+        const long MaxLogBytes = 2 * 1024 * 1024;
         const string Tag = "[DEBUG-quit]";
         static readonly object Gate = new object();
         static string _path;
@@ -44,7 +45,7 @@ namespace CrazyChat.Overlay
             {
                 lock (Gate)
                 {
-                    File.AppendAllText(Path, line + Environment.NewLine, Encoding.UTF8);
+                    AppendBounded(line + Environment.NewLine);
                 }
             }
             catch (Exception)
@@ -52,6 +53,28 @@ namespace CrazyChat.Overlay
             }
         }
 
+        // High-frequency tracing is compiled out of release players.
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        public static void LogVerbose(string message)
+        {
+            Log(message);
+        }
+
+        static void AppendBounded(string text)
+        {
+            var path = Path;
+            if (File.Exists(path) && new FileInfo(path).Length + Encoding.UTF8.GetByteCount(text) > MaxLogBytes)
+            {
+                var previous = path + ".previous";
+                if (File.Exists(previous)) File.Delete(previous);
+                File.Move(path, previous);
+            }
+            File.AppendAllText(path, text, Encoding.UTF8);
+        }
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
         public static void LogClickThrough(bool clickThrough, bool overUi)
         {
             if (_hasLastClickThrough && _lastClickThrough == clickThrough)
@@ -128,7 +151,7 @@ namespace CrazyChat.Overlay
                         sb.AppendLine(stackTrace);
                     }
 
-                    File.AppendAllText(Path, sb.ToString(), Encoding.UTF8);
+                    AppendBounded(sb.ToString());
                 }
             }
             catch (Exception)

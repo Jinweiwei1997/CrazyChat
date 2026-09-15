@@ -18,6 +18,8 @@ namespace CrazyChat.Overlay
     public sealed class OverlayChatService : MonoBehaviour
     {
         const int Channel = 1;
+        // Existing input limit is 200 UTF-16 characters; allow up to 800 UTF-8 bytes plus CC1|.
+        const int MaxPayloadBytes = 804;
         const string Prefix = "CC1|";
 
         public OverlayChatStore Store { get; private set; }
@@ -59,12 +61,12 @@ namespace CrazyChat.Overlay
 #endif
         }
 
-        public void Send(ulong friendId, string text)
+        public bool Send(ulong friendId, string text)
         {
             text = (text ?? string.Empty).Trim();
-            if (text.Length == 0 || Store == null)
+            if (text.Length == 0 || Store == null || Encoding.UTF8.GetByteCount(text) > MaxPayloadBytes - Prefix.Length)
             {
-                return;
+                return false;
             }
 
             var localId = 0UL;
@@ -82,6 +84,7 @@ namespace CrazyChat.Overlay
                 SendP2P(friendId, text);
             }
 #endif
+            return true;
         }
 
 #if !DISABLESTEAMWORKS
@@ -99,7 +102,11 @@ namespace CrazyChat.Overlay
         void OnSessionRequest(SteamNetworkingMessagesSessionRequest_t ev)
         {
             var identity = ev.m_identityRemote;
-            SteamNetworkingMessages.AcceptSessionWithUser(ref identity);
+            if (SteamFriends.GetFriendRelationship(new CSteamID(identity.GetSteamID64())) ==
+                EFriendRelationship.k_EFriendRelationshipFriend)
+            {
+                SteamNetworkingMessages.AcceptSessionWithUser(ref identity);
+            }
         }
 
         void ReceiveP2P()
@@ -113,14 +120,26 @@ namespace CrazyChat.Overlay
                     continue;
                 }
 
-                var message = SteamNetworkingMessage_t.FromIntPtr(ptr);
-                var identity = message.m_identityPeer;
-                var friendId = identity.GetSteamID64();
-                var text = DecodePayload(message.m_pData, message.m_cbSize);
-                SteamNetworkingMessage_t.Release(ptr);
-                if (Store != null && !string.IsNullOrEmpty(text))
+                try
                 {
-                    Store.Add(friendId, text, false, friendId);
+                    var message = SteamNetworkingMessage_t.FromIntPtr(ptr);
+                    var identity = message.m_identityPeer;
+                    var friendId = identity.GetSteamID64();
+                    if (SteamFriends.GetFriendRelationship(new CSteamID(friendId)) !=
+                        EFriendRelationship.k_EFriendRelationshipFriend)
+                    {
+                        continue;
+                    }
+                    var text = DecodePayload(message.m_pData, message.m_cbSize);
+
+                    if (Store != null && !string.IsNullOrEmpty(text))
+                    {
+                        Store.Add(friendId, text, false, friendId);
+                    }
+                }
+                finally
+                {
+                    SteamNetworkingMessage_t.Release(ptr);
                 }
             }
         }
@@ -131,18 +150,24 @@ namespace CrazyChat.Overlay
             identity.SetSteamID64(friendId);
             var bytes = Encoding.UTF8.GetBytes(Prefix + text);
             var handle = GCHandle.Alloc(bytes, GCHandleType.Pinned);
-            SteamNetworkingMessages.SendMessageToUser(
-                ref identity,
-                handle.AddrOfPinnedObject(),
-                (uint)bytes.Length,
-                Constants.k_nSteamNetworkingSend_Reliable | Constants.k_nSteamNetworkingSend_AutoRestartBrokenSession,
-                Channel);
-            handle.Free();
+            try
+            {
+                SteamNetworkingMessages.SendMessageToUser(
+                    ref identity,
+                    handle.AddrOfPinnedObject(),
+                    (uint)bytes.Length,
+                    Constants.k_nSteamNetworkingSend_Reliable | Constants.k_nSteamNetworkingSend_AutoRestartBrokenSession,
+                    Channel);
+            }
+            finally
+            {
+                handle.Free();
+            }
         }
 
         static string DecodePayload(IntPtr data, int size)
         {
-            if (data == IntPtr.Zero || size <= 0)
+            if (data == IntPtr.Zero || size <= Prefix.Length || size > MaxPayloadBytes)
             {
                 return null;
             }
@@ -150,7 +175,7 @@ namespace CrazyChat.Overlay
             var bytes = new byte[size];
             Marshal.Copy(data, bytes, 0, size);
             var raw = Encoding.UTF8.GetString(bytes);
-            return raw.StartsWith(Prefix, StringComparison.Ordinal) ? raw.Substring(Prefix.Length) : raw;
+            return raw.StartsWith(Prefix, StringComparison.Ordinal) ? raw.Substring(Prefix.Length) : null;
         }
 #endif
     }
