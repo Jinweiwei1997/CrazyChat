@@ -62,6 +62,7 @@ namespace CrazyChat.Overlay
         public bool IsLocal => _friend != null && _friend.IsLocal;
 
         public Vector2 LayoutPosition => _layoutPos;
+        internal bool IsPresenceActive => _presenceMode && _presenceActive;
 
         public Vector2 FollowPosition => _layoutPos;
 
@@ -218,10 +219,10 @@ namespace CrazyChat.Overlay
             _selectionMarker.raycastTarget = false;
             _selectionMarker.type = Image.Type.Simple;
             var markerRt = _selectionMarker.rectTransform;
-            markerRt.anchorMin = markerRt.anchorMax = new Vector2(0f, 0.5f);
+            markerRt.anchorMin = markerRt.anchorMax = new Vector2(0f, 1f);
             markerRt.pivot = new Vector2(0.5f, 0.5f);
-            markerRt.sizeDelta = new Vector2(20f, 20f);
-            markerRt.anchoredPosition = new Vector2(-2f, 0f);
+            markerRt.sizeDelta = new Vector2(21f, 25f);
+            markerRt.anchoredPosition = new Vector2(2f, -2f);
             _selectionMarker.gameObject.SetActive(false);
 
             _badge = CreateImage("Badge", _bubble.rectTransform, new Color32(250, 81, 81, 255), OverlaySprites.Circle);
@@ -403,6 +404,13 @@ namespace CrazyChat.Overlay
 
         public void ApplySkin()
         {
+            if (_selectionMarker != null && _view != null)
+            {
+                var config = _view.Config;
+                _selectionMarker.rectTransform.sizeDelta = new Vector2(21f, 25f) * config.SelectionStarScale;
+                _selectionMarker.rectTransform.anchoredPosition = new Vector2(
+                    config.SelectionStarOffsetX, config.SelectionStarOffsetY);
+            }
             var theme = _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
             if (_bubble != null)
             {

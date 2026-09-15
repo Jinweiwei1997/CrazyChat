@@ -20,6 +20,9 @@ namespace CrazyChat.Overlay
 
         readonly bool[] _down = new bool[256];
         readonly bool[] _eligible = new bool[256];
+        readonly float[] _heldSince = new float[256];
+        readonly bool[] _reportedHeld = new bool[256];
+        float _nextHeldTrace;
         OverlayConfig _config;
         float _lastCtrl;
         bool _anyDown;
@@ -111,11 +114,53 @@ namespace CrazyChat.Overlay
                 any |= _eligible[vk] && pressed;
             }
 
+            TraceHeldInputs();
             _pollInitialized = true;
             SetAnyDown(any);
             return taps;
         }
 
+        void TraceHeldInputs()
+        {
+            var now = Time.unscaledTime;
+            var report = now >= _nextHeldTrace;
+            System.Text.StringBuilder held = null;
+            for (var vk = 1; vk < _down.Length; vk++)
+            {
+                if (!_down[vk] || !_eligible[vk])
+                {
+                    if (_reportedHeld[vk])
+                    {
+                        OverlayDebugTrace.Log("input-held released vk=0x" + vk.ToString("X2") +
+                            " seconds=" + (now - _heldSince[vk]).ToString("F1"));
+                    }
+                    _heldSince[vk] = 0f;
+                    _reportedHeld[vk] = false;
+                    continue;
+                }
+
+                if (_heldSince[vk] == 0f) _heldSince[vk] = now;
+                if (!report || now - _heldSince[vk] < 10f) continue;
+                if (held == null) held = new System.Text.StringBuilder();
+                held.Append(" vk=0x").Append(vk.ToString("X2"))
+                    .Append(" seconds=").Append((now - _heldSince[vk]).ToString("F1"));
+                _reportedHeld[vk] = true;
+            }
+
+            if (held != null)
+            {
+                _nextHeldTrace = now + 30f;
+                // Include sided modifier states to diagnose an aggregate Ctrl/Alt/Shift stuck bit.
+                OverlayDebugTrace.Log("input-held focused=" + Application.isFocused + held +
+                    " modifiers(LShift,RShift,LCtrl,RCtrl,LAlt,RAlt)=" +
+                    ((GetAsyncKeyState(0xA0) & 0x8000) != 0) + "," +
+                    ((GetAsyncKeyState(0xA1) & 0x8000) != 0) + "," +
+                    ((GetAsyncKeyState(0xA2) & 0x8000) != 0) + "," +
+                    ((GetAsyncKeyState(0xA3) & 0x8000) != 0) + "," +
+                    ((GetAsyncKeyState(0xA4) & 0x8000) != 0) + "," +
+                    ((GetAsyncKeyState(0xA5) & 0x8000) != 0));
+            }
+        }
         // Only poll real keyboard and mouse buttons. Undefined / IME virtual keys can report as stuck.
         static bool IsPhysicalInput(int vk)
         {

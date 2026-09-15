@@ -21,6 +21,10 @@ namespace CrazyChat.Overlay
         OverlayUserSettings _settings;
 
         bool _localActive;
+        float _localActiveSince;
+        float _nextActiveTrace;
+        float _nextRemoteTrace;
+        readonly Dictionary<ulong, float> _remotePresenceAt = new Dictionary<ulong, float>();
         readonly Dictionary<ulong, int> _remoteVersion = new Dictionary<ulong, int>();
         readonly Dictionary<ulong, bool> _remoteActive = new Dictionary<ulong, bool>();
         readonly Dictionary<ulong, int> _pushedVersion = new Dictionary<ulong, int>();
@@ -125,6 +129,8 @@ namespace CrazyChat.Overlay
             }
 
             _localActive = active;
+            _localActiveSince = Time.unscaledTime;
+            _nextActiveTrace = _localActiveSince + 10f;
             ApplyLocalChip();
             if (!LocalEnabled || _interact == null)
             {
@@ -141,6 +147,50 @@ namespace CrazyChat.Overlay
             });
         }
 
+        void Update()
+        {
+            if (_input == null) return;
+
+            // Reconcile if a previous callback was interrupted; the poller remains authoritative.
+            if (_localActive != _input.IsAnyDown)
+            {
+                OverlayDebugTrace.Log("avatar-input mismatch active=" + _localActive +
+                    " polled=" + _input.IsAnyDown);
+                SetLocalActive(_input.IsAnyDown);
+            }
+
+            var localChip = _view != null ? _view.LocalChip : null;
+            if (localChip != null && localChip.IsPresenceActive && !_localActive)
+            {
+                OverlayDebugTrace.Log("avatar-input visual-mismatch polled=" + _input.IsAnyDown);
+                ApplyLocalChip();
+            }
+
+            if (Time.unscaledTime >= _nextRemoteTrace)
+            {
+                _nextRemoteTrace = Time.unscaledTime + 30f;
+                foreach (var pair in _remotePresenceAt)
+                {
+                    if (_remoteActive.TryGetValue(pair.Key, out var active) && active &&
+                        Time.unscaledTime - pair.Value >= 10f && _view != null &&
+                        _view.TryGetChip(pair.Key, out var chip) && chip != null)
+                    {
+                        OverlayDebugTrace.Log("avatar-remote active friend=" + pair.Key +
+                            " lastPresenceSeconds=" + (Time.unscaledTime - pair.Value).ToString("F1") +
+                            " visualB=" + chip.IsPresenceActive);
+                    }
+                }
+            }
+
+            if (_localActive && Time.unscaledTime >= _nextActiveTrace)
+            {
+                _nextActiveTrace = Time.unscaledTime + 30f;
+                OverlayDebugTrace.Log("avatar-input active seconds=" +
+                    (Time.unscaledTime - _localActiveSince).ToString("F1") +
+                    " polled=" + _input.IsAnyDown + " visualB=" + (localChip != null && localChip.IsPresenceActive) + " enabled=" + LocalEnabled +
+                    " focused=" + Application.isFocused);
+            }
+        }
         void ApplyLocalChip()
         {
             var chip = _view != null ? _view.LocalChip : null;
@@ -245,6 +295,7 @@ namespace CrazyChat.Overlay
         {
             if (OverlayAvatarSync.TryDecodePresence(actionId, out var active))
             {
+                _remotePresenceAt[fromId] = Time.unscaledTime;
                 _remoteActive[fromId] = active;
                 ApplyRemoteChip(fromId);
                 return;

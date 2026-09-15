@@ -128,7 +128,7 @@ namespace CrazyChat.Overlay
             _interact.Received += OnInteractReceived;
             _interactFx = OverlayInteractFx.Create(fxLayer);
             _interactUi = OverlayInteractUi.Create(_chromeLayer, _windowLayer, this, _interact, _interactFx);
-            _inputPop = OverlayInputPopFx.Create(_chromeLayer);
+            _inputPop = OverlayInputPopFx.Create(_chromeLayer, Config);
 
             _stats = new OverlayTapStats();
             _stats.Load();
@@ -159,6 +159,15 @@ namespace CrazyChat.Overlay
             _chatUi?.Hide();
             _settingsUi?.Hide();
             HideInteractMenu();
+        }
+
+        public void ReloadTemporaryConfig()
+        {
+            Config.LoadTemporarySettings();
+            foreach (var chip in _chips.Values)
+            {
+                chip?.ApplySkin();
+            }
         }
 
         public void ApplyUserSettings()
@@ -1001,12 +1010,6 @@ namespace CrazyChat.Overlay
 
         void ReclampVisibleChips()
         {
-            if (_chips.Count == 0)
-            {
-                return;
-            }
-
-            var dirty = false;
             foreach (var pair in _chips)
             {
                 if (pair.Value == null)
@@ -1014,20 +1017,20 @@ namespace CrazyChat.Overlay
                     continue;
                 }
 
-                var pos = Clamp(pair.Value.LayoutPosition);
-                if (pos == pair.Value.LayoutPosition)
+                // Screen changes (including lock/unlock) must not overwrite the user's layout.
+                // Always project the saved normalized position into the current screen so a
+                // temporary small display cannot permanently collapse avatars onto its edge.
+                var desired = pair.Value.LayoutPosition;
+                if (_store != null && _store.TryGetPixel(pair.Key, out var saved))
                 {
-                    continue;
+                    desired = saved;
                 }
 
-                pair.Value.SetLayoutPosition(pos);
-                _store?.SetPixel(pair.Key, pos);
-                dirty = true;
-            }
-
-            if (dirty)
-            {
-                _store?.Save();
+                var pos = Clamp(desired);
+                if (pos != pair.Value.LayoutPosition)
+                {
+                    pair.Value.SetLayoutPosition(pos);
+                }
             }
         }
 

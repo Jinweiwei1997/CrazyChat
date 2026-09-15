@@ -1,0 +1,5 @@
+inputPopScale=1 # 按键气泡大小倍率，1 为原大小
+inputPopSpeedScale=1 # 按键气泡速度倍率，1 为原速度
+selectionStarScale=1 # 左侧星星大小倍率，1 为原大小
+selectionStarOffsetX=2 # 星星中心相对气泡左上角的横向偏移（像素），正右负左
+selectionStarOffsetY=-2 # 星星中心相对气泡左上角的纵向偏移（像素），正上负下

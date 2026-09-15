@@ -6,18 +6,20 @@ namespace CrazyChat.Overlay
 {
     public sealed class OverlayInputPopFx : MonoBehaviour
     {
-        const float Size = 48f;
         const float Duration = 0.55f;
         const int PoolSize = 12;
 
         RectTransform _root;
+        OverlayConfig _config;
         readonly List<Pop> _pops = new List<Pop>(PoolSize);
 
-        public static OverlayInputPopFx Create(Transform parent)
+        public static OverlayInputPopFx Create(Transform parent, OverlayConfig config)
         {
             var go = new GameObject("InputPopFx", typeof(RectTransform));
             go.transform.SetParent(parent, false);
             var fx = go.AddComponent<OverlayInputPopFx>();
+            fx._config = config;
+            config.LoadTemporarySettings();
             fx._root = (RectTransform)go.transform;
             Stretch(fx._root);
             return fx;
@@ -36,9 +38,9 @@ namespace CrazyChat.Overlay
             pop.Group.alpha = 1f;
             scale = Mathf.Max(0.1f, scale);
             pop.From = origin + new Vector2(Random.Range(-12f, 12f) * scale, 0f);
-            pop.Drift = new Vector2(0f, 63f) * scale;
+            pop.Drift = new Vector2(0f, 63f * _config.InputPopSpeedScale) * scale;
             pop.Until = Time.unscaledTime + Duration;
-            pop.Rt.sizeDelta = new Vector2(Size, Size) * scale;
+            pop.Rt.sizeDelta = Vector2.one * 48f * _config.InputPopScale * scale;
             pop.Rt.anchoredPosition = pop.From;
             pop.Rt.gameObject.SetActive(true);
         }

@@ -1,3 +1,7 @@
+using System;
+using System.Globalization;
+using System.IO;
+using System.Text;
 using UnityEngine;
 
 namespace CrazyChat.Overlay
@@ -6,6 +10,70 @@ namespace CrazyChat.Overlay
     public sealed class OverlayConfig : ScriptableObject
     {
         public const string AssetPath = "Assets/Resources/OverlayConfig.asset";
+
+        public float InputPopScale { get; private set; } = 1f;
+        public float InputPopSpeedScale { get; private set; } = 1f;
+        public float SelectionStarScale { get; private set; } = 1f;
+        public float SelectionStarOffsetX { get; private set; } = 2f;
+        public float SelectionStarOffsetY { get; private set; } = -2f;
+
+        public void LoadTemporarySettings()
+        {
+            InputPopScale = 1f;
+            InputPopSpeedScale = 1f;
+            SelectionStarScale = 1f;
+            SelectionStarOffsetX = 2f;
+            SelectionStarOffsetY = -2f;
+            var path = Path.Combine(Application.streamingAssetsPath, "config.txt");
+            try
+            {
+                if (!File.Exists(path)) return;
+                var lines = File.ReadAllLines(path, Encoding.UTF8);
+                for (var i = 0; i < lines.Length; i++)
+                {
+                    var line = lines[i].Split('#')[0].Trim();
+                    if (line.Length == 0) continue;
+                    var separator = line.IndexOf('=');
+                    if (separator <= 0)
+                    {
+                        Debug.LogWarning($"config.txt 第 {i + 1} 行格式错误，应为 名称=数值。");
+                        continue;
+                    }
+                    var key = line.Substring(0, separator).Trim();
+                    var raw = line.Substring(separator + 1).Trim();
+                    float min, max;
+                    switch (key)
+                    {
+                        case "inputPopScale":
+                        case "selectionStarScale": min = 0.1f; max = 10f; break;
+                        case "inputPopSpeedScale": min = 0.1f; max = 10f; break;
+                        case "selectionStarOffsetX":
+                        case "selectionStarOffsetY": min = -1000f; max = 1000f; break;
+                        default:
+                            Debug.LogWarning($"config.txt 第 {i + 1} 行：未知参数 {key}。");
+                            continue;
+                    }
+                    if (!float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+                        || float.IsNaN(value) || float.IsInfinity(value) || value < min || value > max)
+                    {
+                        Debug.LogWarning($"config.txt 第 {i + 1} 行：{key} 应为 {min}～{max} 的数字，本行已忽略。");
+                        continue;
+                    }
+                    switch (key)
+                    {
+                        case "inputPopScale": InputPopScale = value; break;
+                        case "inputPopSpeedScale": InputPopSpeedScale = value; break;
+                        case "selectionStarScale": SelectionStarScale = value; break;
+                        case "selectionStarOffsetX": SelectionStarOffsetX = value; break;
+                        case "selectionStarOffsetY": SelectionStarOffsetY = value; break;
+                    }
+                }
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+            {
+                Debug.LogWarning($"无法读取临时配置 {path}，使用默认参数：{e.Message}");
+            }
+        }
 
         [Header("系统")]
         [Tooltip("桌上最多几个好友")]

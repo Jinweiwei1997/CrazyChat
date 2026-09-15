@@ -220,6 +220,7 @@ namespace CrazyChat.Overlay
                 RefreshLabels();
             });
             BindDisplayDropdown();
+            BindClick(FindNode(_cardRt, "Pages/SystemPage/ReloadConfigRow"), () => _view.ReloadTemporaryConfig());
             BindClick(FindNode(_cardRt, "Pages/SystemPage/QuitGameRow"), QuitGame);
             BindHoverStyles();
         }
@@ -525,6 +526,7 @@ namespace CrazyChat.Overlay
             _topmostText = AddToggleRow(systemPage, "AlwaysOnTopRow", "始终置顶");
             _autoStartText = AddToggleRow(systemPage, "AutoStartRow", "开机自启");
             _displayDropdown = AddDisplayDropdownRow(systemPage);
+            AddActionRow(systemPage, "ReloadConfigRow", "刷新配置");
             AddActionRow(systemPage, "QuitGameRow", "退出游戏", danger: true);
         }
 
