@@ -379,6 +379,7 @@ namespace CrazyChat.Overlay
 
         public void Hide()
         {
+            OverlayDebugTrace.Log("ChatUi.Hide wasOpen=" + IsOpen + " friend=" + _friendId);
             if (_refocusRoutine != null)
             {
                 StopCoroutine(_refocusRoutine);

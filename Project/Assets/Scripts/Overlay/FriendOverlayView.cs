@@ -155,6 +155,7 @@ namespace CrazyChat.Overlay
 
         public void CloseTransientPanels()
         {
+            OverlayDebugTrace.Log("CloseTransientPanels");
             _chatUi?.Hide();
             _settingsUi?.Hide();
             HideInteractMenu();

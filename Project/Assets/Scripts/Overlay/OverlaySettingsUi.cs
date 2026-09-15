@@ -1105,6 +1105,7 @@ namespace CrazyChat.Overlay
 
         static void QuitGame()
         {
+            OverlayDebugTrace.Log("SettingsUi.QuitGame");
 #if UNITY_EDITOR
             UnityEditor.EditorApplication.isPlaying = false;
 #else
@@ -1372,6 +1373,7 @@ namespace CrazyChat.Overlay
 
         public void Hide()
         {
+            OverlayDebugTrace.Log("SettingsUi.Hide");
             CloseAvatarOverlays();
             if (_panel != null)
             {

@@ -366,6 +366,7 @@ namespace CrazyChat.Overlay
                 }
                 else if (command == MenuIdQuit)
                 {
+                    OverlayDebugTrace.Log("TrayIcon.Quit");
                     Application.Quit();
                 }
             }

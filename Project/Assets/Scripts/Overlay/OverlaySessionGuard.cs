@@ -44,14 +44,20 @@ namespace CrazyChat.Overlay
                 _mutexOwned = _mutex.WaitOne(0);
                 if (!_mutexOwned)
                 {
+                    OverlayDebugTrace.Log("TryAcquireLocalMutex failed: already owned");
                     _mutex.Dispose();
                     _mutex = null;
+                }
+                else
+                {
+                    OverlayDebugTrace.Log("TryAcquireLocalMutex ok");
                 }
 
                 return _mutexOwned;
             }
             catch (Exception e)
             {
+                OverlayDebugTrace.Log("TryAcquireLocalMutex exception degrade-allow: " + e.Message);
                 Debug.LogWarning("[Overlay] 本机互斥获取异常，降级放行: " + e.Message);
                 ReleaseLocalMutex();
                 return true;
@@ -287,11 +293,13 @@ namespace CrazyChat.Overlay
             _leaseActive = false;
             _exitMessage = message;
             _exitAt = Time.unscaledTime + OverlaySessionLease.ExitNoticeSeconds;
+            OverlayDebugTrace.Log("ScheduleExit: " + message);
             Debug.LogWarning("[Overlay] " + message);
         }
 
         static void QuitNow()
         {
+            OverlayDebugTrace.Log("QuitNow");
             ReleaseLocalMutex();
 #if UNITY_EDITOR
             UnityEditor.EditorApplication.isPlaying = false;

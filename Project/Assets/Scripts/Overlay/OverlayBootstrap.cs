@@ -45,11 +45,15 @@ namespace CrazyChat.Overlay
         {
             if (_instance != null)
             {
+                OverlayDebugTrace.Log("AutoStart skip: instance exists");
                 return;
             }
 
-            if (!OverlaySessionGuard.TryAcquireLocalMutex())
+            var mutexOk = OverlaySessionGuard.TryAcquireLocalMutex();
+            OverlayDebugTrace.Log("AutoStart mutexOk=" + mutexOk);
+            if (!mutexOk)
             {
+                OverlayDebugTrace.Log("AutoStart BeginQuit: already running locally");
                 OverlaySessionGuard.BeginQuit("CrazyChat 已在本机运行");
                 return;
             }
@@ -62,12 +66,14 @@ namespace CrazyChat.Overlay
         {
             if (_instance != null && _instance != this)
             {
+                OverlayDebugTrace.Log("Awake destroy duplicate bootstrap");
                 Destroy(gameObject);
                 return;
             }
 
             _instance = this;
             DontDestroyOnLoad(gameObject);
+            OverlayDebugTrace.Log("Awake begin");
 
             Application.runInBackground = true;
             Application.targetFrameRate = 60;
@@ -96,6 +102,7 @@ namespace CrazyChat.Overlay
                     () => view.Stealth?.RevealNow());
             }
 #endif
+            OverlayDebugTrace.Log("Awake complete steamInit=" + _steamSessionOpen);
         }
 
         static void EnsureSteamManager()
@@ -132,6 +139,7 @@ namespace CrazyChat.Overlay
 
         void OnApplicationQuit()
         {
+            OverlayDebugTrace.Log("OnApplicationQuit");
             EndSteamSession();
             OverlaySessionGuard.ReleaseLocalMutex();
         }

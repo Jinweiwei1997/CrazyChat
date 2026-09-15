@@ -210,8 +210,10 @@ namespace CrazyChat.Overlay
         public void FocusForTextInput()
         {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            OverlayDebugTrace.Log("FocusForTextInput begin applied=" + _applied);
             if (!_applied || !EnsureWindowHandle())
             {
+                OverlayDebugTrace.Log("FocusForTextInput abort");
                 return;
             }
 
@@ -267,6 +269,7 @@ namespace CrazyChat.Overlay
 
             var overUi = _raycasterHost != null && _raycasterHost.IsPointerOverInteractive();
             SetClickThrough(!overUi);
+            OverlayDebugTrace.LogClickThrough(!overUi, overUi);
 
             if (_alwaysOnTop && !_suspendTopmost && Time.unscaledTime >= _nextTopmostTime)
             {
