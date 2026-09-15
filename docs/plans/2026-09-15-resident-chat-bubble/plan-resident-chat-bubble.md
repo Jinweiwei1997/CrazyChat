@@ -19,9 +19,9 @@
 **Files:**
 - Modify: `Project/Assets/Scripts/Overlay/FriendAvatarChip.cs`
 
-- [ ] When unread == 0, set bubble content to `…` and show bubble if chat-capable and not expanded
-- [ ] When unread > 0, keep carousel + badge behavior
-- [ ] Do not show on local self chip
+- [x] When unread == 0, set bubble content to `…` and show bubble if chat-capable and not expanded
+- [x] When unread > 0, keep carousel + badge behavior
+- [x] Do not show on local self chip
 
 ### Task 2: Rules sync
 
@@ -29,10 +29,10 @@
 - Modify: `docs/game-ui-rules.md`
 - Modify: `.cursor/rules/game-ui-rules.mdc`
 
-- [ ] Replace “有未读时才显示气泡” with resident `…` / unread carousel rules
+- [x] Replace “有未读时才显示气泡” with resident `…` / unread carousel rules
 
 ### Task 3: Verify and ship
 
-- [ ] Rebuild `Export/0.4`
-- [ ] Smoke exe stays alive
-- [ ] Commit spec/plan/code/docs/export; push `main`
+- [x] Rebuild `Export/0.4`
+- [x] Smoke exe stays alive
+- [x] Commit spec/plan/code/docs/export; push `main`
