@@ -18,6 +18,29 @@ namespace CrazyChat.Overlay
         static Sprite _roundedSquare;
         static Sprite _dashedRoundedSquare;
         static Font _font;
+        static Material _roundedAvatarMaterial;
+
+        public static Material RoundedAvatarMaterial
+        {
+            get
+            {
+                if (_roundedAvatarMaterial == null)
+                {
+                    var shader = Resources.Load<Shader>("Overlay/UI/RoundedAvatar");
+                    if (shader == null)
+                    {
+                        Debug.LogError("Missing shader: Overlay/UI/RoundedAvatar");
+                        return null;
+                    }
+                    _roundedAvatarMaterial = new Material(shader)
+                    {
+                        name = "OverlayRoundedAvatar",
+                        hideFlags = HideFlags.HideAndDontSave
+                    };
+                }
+                return _roundedAvatarMaterial;
+            }
+        }
 
         public static Sprite Circle
         {

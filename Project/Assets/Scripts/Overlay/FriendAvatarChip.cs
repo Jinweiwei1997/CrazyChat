@@ -8,6 +8,7 @@ namespace CrazyChat.Overlay
     public sealed class FriendAvatarChip : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         const float BubbleVisualScale = 1f;
+        const float AvatarInset = 4f;
         const float BubbleWidthRatio = 2f / 3f;
         const float BubbleHeight = 26f * BubbleVisualScale;
         const float BubbleOffsetY = 0f;
@@ -54,6 +55,16 @@ namespace CrazyChat.Overlay
         bool _chatExpanded;
         Vector2 _layoutPos;
         bool _dragging;
+        bool _settlingDrag;
+        Vector2 _dragPointer;
+        Vector2 _pointerOffset;
+        Vector2 _dragTarget;
+        Vector2 _releaseOffset;
+        float _releaseStartedAt = -1f;
+        Vector2 _snapMotionOffset;
+        float _snapStartedAt = -1f;
+        FriendAvatarChip _snapAnchor;
+        Vector2 _snapDirection;
         long _tapCount;
         bool _hover;
 
@@ -97,6 +108,11 @@ namespace CrazyChat.Overlay
 
         public void SetLayoutPosition(Vector2 pixel)
         {
+            if (!_dragging)
+            {
+                _settlingDrag = false;
+                _snapAnchor = null;
+            }
             _layoutPos = pixel;
             if (_rect != null && !_dragging)
             {
@@ -129,20 +145,21 @@ namespace CrazyChat.Overlay
             _body.sizeDelta = new Vector2(_size, _size);
             _body.anchoredPosition = Vector2.zero;
 
-            var maskGo = new GameObject("Mask", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Mask));
+            var maskGo = new GameObject("Mask", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             maskGo.transform.SetParent(_body, false);
             var maskRt = (RectTransform)maskGo.transform;
             Stretch(maskRt);
-            maskRt.offsetMin = new Vector2(4f, 4f);
-            maskRt.offsetMax = new Vector2(-4f, -4f);
+            maskRt.offsetMin = Vector2.one * AvatarInset;
+            maskRt.offsetMax = -Vector2.one * AvatarInset;
             var maskImage = maskGo.GetComponent<Image>();
             maskImage.sprite = OverlaySprites.RoundedSquare;
+            maskImage.color = Color.clear;
             maskImage.raycastTarget = true;
-            maskGo.GetComponent<Mask>().showMaskGraphic = false;
 
             _avatar = CreateImage("Avatar", maskRt, Color.white, OverlaySprites.RoundedSquare);
             Stretch(_avatar.rectTransform);
             _avatar.preserveAspect = true;
+            _avatar.material = OverlaySprites.RoundedAvatarMaterial;
             _avatar.raycastTarget = false;
 
             _nameRoot = new GameObject("NameTag", typeof(RectTransform));
@@ -595,6 +612,7 @@ namespace CrazyChat.Overlay
             }
 
             var userScale = _view != null && _view.Settings != null ? _view.Settings.Scale : 1f;
+            UpdateDragMotion(userScale);
             _rect.anchoredPosition = _layoutPos;
             _rect.localScale = new Vector3(userScale, userScale, 1f);
 
@@ -723,6 +741,15 @@ namespace CrazyChat.Overlay
 
             _view?.HideInteractMenu();
             _dragging = true;
+            _releaseStartedAt = -1f;
+            _snapStartedAt = -1f;
+            _settlingDrag = false;
+            _snapAnchor = null;
+            _dragPointer = eventData.pressPosition;
+            _pointerOffset = _layoutPos - eventData.pressPosition;
+            var scale = _view != null && _view.Settings != null ? _view.Settings.Scale : 1f;
+            _dragTarget = ResolveDragTarget(scale);
+            _dragPointer = eventData.position;
             transform.SetAsLastSibling();
         }
 
@@ -733,10 +760,11 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            var scale = _view != null && _view.Settings != null ? _view.Settings.Scale : 1f;
-            _layoutPos = FriendOverlayView.Clamp(_layoutPos + eventData.delta, _size * 0.5f * scale);
-            _rect.anchoredPosition = _layoutPos;
+            _dragPointer = eventData.position;
             _view?.SetBagHover(eventData.position);
+            var scale = _view != null && _view.Settings != null ? _view.Settings.Scale : 1f;
+            UpdateDragMotion(scale);
+            _rect.anchoredPosition = _layoutPos;
         }
 
         public void OnEndDrag(PointerEventData eventData)
@@ -746,13 +774,141 @@ namespace CrazyChat.Overlay
                 return;
             }
 
+            _dragPointer = eventData.position;
+            var scale = _view != null && _view.Settings != null ? _view.Settings.Scale : 1f;
+            UpdateDragMotion(scale);
             _dragging = false;
             if (_view != null && _view.TryPutInBag(this))
             {
                 return;
             }
 
-            _view?.NotifyMoved(this);
+            _snapAnchor = null;
+            _settlingDrag = true;
+        }
+
+        void UpdateDragMotion(float scale)
+        {
+            if (!_dragging && !_settlingDrag) return;
+            if (_dragging)
+            {
+                var previousAnchor = _snapAnchor;
+                var previousDirection = _snapDirection;
+                var wasSnapped = _snapAnchor != null;
+                _dragTarget = ResolveDragTarget(scale);
+                if (_snapAnchor != null)
+                {
+                    if (_snapStartedAt < 0f || previousAnchor != _snapAnchor || previousDirection != _snapDirection)
+                    {
+                        _snapMotionOffset = _layoutPos - _dragTarget;
+                        _snapStartedAt = Time.unscaledTime;
+                    }
+                    var snapT = Mathf.Clamp01((Time.unscaledTime - _snapStartedAt) / OverlayConfig.AvatarSnapBounceSeconds);
+                    _layoutPos = FriendOverlayView.Clamp(_dragTarget + _snapMotionOffset * (1f - DragBounce(snapT)), _size * 0.5f * scale);
+                    _releaseStartedAt = -1f;
+                    return;
+                }
+                if (wasSnapped)
+                {
+                    _releaseOffset = _layoutPos - _dragTarget;
+                    _releaseStartedAt = Time.unscaledTime;
+                }
+                _snapStartedAt = -1f;
+                var t = _releaseStartedAt < 0f ? 1f
+                    : Mathf.Clamp01((Time.unscaledTime - _releaseStartedAt) / OverlayConfig.AvatarReleaseBounceSeconds);
+                var eased = DragBounce(t);
+                _layoutPos = FriendOverlayView.Clamp(_dragTarget + _releaseOffset * (1f - eased), _size * 0.5f * scale);
+                if (t >= 1f) _releaseStartedAt = -1f;
+                return;
+            }
+            _dragTarget = FriendOverlayView.Clamp(_dragTarget, _size * 0.5f * scale);
+            if (_snapStartedAt >= 0f || _releaseStartedAt >= 0f)
+            {
+                var snapping = _snapStartedAt >= 0f;
+                var start = snapping ? _snapStartedAt : _releaseStartedAt;
+                var duration = snapping ? OverlayConfig.AvatarSnapBounceSeconds : OverlayConfig.AvatarReleaseBounceSeconds;
+                var t = Mathf.Clamp01((Time.unscaledTime - start) / duration);
+                var offset = snapping ? _snapMotionOffset : _releaseOffset;
+                _layoutPos = _dragTarget + offset * (1f - DragBounce(t));
+                if (t >= 1f) _snapStartedAt = _releaseStartedAt = -1f;
+            }
+            else
+            {
+                _layoutPos = _dragTarget;
+            }
+            _layoutPos = FriendOverlayView.Clamp(_layoutPos, _size * 0.5f * scale);
+            if (!_dragging && _snapStartedAt < 0f && _releaseStartedAt < 0f && (_layoutPos - _dragTarget).sqrMagnitude < 0.01f)
+            {
+                _layoutPos = _dragTarget;
+                _settlingDrag = false;
+                _view?.NotifyMoved(this);
+            }
+        }
+
+        static float DragBounce(float t)
+        {
+            // Fast capture, a small overshoot, then a firm finish (about 6% rebound).
+            var u = Mathf.Clamp01(t) - 1f;
+            return 1f + 2.3f * u * u * u + 1.3f * u * u;
+        }
+
+        Vector2 ResolveDragTarget(float scale)
+        {
+            var desired = FriendOverlayView.Clamp(_dragPointer + _pointerOffset, _size * 0.5f * scale);
+            var distance = _view != null ? _view.Config.AvatarSnapDistance : 0f;
+            var startDistance = _view != null ? _view.Config.AvatarSnapStartDistance : 0f;
+            if (distance <= 0f || startDistance <= 0f || _view.IsOverBag(_dragPointer))
+            {
+                _snapAnchor = null;
+                return desired;
+            }
+            if (_snapAnchor != null && _snapAnchor.gameObject.activeInHierarchy)
+            {
+                var held = SnapPosition(_snapAnchor, _snapDirection, scale);
+                var releaseDistance = Mathf.Max(distance, startDistance + 1f);
+                if ((desired - held).sqrMagnitude <= releaseDistance * releaseDistance && CanSnapAt(held, scale))
+                    return held;
+            }
+            _snapAnchor = null;
+            // Acquire closer than the release threshold to avoid flickering at the boundary.
+            var bestDistance = startDistance * startDistance;
+            var best = desired;
+            foreach (var other in _view.DesktopChips)
+            {
+                if (other == null || other == this || !other.gameObject.activeInHierarchy) continue;
+                for (var side = 0; side < 4; side++)
+                {
+                    var direction = side == 0 ? Vector2.left : side == 1 ? Vector2.right
+                        : side == 2 ? Vector2.up : Vector2.down;
+                    var candidate = SnapPosition(other, direction, scale);
+                    var squared = (candidate - desired).sqrMagnitude;
+                    if (squared > bestDistance || !CanSnapAt(candidate, scale)) continue;
+                    bestDistance = squared;
+                    best = candidate;
+                    _snapAnchor = other;
+                    _snapDirection = direction;
+                }
+            }
+            return best;
+        }
+
+        Vector2 SnapPosition(FriendAvatarChip other, Vector2 direction, float scale)
+        {
+            return other.LayoutPosition + direction * (((_size + other._size) * 0.5f - 2f * AvatarInset) * scale + _view.Config.AvatarSnapGap);
+        }
+
+        bool CanSnapAt(Vector2 position, float scale)
+        {
+            if ((FriendOverlayView.Clamp(position, _size * 0.5f * scale) - position).sqrMagnitude > 0.01f)
+                return false;
+            foreach (var other in _view.DesktopChips)
+            {
+                if (other == null || other == this || !other.gameObject.activeInHierarchy) continue;
+                var separation = ((_size + other._size) * 0.5f - 2f * AvatarInset) * scale - 0.5f;
+                var offset = position - other.LayoutPosition;
+                if (Mathf.Abs(offset.x) < separation && Mathf.Abs(offset.y) < separation) return false;
+            }
+            return true;
         }
 
         static Image CreateImage(string name, Transform parent, Color color, Sprite sprite)

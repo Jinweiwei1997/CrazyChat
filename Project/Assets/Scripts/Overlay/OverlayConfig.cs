@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -10,17 +11,27 @@ namespace CrazyChat.Overlay
     public sealed class OverlayConfig : ScriptableObject
     {
         public const string AssetPath = "Assets/Resources/OverlayConfig.asset";
+        public const float AvatarSnapBounceSeconds = 0.16f;
+        public const float AvatarReleaseBounceSeconds = 0.18f;
+        public float AvatarSnapDistance { get; private set; } = 36f;
+        public float AvatarSnapStartDistance { get; private set; } = 18f;
+        public float AvatarSnapGap { get; private set; } = 0f;
 
         public float InputPopScale { get; private set; } = 1f;
-        public float InputPopSpeedScale { get; private set; } = 1f;
+        public Vector2[] InputPopRiseCurve { get; private set; } = DefaultRiseCurve();
+        public Vector2[] InputPopFadeCurve { get; private set; } = DefaultFadeCurve();
         public float SelectionStarScale { get; private set; } = 1f;
         public float SelectionStarOffsetX { get; private set; } = 2f;
         public float SelectionStarOffsetY { get; private set; } = -2f;
 
         public void LoadTemporarySettings()
         {
+            AvatarSnapDistance = 36f;
+            AvatarSnapStartDistance = 18f;
+            AvatarSnapGap = 0f;
             InputPopScale = 1f;
-            InputPopSpeedScale = 1f;
+            InputPopRiseCurve = DefaultRiseCurve();
+            InputPopFadeCurve = DefaultFadeCurve();
             SelectionStarScale = 1f;
             SelectionStarOffsetX = 2f;
             SelectionStarOffsetY = -2f;
@@ -33,6 +44,32 @@ namespace CrazyChat.Overlay
                 {
                     var line = lines[i].Split('#')[0].Trim();
                     if (line.Length == 0) continue;
+                    if (line.StartsWith("["))
+                    {
+                        var headerLine = i + 1;
+                        var rows = new List<string>();
+                        while (i + 1 < lines.Length)
+                        {
+                            var row = lines[i + 1].Split('#')[0].Trim();
+                            if (row.StartsWith("[") || row.Contains("=")) break;
+                            i++;
+                            if (row.Length > 0) rows.Add(row);
+                        }
+                        if (line != "[inputPopRise]" && line != "[inputPopFade]")
+                        {
+                            Debug.LogWarning($"config.txt 第 {headerLine} 行：未知表格 {line}。");
+                            continue;
+                        }
+                        var fade = line == "[inputPopFade]";
+                        if (!TryParsePopCurve(rows.ToArray(), fade, out var points))
+                        {
+                            Debug.LogWarning($"config.txt 第 {headerLine} 行：{line} 表格无效，已忽略。每行两列（秒数 数值），空格或Tab分隔；需要2～64行，从0秒开始且时间严格递增（最多60秒）；透明度0～1，速度倍率0～10。");
+                            continue;
+                        }
+                        if (fade) InputPopFadeCurve = points;
+                        else InputPopRiseCurve = points;
+                        continue;
+                    }
                     var separator = line.IndexOf('=');
                     if (separator <= 0)
                     {
@@ -44,9 +81,11 @@ namespace CrazyChat.Overlay
                     float min, max;
                     switch (key)
                     {
+                        case "avatarSnapDistance": min = 0f; max = 256f; break;
+                        case "avatarSnapStartDistance":
+                        case "avatarSnapGap": min = 0f; max = 256f; break;
                         case "inputPopScale":
                         case "selectionStarScale": min = 0.1f; max = 10f; break;
-                        case "inputPopSpeedScale": min = 0.1f; max = 10f; break;
                         case "selectionStarOffsetX":
                         case "selectionStarOffsetY": min = -1000f; max = 1000f; break;
                         default:
@@ -61,8 +100,10 @@ namespace CrazyChat.Overlay
                     }
                     switch (key)
                     {
+                        case "avatarSnapDistance": AvatarSnapDistance = value; break;
+                        case "avatarSnapStartDistance": AvatarSnapStartDistance = value; break;
+                        case "avatarSnapGap": AvatarSnapGap = value; break;
                         case "inputPopScale": InputPopScale = value; break;
-                        case "inputPopSpeedScale": InputPopSpeedScale = value; break;
                         case "selectionStarScale": SelectionStarScale = value; break;
                         case "selectionStarOffsetX": SelectionStarOffsetX = value; break;
                         case "selectionStarOffsetY": SelectionStarOffsetY = value; break;
@@ -73,6 +114,33 @@ namespace CrazyChat.Overlay
             {
                 Debug.LogWarning($"无法读取临时配置 {path}，使用默认参数：{e.Message}");
             }
+        }
+
+        static Vector2[] DefaultRiseCurve() => new[] { new Vector2(0f, 1f), new Vector2(0.55f, 1f) };
+        static Vector2[] DefaultFadeCurve() => new[]
+        {
+            new Vector2(0f, 0f), new Vector2(0.1375f, 0f), new Vector2(0.55f, 1f)
+        };
+
+        internal static bool TryParsePopCurve(string[] entries, bool fade, out Vector2[] points)
+        {
+            points = null;
+            if (entries.Length < 2 || entries.Length > 64) return false;
+            var parsed = new Vector2[entries.Length];
+            for (var i = 0; i < entries.Length; i++)
+            {
+                var pair = entries[i].Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                if (pair.Length != 2
+                    || !float.TryParse(pair[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var time)
+                    || !float.TryParse(pair[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+                    || float.IsNaN(time) || float.IsInfinity(time)
+                    || float.IsNaN(value) || float.IsInfinity(value)
+                    || time < 0f || time > 60f || value < 0f || value > (fade ? 1f : 10f)) return false;
+                if (i == 0 ? time != 0f : time <= parsed[i - 1].x) return false;
+                parsed[i] = new Vector2(time, value);
+            }
+            points = parsed;
+            return true;
         }
 
         [Header("系统")]

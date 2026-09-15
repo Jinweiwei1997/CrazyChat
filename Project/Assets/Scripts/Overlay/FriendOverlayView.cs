@@ -42,6 +42,7 @@ namespace CrazyChat.Overlay
         Vector2 _lastOverlaySize;
 
         public FriendAvatarChip LocalChip { get; private set; }
+        internal IEnumerable<FriendAvatarChip> DesktopChips => _chips.Values;
 
         public OverlayUserSettings Settings => _settings;
 
