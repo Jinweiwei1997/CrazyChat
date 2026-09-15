@@ -13,12 +13,20 @@ namespace CrazyChat.Overlay
     public sealed class TransparentOverlayWindow : MonoBehaviour
     {
         const float TopmostRefreshSeconds = 2f;
+        const float ClickThroughLeaveDelaySeconds = 0.12f;
+        const float FocusMinIntervalSeconds = 0.75f;
+        const float HeartbeatSeconds = 1f;
 
         GraphicRaycasterHost _raycasterHost;
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         bool _clickThrough = true;
+        bool _pendingClickThrough = true;
+        bool _hasPendingClickThrough;
+        float _clickThroughStableSince;
+        float _lastFocusAt = -999f;
 #endif
         float _nextTopmostTime;
+        float _nextHeartbeatAt;
         bool _applied;
         bool _alwaysOnTop = true;
         bool _suspendTopmost;
@@ -84,18 +92,6 @@ namespace CrazyChat.Overlay
 
         [DllImport("user32.dll")]
         static extern IntPtr GetForegroundWindow();
-
-        [DllImport("user32.dll")]
-        static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr processId);
-
-        [DllImport("user32.dll")]
-        static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach);
-
-        [DllImport("user32.dll")]
-        static extern bool BringWindowToTop(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
-        static extern IntPtr SetActiveWindow(IntPtr hWnd);
 
         [DllImport("user32.dll")]
         static extern IntPtr SetFocus(IntPtr hWnd);
@@ -210,37 +206,35 @@ namespace CrazyChat.Overlay
         public void FocusForTextInput()
         {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-            OverlayDebugTrace.Log("FocusForTextInput begin applied=" + _applied);
             if (!_applied || !EnsureWindowHandle())
             {
                 OverlayDebugTrace.Log("FocusForTextInput abort");
                 return;
             }
 
-            SetClickThrough(false);
-            var foreground = GetForegroundWindow();
-            var windowThread = GetWindowThreadProcessId(_hwnd, IntPtr.Zero);
-            var foregroundThread = foreground != IntPtr.Zero
-                ? GetWindowThreadProcessId(foreground, IntPtr.Zero)
-                : 0;
-            var attached = windowThread != 0 && foregroundThread != 0 && foregroundThread != windowThread &&
-                           AttachThreadInput(windowThread, foregroundThread, true);
-            try
+            // Need hits immediately while typing; do not wait for leave debounce.
+            SetClickThrough(false, immediate: true);
+
+            var now = Time.unscaledTime;
+            if (now - _lastFocusAt < FocusMinIntervalSeconds)
             {
-                SetWindowPos(_hwnd, _alwaysOnTop ? HwndTopmost : HwndNoTopmost, 0, 0, 0, 0,
-                    SwpNoMove | SwpNoSize | SwpShowWindow);
-                BringWindowToTop(_hwnd);
-                SetForegroundWindow(_hwnd);
-                SetActiveWindow(_hwnd);
+                return;
+            }
+
+            _lastFocusAt = now;
+            if (GetForegroundWindow() == _hwnd)
+            {
                 SetFocus(_hwnd);
+                OverlayDebugTrace.Log("FocusForTextInput already-foreground");
+                return;
             }
-            finally
-            {
-                if (attached)
-                {
-                    AttachThreadInput(windowThread, foregroundThread, false);
-                }
-            }
+
+            // Soft focus only: AttachThreadInput caused AppHangXProc with other apps.
+            OverlayDebugTrace.Log("FocusForTextInput soft");
+            SetWindowPos(_hwnd, _alwaysOnTop ? HwndTopmost : HwndNoTopmost, 0, 0, 0, 0,
+                SwpNoMove | SwpNoSize | SwpShowWindow);
+            SetForegroundWindow(_hwnd);
+            SetFocus(_hwnd);
 #endif
         }
 
@@ -267,14 +261,24 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            var overUi = _raycasterHost != null && _raycasterHost.IsPointerOverInteractive();
-            SetClickThrough(!overUi);
-            OverlayDebugTrace.LogClickThrough(!overUi, overUi);
+            var now = Time.unscaledTime;
+            if (now >= _nextHeartbeatAt)
+            {
+                _nextHeartbeatAt = now + HeartbeatSeconds;
+                OverlayDebugTrace.Log(
+                    "heartbeat clickThrough=" + _clickThrough +
+                    " pending=" + (_hasPendingClickThrough ? _pendingClickThrough.ToString() : "none") +
+                    " fgSelf=" + (GetForegroundWindow() == _hwnd));
+            }
 
-            if (_alwaysOnTop && !_suspendTopmost && Time.unscaledTime >= _nextTopmostTime)
+            var overUi = _raycasterHost != null && _raycasterHost.IsPointerOverInteractive();
+            RequestClickThrough(!overUi);
+            OverlayDebugTrace.LogClickThrough(_clickThrough, overUi);
+
+            if (_alwaysOnTop && !_suspendTopmost && now >= _nextTopmostTime)
             {
                 ApplyTopmost();
-                _nextTopmostTime = Time.unscaledTime + TopmostRefreshSeconds;
+                _nextTopmostTime = now + TopmostRefreshSeconds;
             }
 #endif
         }
@@ -351,8 +355,34 @@ namespace CrazyChat.Overlay
             _moveDisplayRoutine = null;
         }
 
-        void SetClickThrough(bool clickThrough)
+        void RequestClickThrough(bool clickThrough)
         {
+            if (!_hasPendingClickThrough || _pendingClickThrough != clickThrough)
+            {
+                _hasPendingClickThrough = true;
+                _pendingClickThrough = clickThrough;
+                _clickThroughStableSince = Time.unscaledTime;
+            }
+
+            // Entering UI must be immediate; leaving waits so edge jitter does not thrash styles.
+            var delay = clickThrough ? ClickThroughLeaveDelaySeconds : 0f;
+            if (Time.unscaledTime - _clickThroughStableSince < delay)
+            {
+                return;
+            }
+
+            SetClickThrough(clickThrough, immediate: true);
+        }
+
+        void SetClickThrough(bool clickThrough, bool immediate = false)
+        {
+            if (immediate)
+            {
+                _hasPendingClickThrough = true;
+                _pendingClickThrough = clickThrough;
+                _clickThroughStableSince = Time.unscaledTime;
+            }
+
             if (_clickThrough == clickThrough || !EnsureWindowHandle())
             {
                 return;

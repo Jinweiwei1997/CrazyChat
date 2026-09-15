@@ -719,7 +719,7 @@ namespace CrazyChat.Overlay
         {
             if (!isActiveAndEnabled)
             {
-                FocusInputNow();
+                FocusInputNow(stealWindowFocus: true);
                 return;
             }
 
@@ -728,24 +728,28 @@ namespace CrazyChat.Overlay
                 StopCoroutine(_refocusRoutine);
             }
 
-            _refocusRoutine = StartCoroutine(RefocusInputNextFrame());
+            _refocusRoutine = StartCoroutine(RefocusInputNextFrame(stealWindowFocus: true));
         }
 
-        IEnumerator RefocusInputNextFrame()
+        IEnumerator RefocusInputNextFrame(bool stealWindowFocus)
         {
             yield return null;
             _refocusRoutine = null;
-            FocusInputNow();
+            FocusInputNow(stealWindowFocus);
         }
 
-        void FocusInputNow()
+        void FocusInputNow(bool stealWindowFocus)
         {
             if (!IsOpen || _input == null || !_input.gameObject.activeInHierarchy)
             {
                 return;
             }
 
-            _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput();
+            if (stealWindowFocus)
+            {
+                _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput();
+            }
+
             EventSystem.current?.SetSelectedGameObject(_input.gameObject);
             _input.ActivateInputField();
             _input.Select();
@@ -753,7 +757,8 @@ namespace CrazyChat.Overlay
 
         void OnCardPointerEnter()
         {
-            KeepInputFocused();
+            // Local field focus only; window steal on hover caused AppHangXProc.
+            FocusInputNow(stealWindowFocus: false);
         }
 
         void Update()
