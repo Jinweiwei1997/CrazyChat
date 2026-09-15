@@ -14,6 +14,7 @@ namespace CrazyChat.Overlay
         const float BubbleOffsetY = 0f;
         const int BubbleFontSize = 16;
         const float BubbleSlideSeconds = 0.32f;
+        const string IdleBubbleText = "…";
 
         float _size = 128f;
 
@@ -452,7 +453,7 @@ namespace CrazyChat.Overlay
 
             _bubbleUnreadIndex = 0;
             _nextBubbleRotateAt = Time.unscaledTime + BubbleRotateSeconds;
-            var next = _bubbleUnread.Count > 0 ? _bubbleUnread[0] : "";
+            var next = _bubbleUnread.Count > 0 ? _bubbleUnread[0] : IdleBubbleText;
             _bubbleSlideStartedAt = -1f;
             _bubbleSlideTarget = null;
             _bubbleContent = next;
@@ -493,14 +494,26 @@ namespace CrazyChat.Overlay
             var showChat = _friend != null && !_friend.IsLocal;
             if (_bubble != null)
             {
-                var showBubble = showChat && !_chatExpanded && _unread > 0 && !string.IsNullOrEmpty(_bubbleContent);
+                if (showChat && _unread <= 0)
+                {
+                    _bubbleContent = IdleBubbleText;
+                    _bubbleSlideStartedAt = -1f;
+                    _bubbleSlideTarget = null;
+                    if (_bubbleNextText != null)
+                    {
+                        _bubbleNextText.gameObject.SetActive(false);
+                    }
+                }
+
+                var showBubble = showChat && !_chatExpanded;
                 _bubble.gameObject.SetActive(showBubble);
                 if (showBubble && _bubbleText != null)
                 {
                     if (_bubbleSlideStartedAt < 0f)
                     {
-                        _bubbleText.text = _bubbleContent;
+                        _bubbleText.text = string.IsNullOrEmpty(_bubbleContent) ? IdleBubbleText : _bubbleContent;
                     }
+
                     _bubble.rectTransform.sizeDelta = new Vector2(_size * BubbleWidthRatio, BubbleHeight);
                 }
             }
@@ -516,7 +529,6 @@ namespace CrazyChat.Overlay
                         : (_unread > 99 ? "99+" : _unread.ToString());
                 }
             }
-
         }
 
         string FormatUnread(int count)
