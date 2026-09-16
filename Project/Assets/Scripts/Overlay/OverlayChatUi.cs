@@ -415,6 +415,7 @@ namespace CrazyChat.Overlay
 
         int ResolveCompactStartIndex(IReadOnlyList<OverlayChatMessage> messages, ulong friendId)
         {
+            // Lock the session floor at open: later sends only append (until maxCompact slides).
             if (messages == null || messages.Count == 0)
             {
                 return 0;
@@ -426,6 +427,7 @@ namespace CrazyChat.Overlay
                 : _chat.Store.GetLatestPeer(friendId);
             if (anchor == null)
             {
+                // No peer messages: start empty, then keep everything sent in this open session.
                 return messages.Count;
             }
 
@@ -852,7 +854,7 @@ namespace CrazyChat.Overlay
                 _rows.Add(CreateRow());
             }
 
-            var y = 10f;
+            // Measure after canvas update so preferredHeight matches wrapped text.
             for (var i = 0; i < _rows.Count; i++)
             {
                 var row = _rows[i];
@@ -862,9 +864,17 @@ namespace CrazyChat.Overlay
                     continue;
                 }
 
-                var msg = _visibleMessages[i];
                 row.Root.SetActive(true);
-                var height = BindRow(row, msg);
+                BindRow(row, _visibleMessages[i]);
+            }
+
+            Canvas.ForceUpdateCanvases();
+
+            var y = 10f;
+            for (var i = 0; i < visible; i++)
+            {
+                var row = _rows[i];
+                var height = BindRow(row, _visibleMessages[i]);
                 row.Rt.anchoredPosition = new Vector2(0f, -y);
                 row.Rt.sizeDelta = new Vector2(0f, height);
                 y += height + 6f;
@@ -904,8 +914,13 @@ namespace CrazyChat.Overlay
             _visibleMessages.Clear();
             var max = _view != null && _view.Config != null
                 ? Mathf.Max(1, _view.Config.maxCompactChatMessages)
-                : 5;
-            var start = Mathf.Max(Mathf.Clamp(_compactStartIndex, 0, count), count - max);
+                : 10;
+            // Keep session floor from Open; only slide when over the compact max.
+            var start = Mathf.Clamp(_compactStartIndex, 0, count);
+            if (count - start > max)
+            {
+                start = count - max;
+            }
             for (var i = start; i < count; i++)
             {
                 if (messages[i] != null)

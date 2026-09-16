@@ -167,7 +167,7 @@ namespace CrazyChat.Overlay
 
         [Tooltip("简易聊天最多显示几条")]
         [Min(1)]
-        public int maxCompactChatMessages = 5;
+        public int maxCompactChatMessages = 10;
 
         [Tooltip("未读显示封顶")]
         [Min(1)]
