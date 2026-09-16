@@ -737,7 +737,7 @@ namespace CrazyChat.Overlay
 
             // Request now, during the opening action, never from a delayed callback.
             if (requestWindowFocus)
-                _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput();
+                _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput(forceSteal: true);
 
             _refocusRoutine = StartCoroutine(RefocusInputNextFrame());
         }

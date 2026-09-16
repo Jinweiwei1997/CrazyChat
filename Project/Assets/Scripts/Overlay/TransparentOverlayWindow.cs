@@ -83,6 +83,15 @@ namespace CrazyChat.Overlay
         [DllImport("user32.dll")]
         static extern IntPtr GetForegroundWindow();
 
+        [DllImport("user32.dll")]
+        static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr processId);
+
+        [DllImport("user32.dll")]
+        static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach);
+
+        [DllImport("user32.dll")]
+        static extern IntPtr SetFocus(IntPtr hWnd);
+
 
         [StructLayout(LayoutKind.Sequential)]
         struct CursorPoint { public int x, y; }
@@ -235,14 +244,45 @@ namespace CrazyChat.Overlay
             }
         }
 
-        public void FocusForTextInput()
+        public void FocusForTextInput(bool forceSteal = false)
         {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
             if (!_applied || !EnsureWindowHandle()) return;
             SetClickThrough(false);
-            // Only an explicit user action may request foreground activation.
-            // Do not force SetFocus or use window positioning to activate the overlay.
-            if (GetForegroundWindow() != _hwnd) SetForegroundWindow(_hwnd);
+            if (GetForegroundWindow() == _hwnd)
+            {
+                SetFocus(_hwnd);
+                return;
+            }
+
+            if (forceSteal)
+            {
+                // One-shot steal when opening dialogs without a mouse gesture (keyboard open / Esc priority).
+                var foreground = GetForegroundWindow();
+                var windowThread = GetWindowThreadProcessId(_hwnd, IntPtr.Zero);
+                var foregroundThread = foreground != IntPtr.Zero
+                    ? GetWindowThreadProcessId(foreground, IntPtr.Zero)
+                    : 0;
+                var attached = windowThread != 0 && foregroundThread != 0 && foregroundThread != windowThread &&
+                               AttachThreadInput(windowThread, foregroundThread, true);
+                try
+                {
+                    SetForegroundWindow(_hwnd);
+                    SetFocus(_hwnd);
+                }
+                finally
+                {
+                    if (attached)
+                    {
+                        AttachThreadInput(windowThread, foregroundThread, false);
+                    }
+                }
+            }
+            else
+            {
+                // Soft request only; mouse-driven opens usually already own last input.
+                SetForegroundWindow(_hwnd);
+            }
 #endif
         }
         IEnumerator Start()

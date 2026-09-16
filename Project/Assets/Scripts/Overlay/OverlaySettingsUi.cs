@@ -1354,6 +1354,8 @@ namespace CrazyChat.Overlay
             return label;
         }
 
+        public bool IsOpen => _panel != null && _panel.activeSelf;
+
         void TogglePanel()
         {
             if (_panel != null && _panel.activeSelf)
@@ -1374,6 +1376,7 @@ namespace CrazyChat.Overlay
 
             _view?.HideInteractMenu();
             _panel.SetActive(true);
+            _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput(forceSteal: true);
             RefreshLabels();
         }
 

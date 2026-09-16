@@ -141,7 +141,7 @@ namespace CrazyChat.Overlay
             _input.NavigateLeft += () => StepTarget(-1);
             _input.NavigateRight += () => StepTarget(1);
             _input.Confirm += OnConfirmTarget;
-            _input.Cancel += StopTargeting;
+            _input.Cancel += OnCancel;
 
             _avatarPresence = gameObject.AddComponent<OverlayAvatarPresence>();
             _avatarPresence.Bind(this, _interact, _input, _settings);
@@ -378,7 +378,7 @@ namespace CrazyChat.Overlay
                 _input.Tapped -= OnTapped;
                 _input.InputDown -= OnInputDown;
                 _input.DoubleControl -= OnDoubleControl;
-                _input.Cancel -= StopTargeting;
+                _input.Cancel -= OnCancel;
             }
 
             if (_chatStore != null)
@@ -678,6 +678,25 @@ namespace CrazyChat.Overlay
             {
                 _nextTapSend = Time.unscaledTime + cooldown;
             }
+        }
+
+        void OnCancel()
+        {
+            // Dialog Esc has highest priority even when another app is foreground
+            // (GetAsyncKeyState still sees the key; OS may also deliver it to that app unless we stole focus).
+            if (_chatUi != null && _chatUi.IsOpen)
+            {
+                _chatUi.Hide();
+                return;
+            }
+
+            if (_settingsUi != null && _settingsUi.IsOpen)
+            {
+                _settingsUi.Hide();
+                return;
+            }
+
+            StopTargeting();
         }
 
         bool IsTyping()
