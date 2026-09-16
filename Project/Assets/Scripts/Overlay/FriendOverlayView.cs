@@ -743,7 +743,7 @@ namespace CrazyChat.Overlay
             StopTargeting();
             HideSettings();
             _bag?.ExpandFor(id);
-            _chatUi?.Open(id);
+            _chatUi?.OpenFromKeyboard(id);
         }
 
         void StopTargeting()

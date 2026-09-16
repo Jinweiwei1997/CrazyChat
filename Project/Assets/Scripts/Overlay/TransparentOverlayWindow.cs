@@ -19,6 +19,7 @@ namespace CrazyChat.Overlay
         GraphicRaycasterHost _raycasterHost;
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         bool _clickThrough = true;
+        bool _pointerCaptureLock;
         float _lastFocusAt = -999f;
 #endif
         float _nextTopmostTime;
@@ -88,6 +89,12 @@ namespace CrazyChat.Overlay
 
         [DllImport("user32.dll")]
         static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr processId);
+
+        [DllImport("user32.dll")]
+        static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach);
 
         [DllImport("user32.dll")]
         static extern IntPtr SetFocus(IntPtr hWnd);
@@ -199,7 +206,21 @@ namespace CrazyChat.Overlay
         }
 #endif
 
-        public void FocusForTextInput()
+        public void SetPointerCaptureLock(bool locked)
+        {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            _pointerCaptureLock = locked;
+            if (locked)
+            {
+                SetClickThrough(false);
+            }
+#endif
+        }
+
+        /// <param name="forceSteal">
+        /// true：键盘开聊天等无鼠标手势时，短时 AttachThreadInput 抢前台；false：仅软抢（鼠标点开可用）。
+        /// </param>
+        public void FocusForTextInput(bool forceSteal = false)
         {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
             if (!_applied || !EnsureWindowHandle())
@@ -208,11 +229,10 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            // Text input needs mouse interaction immediately.
             SetClickThrough(false);
 
             var now = Time.unscaledTime;
-            if (now - _lastFocusAt < FocusMinIntervalSeconds)
+            if (!forceSteal && now - _lastFocusAt < FocusMinIntervalSeconds)
             {
                 return;
             }
@@ -225,12 +245,38 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            // Soft focus only: AttachThreadInput caused AppHangXProc with other apps.
-            OverlayDebugTrace.Log("FocusForTextInput soft");
             SetWindowPos(_hwnd, _alwaysOnTop ? HwndTopmost : HwndNoTopmost, 0, 0, 0, 0,
                 SwpNoMove | SwpNoSize | SwpShowWindow);
-            SetForegroundWindow(_hwnd);
-            SetFocus(_hwnd);
+
+            if (forceSteal)
+            {
+                OverlayDebugTrace.Log("FocusForTextInput force");
+                var foreground = GetForegroundWindow();
+                var windowThread = GetWindowThreadProcessId(_hwnd, IntPtr.Zero);
+                var foregroundThread = foreground != IntPtr.Zero
+                    ? GetWindowThreadProcessId(foreground, IntPtr.Zero)
+                    : 0;
+                var attached = windowThread != 0 && foregroundThread != 0 && foregroundThread != windowThread &&
+                               AttachThreadInput(windowThread, foregroundThread, true);
+                try
+                {
+                    SetForegroundWindow(_hwnd);
+                    SetFocus(_hwnd);
+                }
+                finally
+                {
+                    if (attached)
+                    {
+                        AttachThreadInput(windowThread, foregroundThread, false);
+                    }
+                }
+            }
+            else
+            {
+                OverlayDebugTrace.Log("FocusForTextInput soft");
+                SetForegroundWindow(_hwnd);
+                SetFocus(_hwnd);
+            }
 #endif
         }
 
@@ -267,7 +313,15 @@ namespace CrazyChat.Overlay
             }
 
             var overUi = _raycasterHost != null && _raycasterHost.IsPointerOverInteractive();
-            SetClickThrough(!overUi);
+            if (_pointerCaptureLock)
+            {
+                SetClickThrough(false);
+            }
+            else
+            {
+                SetClickThrough(!overUi);
+            }
+
             OverlayDebugTrace.LogClickThrough(_clickThrough, overUi);
 
             if (_alwaysOnTop && !_suspendTopmost && now >= _nextTopmostTime)
