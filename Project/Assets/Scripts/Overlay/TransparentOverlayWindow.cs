@@ -12,17 +12,11 @@ namespace CrazyChat.Overlay
     /// </summary>
     public sealed class TransparentOverlayWindow : MonoBehaviour
     {
-        const float TopmostRefreshSeconds = 2f;
-        const float FocusMinIntervalSeconds = 0.75f;
-        const float HeartbeatSeconds = 1f;
 
         GraphicRaycasterHost _raycasterHost;
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         bool _clickThrough = true;
-        float _lastFocusAt = -999f;
 #endif
-        float _nextTopmostTime;
-        float _nextHeartbeatAt;
         bool _applied;
         bool _alwaysOnTop = true;
         bool _suspendTopmost;
@@ -89,9 +83,17 @@ namespace CrazyChat.Overlay
         [DllImport("user32.dll")]
         static extern IntPtr GetForegroundWindow();
 
-        [DllImport("user32.dll")]
-        static extern IntPtr SetFocus(IntPtr hWnd);
 
+        [StructLayout(LayoutKind.Sequential)]
+        struct CursorPoint { public int x, y; }
+        [StructLayout(LayoutKind.Sequential)]
+        struct ClientRect { public int left, top, right, bottom; }
+        [DllImport("user32.dll")]
+        static extern bool GetCursorPos(out CursorPoint point);
+        [DllImport("user32.dll")]
+        static extern bool ScreenToClient(IntPtr window, ref CursorPoint point);
+        [DllImport("user32.dll")]
+        static extern bool GetClientRect(IntPtr window, out ClientRect rect);
         [DllImport("Dwmapi.dll")]
         static extern int DwmExtendFrameIntoClientArea(IntPtr hWnd, ref Margins pMarInset);
 
@@ -117,13 +119,35 @@ namespace CrazyChat.Overlay
         }
 #endif
 
+        public bool TryGetPointerPosition(out Vector2 position)
+        {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            position = default;
+            if (!EnsureWindowHandle() || !GetCursorPos(out var point) ||
+                !ScreenToClient(_hwnd, ref point) || !GetClientRect(_hwnd, out var rect))
+                return false;
+            var width = rect.right - rect.left;
+            var height = rect.bottom - rect.top;
+            if (width <= 0 || height <= 0) return false;
+            // ScreenToClient handles monitors left/above the primary screen and window offsets.
+            // Preserve out-of-window coordinates; never clamp another monitor onto a UI edge.
+            position = new Vector2(point.x * (float)Screen.width / width,
+                (height - point.y) * (float)Screen.height / height);
+            return true;
+#else
+            position = Input.mousePosition;
+            return true;
+#endif
+        }
         public void BindRaycaster(GraphicRaycasterHost host)
         {
             _raycasterHost = host;
+            if (host != null) host.BindWindow(this);
         }
 
         public void SetAlwaysOnTop(bool enabled)
         {
+            if (_alwaysOnTop == enabled) return;
             _alwaysOnTop = enabled;
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
             if (_applied && !_suspendTopmost)
@@ -199,41 +223,28 @@ namespace CrazyChat.Overlay
         }
 #endif
 
+        public bool HasKeyboardFocus
+        {
+            get
+            {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+                return EnsureWindowHandle() && GetForegroundWindow() == _hwnd;
+#else
+                return Application.isFocused;
+#endif
+            }
+        }
+
         public void FocusForTextInput()
         {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-            if (!_applied || !EnsureWindowHandle())
-            {
-                OverlayDebugTrace.Log("FocusForTextInput abort");
-                return;
-            }
-
-            // Text input needs mouse interaction immediately.
+            if (!_applied || !EnsureWindowHandle()) return;
             SetClickThrough(false);
-
-            var now = Time.unscaledTime;
-            if (now - _lastFocusAt < FocusMinIntervalSeconds)
-            {
-                return;
-            }
-
-            _lastFocusAt = now;
-            if (GetForegroundWindow() == _hwnd)
-            {
-                SetFocus(_hwnd);
-                OverlayDebugTrace.Log("FocusForTextInput already-foreground");
-                return;
-            }
-
-            // Soft focus only: AttachThreadInput caused AppHangXProc with other apps.
-            OverlayDebugTrace.Log("FocusForTextInput soft");
-            SetWindowPos(_hwnd, _alwaysOnTop ? HwndTopmost : HwndNoTopmost, 0, 0, 0, 0,
-                SwpNoMove | SwpNoSize | SwpShowWindow);
-            SetForegroundWindow(_hwnd);
-            SetFocus(_hwnd);
+            // Only an explicit user action may request foreground activation.
+            // Do not force SetFocus or use window positioning to activate the overlay.
+            if (GetForegroundWindow() != _hwnd) SetForegroundWindow(_hwnd);
 #endif
         }
-
         IEnumerator Start()
         {
             Application.runInBackground = true;
@@ -257,24 +268,9 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            var now = Time.unscaledTime;
-            if (now >= _nextHeartbeatAt)
-            {
-                _nextHeartbeatAt = now + HeartbeatSeconds;
-                OverlayDebugTrace.LogVerbose(
-                    "heartbeat clickThrough=" + _clickThrough +
-                    " fgSelf=" + (GetForegroundWindow() == _hwnd));
-            }
-
             var overUi = _raycasterHost != null && _raycasterHost.IsPointerOverInteractive();
             SetClickThrough(!overUi);
-            OverlayDebugTrace.LogClickThrough(_clickThrough, overUi);
 
-            if (_alwaysOnTop && !_suspendTopmost && now >= _nextTopmostTime)
-            {
-                ApplyTopmost();
-                _nextTopmostTime = now + TopmostRefreshSeconds;
-            }
 #endif
         }
 
@@ -379,9 +375,10 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            var ex = (ulong)GetWindowLongPtr(_hwnd, GwlExStyle).ToInt64();
+            var original = (ulong)GetWindowLongPtr(_hwnd, GwlExStyle).ToInt64();
+            var ex = original;
             ex |= WsExLayered | WsExToolWindow;
-            if (_alwaysOnTop)
+            if (_alwaysOnTop && !_suspendTopmost)
             {
                 ex |= WsExTopmost;
             }
@@ -399,7 +396,10 @@ namespace CrazyChat.Overlay
                 ex &= ~WsExTransparent;
             }
 
-            SetWindowLongPtr(_hwnd, GwlExStyle, new IntPtr((long)ex));
+            if (ex != original)
+            {
+                SetWindowLongPtr(_hwnd, GwlExStyle, new IntPtr((long)ex));
+            }
         }
 
         bool EnsureWindowHandle()
@@ -418,9 +418,26 @@ namespace CrazyChat.Overlay
     public sealed class GraphicRaycasterHost : MonoBehaviour
     {
         static readonly List<RaycastResult> Results = new List<RaycastResult>(8);
+        TransparentOverlayWindow _window;
+
+        public void BindWindow(TransparentOverlayWindow window) { _window = window; }
+
+        public bool TryGetPointerPosition(out Vector2 position)
+        {
+            if (_window != null) return _window.TryGetPointerPosition(out position);
+            position = Input.mousePosition;
+            return true;
+        }
 
         public bool IsPointerOverInteractive()
         {
+            return TryGetPointerPosition(out var position) && IsPointerOverInteractive(position);
+        }
+
+        public bool IsPointerOverInteractive(Vector2 position)
+        {
+            if (position.x < 0f || position.y < 0f ||
+                position.x >= Screen.width || position.y >= Screen.height) return false;
             var eventSystem = EventSystem.current;
             if (eventSystem == null)
             {
@@ -429,7 +446,7 @@ namespace CrazyChat.Overlay
 
             var data = new PointerEventData(eventSystem)
             {
-                position = Input.mousePosition
+                position = position
             };
             Results.Clear();
             eventSystem.RaycastAll(data, Results);

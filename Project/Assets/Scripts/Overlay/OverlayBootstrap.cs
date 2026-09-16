@@ -13,12 +13,15 @@ namespace CrazyChat.Overlay
     {
         static OverlayBootstrap _instance;
         static bool _steamSessionOpen;
+        static bool _endingSession;
 
 #if UNITY_2019_3_OR_NEWER
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics()
         {
             _instance = null;
+            _steamSessionOpen = false;
+            _endingSession = false;
         }
 #endif
 
@@ -28,6 +31,15 @@ namespace CrazyChat.Overlay
         {
             UnityEditor.EditorApplication.playModeStateChanged -= OnEditorPlayModeChanged;
             UnityEditor.EditorApplication.playModeStateChanged += OnEditorPlayModeChanged;
+            UnityEditor.AssemblyReloadEvents.beforeAssemblyReload -= BeforeEditorAssemblyReload;
+            UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += BeforeEditorAssemblyReload;
+        }
+
+        static void BeforeEditorAssemblyReload()
+        {
+            if (!UnityEditor.EditorApplication.isPlaying) return;
+            EndSteamSession();
+            OverlaySessionGuard.ReleaseLocalMutex();
         }
 
         static void OnEditorPlayModeChanged(UnityEditor.PlayModeStateChange state)
@@ -43,17 +55,14 @@ namespace CrazyChat.Overlay
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void AutoStart()
         {
-            if (_instance != null)
+            if (_endingSession || _instance != null)
             {
-                OverlayDebugTrace.Log("AutoStart skip: instance exists");
                 return;
             }
 
             var mutexOk = OverlaySessionGuard.TryAcquireLocalMutex();
-            OverlayDebugTrace.Log("AutoStart mutexOk=" + mutexOk);
             if (!mutexOk)
             {
-                OverlayDebugTrace.Log("AutoStart BeginQuit: already running locally");
                 OverlaySessionGuard.BeginQuit("CrazyChat 已在本机运行");
                 return;
             }
@@ -66,14 +75,12 @@ namespace CrazyChat.Overlay
         {
             if (_instance != null && _instance != this)
             {
-                OverlayDebugTrace.Log("Awake destroy duplicate bootstrap");
                 Destroy(gameObject);
                 return;
             }
 
             _instance = this;
             DontDestroyOnLoad(gameObject);
-            OverlayDebugTrace.Log("Awake begin");
 
             Application.runInBackground = true;
             Application.targetFrameRate = 60;
@@ -102,7 +109,6 @@ namespace CrazyChat.Overlay
                     () => view.Stealth?.RevealNow());
             }
 #endif
-            OverlayDebugTrace.Log("Awake complete steamInit=" + _steamSessionOpen);
         }
 
         static void EnsureSteamManager()
@@ -139,13 +145,19 @@ namespace CrazyChat.Overlay
 
         void OnApplicationQuit()
         {
-            OverlayDebugTrace.Log("OnApplicationQuit");
             EndSteamSession();
             OverlaySessionGuard.ReleaseLocalMutex();
         }
 
         static void EndSteamSession()
         {
+            if (_endingSession) return;
+            _endingSession = true;
+
+            // Release Overlay callbacks and call results while SteamManager still owns Steam.
+            // Keep SteamAPI.Shutdown exclusively in SteamManager.OnDestroy.
+            if (_instance != null && _instance.gameObject.activeSelf)
+                _instance.gameObject.SetActive(false);
             if (!_steamSessionOpen)
             {
                 return;

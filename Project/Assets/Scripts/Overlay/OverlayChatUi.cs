@@ -116,8 +116,11 @@ namespace CrazyChat.Overlay
 
         void Bind()
         {
-            OverlayHoverRelay.Bind(_card, OnCardPointerEnter, null);
-            BindClick(_backdrop != null ? _backdrop.transform : null, Hide);
+            if (_backdrop != null)
+            {
+                foreach (var graphic in _backdrop.GetComponentsInChildren<Graphic>(true))
+                    graphic.raycastTarget = false;
+            }
             BindClick(FindNode(_cardRt, "Header/Close"), Hide);
             BindClick(FindNode(_cardRt, "Send"), Send);
             BindClick(FindNode(_cardRt, "History"), ToggleHistory);
@@ -370,7 +373,7 @@ namespace CrazyChat.Overlay
                 _input.text = string.Empty;
                 if (focusInput)
                 {
-                    KeepInputFocused();
+                    KeepInputFocused(requestWindowFocus: true);
                 }
             }
 
@@ -379,7 +382,6 @@ namespace CrazyChat.Overlay
 
         public void Hide()
         {
-            OverlayDebugTrace.Log("ChatUi.Hide wasOpen=" + IsOpen + " friend=" + _friendId);
             if (_refocusRoutine != null)
             {
                 StopCoroutine(_refocusRoutine);
@@ -690,7 +692,7 @@ namespace CrazyChat.Overlay
 
         void OnEndEdit(string _)
         {
-            if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
+            if (!_releasingInputFocus && HasKeyboardFocus && (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)))
             {
                 Send();
             }
@@ -717,60 +719,77 @@ namespace CrazyChat.Overlay
             KeepInputFocused();
         }
 
-        void KeepInputFocused()
+        bool _releasingInputFocus;
+
+        bool HasKeyboardFocus
         {
-            if (!isActiveAndEnabled)
+            get
             {
-                FocusInputNow(stealWindowFocus: true);
-                return;
+                var window = _view != null ? _view.GetComponent<TransparentOverlayWindow>() : null;
+                return window != null ? window.HasKeyboardFocus : Application.isFocused;
             }
-
-            if (_refocusRoutine != null)
-            {
-                StopCoroutine(_refocusRoutine);
-            }
-
-            _refocusRoutine = StartCoroutine(RefocusInputNextFrame(stealWindowFocus: true));
         }
 
-        IEnumerator RefocusInputNextFrame(bool stealWindowFocus)
+        void KeepInputFocused(bool requestWindowFocus = false)
+        {
+            if (!IsOpen || !isActiveAndEnabled) return;
+            if (_refocusRoutine != null) StopCoroutine(_refocusRoutine);
+
+            // Request now, during the opening action, never from a delayed callback.
+            if (requestWindowFocus)
+                _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput();
+
+            _refocusRoutine = StartCoroutine(RefocusInputNextFrame());
+        }
+
+        IEnumerator RefocusInputNextFrame()
         {
             yield return null;
             _refocusRoutine = null;
-            FocusInputNow(stealWindowFocus);
-        }
-
-        void FocusInputNow(bool stealWindowFocus)
-        {
-            if (!IsOpen || _input == null || !_input.gameObject.activeInHierarchy)
-            {
-                return;
-            }
-
-            if (stealWindowFocus)
-            {
-                _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput();
-            }
+            if (!IsOpen || !HasKeyboardFocus || _input == null || !_input.gameObject.activeInHierarchy)
+                yield break;
 
             EventSystem.current?.SetSelectedGameObject(_input.gameObject);
             _input.ActivateInputField();
             _input.Select();
         }
 
-        void OnCardPointerEnter()
+        void ReleaseInputFocus()
         {
-            // Local field focus only; window steal on hover caused AppHangXProc.
-            FocusInputNow(stealWindowFocus: false);
+            if (_refocusRoutine != null)
+            {
+                StopCoroutine(_refocusRoutine);
+                _refocusRoutine = null;
+            }
+            if (_input == null) return;
+            _releasingInputFocus = true;
+            try
+            {
+                _input.DeactivateInputField();
+                if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject == _input.gameObject)
+                    EventSystem.current.SetSelectedGameObject(null);
+            }
+            finally
+            {
+                _releasingInputFocus = false;
+            }
+        }
+
+        void OnApplicationFocus(bool focused)
+        {
+            if (!focused) ReleaseInputFocus();
         }
 
         void Update()
         {
-            if (IsOpen && Input.GetKeyDown(KeyCode.Escape))
+            if (!IsOpen) return;
+            if (!HasKeyboardFocus)
             {
-                Hide();
+                ReleaseInputFocus();
+                return;
             }
+            if (Input.GetKeyDown(KeyCode.Escape)) Hide();
         }
-
         void LateUpdate()
         {
             if (!IsOpen || _cardRt == null || _view == null)

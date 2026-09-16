@@ -14,6 +14,7 @@ namespace CrazyChat.Overlay
         OverlayTapStats _stats;
         OverlayUserSettings _settings;
         OverlayInputWatcher _input;
+        GraphicRaycasterHost _raycasterHost;
         OverlayChatStore _chatStore;
         OverlayChatService _chat;
         OverlayChatUi _chatUi;
@@ -151,12 +152,12 @@ namespace CrazyChat.Overlay
             _service.Changed += Rebuild;
             Rebuild();
             ApplyUserSettings();
-            return canvasGo.GetComponent<GraphicRaycasterHost>();
+            _raycasterHost = canvasGo.GetComponent<GraphicRaycasterHost>();
+            return _raycasterHost;
         }
 
         public void CloseTransientPanels()
         {
-            OverlayDebugTrace.Log("CloseTransientPanels");
             _chatUi?.Hide();
             _settingsUi?.Hide();
             HideInteractMenu();
@@ -614,6 +615,12 @@ namespace CrazyChat.Overlay
 
         void OnInputDown(int vk)
         {
+            if (vk == 0x01 && _raycasterHost != null &&
+                _raycasterHost.TryGetPointerPosition(out var position) &&
+                !_raycasterHost.IsPointerOverInteractive(position))
+            {
+                CloseTransientPanels();
+            }
             var displayVk = _settings != null && _settings.ShowInputIcons
                 ? vk
                 : OverlayInputIcons.RandomVirtualKey(vk);

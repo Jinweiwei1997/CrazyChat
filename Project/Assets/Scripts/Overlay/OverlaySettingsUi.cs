@@ -166,7 +166,12 @@ namespace CrazyChat.Overlay
             }
 
             BindClick(_buttonImage, TogglePanel);
-            BindClick(FindNode(_panel != null ? _panel.transform : null, "Backdrop"), Hide);
+            var backdrop = FindNode(_panel != null ? _panel.transform : null, "Backdrop");
+            if (backdrop != null)
+            {
+                foreach (var graphic in backdrop.GetComponentsInChildren<Graphic>(true))
+                    graphic.raycastTarget = false;
+            }
             BindClick(_closeImage, Hide);
             BindTabs();
             BindAvatarSetup();
@@ -1107,7 +1112,6 @@ namespace CrazyChat.Overlay
 
         static void QuitGame()
         {
-            OverlayDebugTrace.Log("SettingsUi.QuitGame");
 #if UNITY_EDITOR
             UnityEditor.EditorApplication.isPlaying = false;
 #else
@@ -1375,7 +1379,6 @@ namespace CrazyChat.Overlay
 
         public void Hide()
         {
-            OverlayDebugTrace.Log("SettingsUi.Hide");
             CloseAvatarOverlays();
             if (_panel != null)
             {

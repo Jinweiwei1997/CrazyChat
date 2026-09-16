@@ -154,7 +154,7 @@ namespace CrazyChat.Overlay
             // Reconcile if a previous callback was interrupted; the poller remains authoritative.
             if (_localActive != _input.IsAnyDown)
             {
-                OverlayDebugTrace.Log("avatar-input mismatch active=" + _localActive +
+                Debug.Log("avatar-input mismatch active=" + _localActive +
                     " polled=" + _input.IsAnyDown);
                 SetLocalActive(_input.IsAnyDown);
             }
@@ -162,7 +162,7 @@ namespace CrazyChat.Overlay
             var localChip = _view != null ? _view.LocalChip : null;
             if (localChip != null && localChip.IsPresenceActive && !_localActive)
             {
-                OverlayDebugTrace.Log("avatar-input visual-mismatch polled=" + _input.IsAnyDown);
+                Debug.Log("avatar-input visual-mismatch polled=" + _input.IsAnyDown);
                 ApplyLocalChip();
             }
 
@@ -175,7 +175,7 @@ namespace CrazyChat.Overlay
                         Time.unscaledTime - pair.Value >= 10f && _view != null &&
                         _view.TryGetChip(pair.Key, out var chip) && chip != null)
                     {
-                        OverlayDebugTrace.Log("avatar-remote active friend=" + pair.Key +
+                        Debug.Log("avatar-remote active friend=" + pair.Key +
                             " lastPresenceSeconds=" + (Time.unscaledTime - pair.Value).ToString("F1") +
                             " visualB=" + chip.IsPresenceActive);
                     }
@@ -185,7 +185,7 @@ namespace CrazyChat.Overlay
             if (_localActive && Time.unscaledTime >= _nextActiveTrace)
             {
                 _nextActiveTrace = Time.unscaledTime + 30f;
-                OverlayDebugTrace.Log("avatar-input active seconds=" +
+                Debug.Log("avatar-input active seconds=" +
                     (Time.unscaledTime - _localActiveSince).ToString("F1") +
                     " polled=" + _input.IsAnyDown + " visualB=" + (localChip != null && localChip.IsPresenceActive) + " enabled=" + LocalEnabled +
                     " focused=" + Application.isFocused);

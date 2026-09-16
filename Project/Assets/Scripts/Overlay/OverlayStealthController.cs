@@ -29,7 +29,6 @@ namespace CrazyChat.Overlay
         Phase _phase = Phase.Visible;
         bool _holding;
         float _elapsed;
-        bool _loggedNonInteractive;
         System.Action _hiddenChanged;
 
         public bool IsHidden => _phase == Phase.Hidden || _phase == Phase.Showing;
@@ -55,7 +54,6 @@ namespace CrazyChat.Overlay
 
         public void RevealNow()
         {
-            OverlayDebugTrace.Log("Stealth.RevealNow from=" + _phase);
             _holding = false;
             _elapsed = 0f;
             SetPhase(Phase.Visible);
@@ -135,11 +133,6 @@ namespace CrazyChat.Overlay
 
         void SetPhase(Phase next)
         {
-            if (_phase != next)
-            {
-                OverlayDebugTrace.Log("Stealth.phase " + _phase + " -> " + next);
-            }
-
             var wasHidden = IsHidden;
             _phase = next;
             if (wasHidden != IsHidden)
@@ -153,18 +146,6 @@ namespace CrazyChat.Overlay
             _content.alpha = alpha;
             _content.interactable = interactive;
             _content.blocksRaycasts = interactive;
-            if (!interactive)
-            {
-                if (!_loggedNonInteractive)
-                {
-                    _loggedNonInteractive = true;
-                    OverlayDebugTrace.Log("Stealth.ApplyAlpha alpha=" + alpha.ToString("0.00") + " interactive=false");
-                }
-            }
-            else
-            {
-                _loggedNonInteractive = false;
-            }
         }
 
         void BuildHud(RectTransform hudLayer)

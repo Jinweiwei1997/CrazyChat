@@ -25,7 +25,14 @@ namespace CrazyChat.Overlay
         string _sessionId;
         long _startedUnix;
         float _nextHeartbeatAt;
-        float _nextPollAt;
+        const int MaxLeaseBytes = 4096;
+        const float LeaseRequestTimeoutSeconds = 15f;
+        bool _requestPending;
+        float _requestDeadline;
+#if !DISABLESTEAMWORKS
+        CallResult<RemoteStorageFileReadAsyncComplete_t> _readResult;
+        CallResult<RemoteStorageFileWriteAsyncComplete_t> _writeResult;
+#endif
         float _exitAt = -1f;
         string _exitMessage;
         bool _leaseActive;
@@ -44,20 +51,14 @@ namespace CrazyChat.Overlay
                 _mutexOwned = _mutex.WaitOne(0);
                 if (!_mutexOwned)
                 {
-                    OverlayDebugTrace.Log("TryAcquireLocalMutex failed: already owned");
                     _mutex.Dispose();
                     _mutex = null;
-                }
-                else
-                {
-                    OverlayDebugTrace.Log("TryAcquireLocalMutex ok");
                 }
 
                 return _mutexOwned;
             }
             catch (Exception e)
             {
-                OverlayDebugTrace.Log("TryAcquireLocalMutex exception degrade-allow: " + e.Message);
                 Debug.LogWarning("[Overlay] 本机互斥获取异常，降级放行: " + e.Message);
                 ReleaseLocalMutex();
                 return true;
@@ -105,26 +106,20 @@ namespace CrazyChat.Overlay
 
         public void StartLeaseIfPossible()
         {
-#if DISABLESTEAMWORKS
+// Editor Play sessions are not cross-device game sessions. Avoid launching
+// cloud operations that may still be pending when Play mode tears Steam down.
+#if DISABLESTEAMWORKS || UNITY_EDITOR
             return;
 #else
-            if (!SteamManager.Initialized)
-            {
-                return;
-            }
+            if (!SteamManager.Initialized || _leaseActive || _exiting) return;
 
             _sessionId = Guid.NewGuid().ToString("N");
             _startedUnix = NowUnix();
-            if (!WriteLease(_startedUnix))
-            {
-                Debug.LogWarning("[Overlay] 会话租约写入失败，跨设备顶号降级。");
-                _leaseActive = false;
-                return;
-            }
-
+            _readResult = CallResult<RemoteStorageFileReadAsyncComplete_t>.Create(OnLeaseRead);
+            _writeResult = CallResult<RemoteStorageFileWriteAsyncComplete_t>.Create(OnLeaseWritten);
             _leaseActive = true;
-            _nextHeartbeatAt = Time.unscaledTime + OverlaySessionLease.HeartbeatSeconds;
-            _nextPollAt = Time.unscaledTime + OverlaySessionLease.HeartbeatSeconds;
+            // Claim the session on startup; later heartbeats yield to a fresh foreign lease.
+            WriteLeaseAsync();
 #endif
         }
 
@@ -153,17 +148,14 @@ namespace CrazyChat.Overlay
             }
 
             var now = Time.unscaledTime;
-            if (now >= _nextPollAt)
+            if (_requestPending)
             {
-                _nextPollAt = now + OverlaySessionLease.HeartbeatSeconds;
-                PollLease();
+                if (now >= _requestDeadline)
+                    DisableLease("异步请求超时");
+                return;
             }
 
-            if (!_exiting && now >= _nextHeartbeatAt)
-            {
-                _nextHeartbeatAt = now + OverlaySessionLease.HeartbeatSeconds;
-                Heartbeat();
-            }
+            if (now >= _nextHeartbeatAt) BeginLeaseCycle();
 #endif
         }
 
@@ -181,107 +173,138 @@ namespace CrazyChat.Overlay
             GUI.Box(new Rect(x, y, width, height), _exitMessage);
         }
 
-        void OnDestroy()
+        void OnDisable()
         {
-            if (_exiting)
-            {
-                return;
-            }
-
-            // Mutex released from Bootstrap EndSteamSession / quit path.
+            _leaseActive = false;
+            _requestPending = false;
+#if !DISABLESTEAMWORKS
+            _readResult?.Dispose();
+            _writeResult?.Dispose();
+            _readResult = null;
+            _writeResult = null;
+#endif
+            // Local mutex remains owned until Bootstrap's quit path.
         }
 
 #if !DISABLESTEAMWORKS
-        void Heartbeat()
+        void BeginLeaseCycle()
         {
-            if (!TryReadRemote(out var remote) || remote == null)
-            {
-                WriteLease(NowUnix());
-                return;
-            }
-
-            var local = CurrentPayload(NowUnix());
-            if (OverlaySessionLease.ShouldYield(local, remote, NowUnix(), OverlaySessionLease.StaleAfterSeconds))
-            {
-                ScheduleExit("已在其他设备登录 CrazyChat");
-                return;
-            }
-
-            WriteLease(NowUnix());
-        }
-
-        void PollLease()
-        {
-            if (!TryReadRemote(out var remote) || remote == null)
-            {
-                return;
-            }
-
-            var local = CurrentPayload(NowUnix());
-            if (OverlaySessionLease.ShouldYield(local, remote, NowUnix(), OverlaySessionLease.StaleAfterSeconds))
-            {
-                ScheduleExit("已在其他设备登录 CrazyChat");
-            }
-        }
-
-        OverlaySessionLease.Payload CurrentPayload(long heartbeatUnix)
-        {
-            return new OverlaySessionLease.Payload
-            {
-                sessionId = _sessionId,
-                startedUnix = _startedUnix,
-                heartbeatUnix = heartbeatUnix
-            };
-        }
-
-        bool WriteLease(long heartbeatUnix)
-        {
+            if (!_leaseActive || _exiting || _requestPending) return;
             try
             {
-                var json = OverlaySessionLease.ToJson(_sessionId, _startedUnix, heartbeatUnix);
-                var bytes = Encoding.UTF8.GetBytes(json);
-                return SteamRemoteStorage.FileWrite(OverlaySessionLease.FileName, bytes, bytes.Length);
-            }
-            catch (Exception e)
-            {
-                Debug.LogWarning("[Overlay] 写会话租约失败: " + e.Message);
-                return false;
-            }
-        }
-
-        static bool TryReadRemote(out OverlaySessionLease.Payload payload)
-        {
-            payload = null;
-            try
-            {
-                if (!SteamRemoteStorage.FileExists(OverlaySessionLease.FileName))
-                {
-                    return false;
-                }
-
                 var size = SteamRemoteStorage.GetFileSize(OverlaySessionLease.FileName);
                 if (size <= 0)
                 {
-                    return false;
+                    WriteLeaseAsync();
+                    return;
                 }
-
-                var buffer = new byte[size];
-                var read = SteamRemoteStorage.FileRead(OverlaySessionLease.FileName, buffer, size);
-                if (read <= 0)
+                if (size > MaxLeaseBytes)
                 {
-                    return false;
+                    DisableLease("租约文件过大");
+                    return;
                 }
 
-                return OverlaySessionLease.TryParse(Encoding.UTF8.GetString(buffer, 0, read), out payload);
+                var call = SteamRemoteStorage.FileReadAsync(OverlaySessionLease.FileName, 0, (uint)size);
+                if (call == SteamAPICall_t.Invalid)
+                {
+                    DisableLease("无法发起异步读取");
+                    return;
+                }
+                _requestPending = true;
+                _requestDeadline = Time.unscaledTime + LeaseRequestTimeoutSeconds;
+                _readResult.Set(call);
             }
             catch (Exception e)
             {
-                Debug.LogWarning("[Overlay] 读会话租约失败: " + e.Message);
-                return false;
+                DisableLease(e.Message);
             }
         }
-#endif
 
+        void OnLeaseRead(RemoteStorageFileReadAsyncComplete_t result, bool ioFailure)
+        {
+            if (!_leaseActive || _exiting) return;
+            _requestPending = false;
+            try
+            {
+                if (ioFailure || result.m_eResult != EResult.k_EResultOK ||
+                    result.m_cubRead == 0 || result.m_cubRead > MaxLeaseBytes)
+                {
+                    DisableLease("异步读取失败");
+                    return;
+                }
+
+                var buffer = new byte[(int)result.m_cubRead];
+                // Complete only copies already-read bytes and must run inside this callback.
+                if (!SteamRemoteStorage.FileReadAsyncComplete(result.m_hFileReadAsync, buffer, result.m_cubRead))
+                {
+                    DisableLease("读取结果获取失败");
+                    return;
+                }
+
+                var now = NowUnix();
+                var local = new OverlaySessionLease.Payload
+                {
+                    sessionId = _sessionId, startedUnix = _startedUnix, heartbeatUnix = now
+                };
+                if (OverlaySessionLease.TryParse(Encoding.UTF8.GetString(buffer), out var remote) &&
+                    OverlaySessionLease.ShouldYield(local, remote, now, OverlaySessionLease.StaleAfterSeconds))
+                {
+                    ScheduleExit("已在其他设备登录 CrazyChat");
+                    return;
+                }
+
+                WriteLeaseAsync();
+            }
+            catch (Exception e)
+            {
+                DisableLease(e.Message);
+            }
+        }
+
+        void WriteLeaseAsync()
+        {
+            if (!_leaseActive || _exiting || _requestPending) return;
+            try
+            {
+                var bytes = Encoding.UTF8.GetBytes(
+                    OverlaySessionLease.ToJson(_sessionId, _startedUnix, NowUnix()));
+                var call = SteamRemoteStorage.FileWriteAsync(OverlaySessionLease.FileName, bytes, (uint)bytes.Length);
+                if (call == SteamAPICall_t.Invalid)
+                {
+                    DisableLease("无法发起异步写入");
+                    return;
+                }
+                _requestPending = true;
+                _requestDeadline = Time.unscaledTime + LeaseRequestTimeoutSeconds;
+                _writeResult.Set(call);
+            }
+            catch (Exception e)
+            {
+                DisableLease(e.Message);
+            }
+        }
+
+        void OnLeaseWritten(RemoteStorageFileWriteAsyncComplete_t result, bool ioFailure)
+        {
+            if (!_leaseActive || _exiting) return;
+            _requestPending = false;
+            if (ioFailure || result.m_eResult != EResult.k_EResultOK)
+            {
+                DisableLease("异步写入失败");
+                return;
+            }
+            _nextHeartbeatAt = Time.unscaledTime + OverlaySessionLease.HeartbeatSeconds;
+        }
+
+        void DisableLease(string reason)
+        {
+            _leaseActive = false;
+            _requestPending = false;
+            _readResult?.Cancel();
+            _writeResult?.Cancel();
+            Debug.LogWarning("[Overlay] 跨设备会话检测已降级，本机单实例仍有效: " + reason);
+        }
+#endif
         void ScheduleExit(string message)
         {
             if (_exiting)
@@ -293,13 +316,11 @@ namespace CrazyChat.Overlay
             _leaseActive = false;
             _exitMessage = message;
             _exitAt = Time.unscaledTime + OverlaySessionLease.ExitNoticeSeconds;
-            OverlayDebugTrace.Log("ScheduleExit: " + message);
             Debug.LogWarning("[Overlay] " + message);
         }
 
         static void QuitNow()
         {
-            OverlayDebugTrace.Log("QuitNow");
             ReleaseLocalMutex();
 #if UNITY_EDITOR
             UnityEditor.EditorApplication.isPlaying = false;

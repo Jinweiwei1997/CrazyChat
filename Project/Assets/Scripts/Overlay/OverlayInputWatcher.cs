@@ -29,7 +29,6 @@ namespace CrazyChat.Overlay
         bool _pollInitialized;
 
         public bool IsAnyDown => _anyDown;
-
         void Awake()
         {
             _config = OverlayConfig.LoadOrDefault();
@@ -64,6 +63,7 @@ namespace CrazyChat.Overlay
                 taps++;
             }
 
+            if (Input.GetMouseButtonDown(0)) InputDown?.Invoke(0x01);
             PollUnityCommands();
             SetAnyDown(Input.anyKey || Input.GetMouseButton(0) || Input.GetMouseButton(1) ||
                        Input.GetMouseButton(2));
@@ -131,7 +131,7 @@ namespace CrazyChat.Overlay
                 {
                     if (_reportedHeld[vk])
                     {
-                        OverlayDebugTrace.Log("input-held released vk=0x" + vk.ToString("X2") +
+                        Debug.Log("input-held released vk=0x" + vk.ToString("X2") +
                             " seconds=" + (now - _heldSince[vk]).ToString("F1"));
                     }
                     _heldSince[vk] = 0f;
@@ -151,7 +151,7 @@ namespace CrazyChat.Overlay
             {
                 _nextHeldTrace = now + 30f;
                 // Include sided modifier states to diagnose an aggregate Ctrl/Alt/Shift stuck bit.
-                OverlayDebugTrace.Log("input-held focused=" + Application.isFocused + held +
+                Debug.Log("input-held focused=" + Application.isFocused + held +
                     " modifiers(LShift,RShift,LCtrl,RCtrl,LAlt,RAlt)=" +
                     ((GetAsyncKeyState(0xA0) & 0x8000) != 0) + "," +
                     ((GetAsyncKeyState(0xA1) & 0x8000) != 0) + "," +
