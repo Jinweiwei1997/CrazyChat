@@ -345,16 +345,10 @@ namespace CrazyChat.Overlay
 
         public void Open(ulong friendId)
         {
-            Open(friendId, focusInput: true, forceWindowFocus: false);
+            Open(friendId, true);
         }
 
-        /// <summary>双击 Ctrl 选人后 Enter：无鼠标手势，需强制抢系统键盘。</summary>
-        public void OpenFromKeyboard(ulong friendId)
-        {
-            Open(friendId, focusInput: true, forceWindowFocus: true);
-        }
-
-        void Open(ulong friendId, bool focusInput, bool forceWindowFocus)
+        void Open(ulong friendId, bool focusInput)
         {
             if (friendId == 0 || _chat == null || _chat.Store == null || _view == null || !_view.IsPresent(friendId))
             {
@@ -371,20 +365,12 @@ namespace CrazyChat.Overlay
             transform.SetAsLastSibling();
             _chat.Store.MarkRead(friendId);
             Refresh();
-            var window = _view?.GetComponent<TransparentOverlayWindow>();
-            window?.SetPointerCaptureLock(true);
-            if (forceWindowFocus)
-            {
-                // Keyboard open: steal immediately on the Enter that confirmed targeting.
-                window?.FocusForTextInput(forceSteal: true);
-            }
-
             if (_input != null)
             {
                 _input.text = string.Empty;
                 if (focusInput)
                 {
-                    KeepInputFocused(forceWindowFocus);
+                    KeepInputFocused();
                 }
             }
 
@@ -422,7 +408,6 @@ namespace CrazyChat.Overlay
                 _backdrop.SetActive(false);
             }
 
-            _view?.GetComponent<TransparentOverlayWindow>()?.SetPointerCaptureLock(false);
             _view?.RefreshChatSelection();
         }
 
@@ -729,14 +714,14 @@ namespace CrazyChat.Overlay
             {
                 _input.text = string.Empty;
             }
-            KeepInputFocused(forceWindowFocus: false);
+            KeepInputFocused();
         }
 
-        void KeepInputFocused(bool forceWindowFocus = false)
+        void KeepInputFocused()
         {
             if (!isActiveAndEnabled)
             {
-                FocusInputNow(stealWindowFocus: true, forceWindowFocus);
+                FocusInputNow(stealWindowFocus: true);
                 return;
             }
 
@@ -745,17 +730,17 @@ namespace CrazyChat.Overlay
                 StopCoroutine(_refocusRoutine);
             }
 
-            _refocusRoutine = StartCoroutine(RefocusInputNextFrame(stealWindowFocus: true, forceWindowFocus));
+            _refocusRoutine = StartCoroutine(RefocusInputNextFrame(stealWindowFocus: true));
         }
 
-        IEnumerator RefocusInputNextFrame(bool stealWindowFocus, bool forceWindowFocus)
+        IEnumerator RefocusInputNextFrame(bool stealWindowFocus)
         {
             yield return null;
             _refocusRoutine = null;
-            FocusInputNow(stealWindowFocus, forceWindowFocus);
+            FocusInputNow(stealWindowFocus);
         }
 
-        void FocusInputNow(bool stealWindowFocus, bool forceWindowFocus = false)
+        void FocusInputNow(bool stealWindowFocus)
         {
             if (!IsOpen || _input == null || !_input.gameObject.activeInHierarchy)
             {
@@ -764,7 +749,7 @@ namespace CrazyChat.Overlay
 
             if (stealWindowFocus)
             {
-                _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput(forceWindowFocus);
+                _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput();
             }
 
             EventSystem.current?.SetSelectedGameObject(_input.gameObject);
