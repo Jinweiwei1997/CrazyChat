@@ -617,9 +617,25 @@ namespace CrazyChat.Overlay
             }
 
             _cardRt.pivot = new Vector2(0.5f, 0.5f);
-            _cardRt.sizeDelta = _mode == ChatMode.History
-                ? new Vector2(HistoryWidth, HistoryHeight)
-                : new Vector2(ChatWidth, ChatHeight);
+            if (_mode == ChatMode.History)
+            {
+                _cardRt.sizeDelta = new Vector2(HistoryWidth, HistoryHeight);
+                return;
+            }
+
+            if (_mode == ChatMode.Compact)
+            {
+                // Height is owned by FitCompactHeight; only pin width here.
+                var height = _cardRt.sizeDelta.y > 0f
+                    ? _cardRt.sizeDelta.y
+                    : OverlayCompactChatLayout.CardHeight(
+                        OverlayCompactChatLayout.FixedChromeHeight(HeaderHeight, StatusHeight, ComposerHeight),
+                        CompactMinBodyHeight);
+                _cardRt.sizeDelta = new Vector2(ChatWidth, height);
+                return;
+            }
+
+            _cardRt.sizeDelta = new Vector2(ChatWidth, ChatHeight);
         }
 
         void ApplyComposerLayout()
@@ -881,13 +897,15 @@ namespace CrazyChat.Overlay
             }
 
             var contentHeight = Mathf.Max(8f, y + 2f);
-            _content.sizeDelta = new Vector2(0f, contentHeight);
+            if (_content != null)
+            {
+                _content.sizeDelta = new Vector2(0f, contentHeight);
+                _content.anchoredPosition = Vector2.zero;
+            }
+
             FitCompactHeight(contentHeight);
             Canvas.ForceUpdateCanvases();
-            if (_scroll != null)
-            {
-                _scroll.verticalNormalizedPosition = 0f;
-            }
+            ApplyCompactScroll(contentHeight);
         }
 
         void FitCompactHeight(float contentHeight)
@@ -897,15 +915,54 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            var fixedHeight = HeaderHeight + StatusHeight + ComposerHeight + 1f;
-            var maxBodyHeight = Mathf.Max(CompactMinBodyHeight, ChatHeight - fixedHeight);
-            var bodyHeight = Mathf.Clamp(contentHeight, CompactMinBodyHeight, maxBodyHeight);
-            _cardRt.sizeDelta = new Vector2(ChatWidth, fixedHeight + bodyHeight);
+            var fixedHeight = OverlayCompactChatLayout.FixedChromeHeight(
+                HeaderHeight, StatusHeight, ComposerHeight);
+            var maxBodyHeight = OverlayCompactChatLayout.MaxBodyHeight(
+                ChatHeight, fixedHeight, CompactMinBodyHeight);
+            var bodyHeight = OverlayCompactChatLayout.ClampBodyHeight(
+                contentHeight, CompactMinBodyHeight, maxBodyHeight);
+            _cardRt.sizeDelta = new Vector2(
+                ChatWidth,
+                OverlayCompactChatLayout.CardHeight(fixedHeight, bodyHeight));
             ApplyComposerLayout();
+            if (_content != null)
+            {
+                _content.anchoredPosition = Vector2.zero;
+            }
+
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_cardRt);
 
             if (_view != null && _view.TryGetFollowPosition(_friendId, out var position))
             {
                 PlaceCardAbove(position);
+            }
+        }
+
+        void ApplyCompactScroll(float contentHeight)
+        {
+            if (_scroll == null || _content == null)
+            {
+                return;
+            }
+
+            if (_mode != ChatMode.Compact)
+            {
+                _scroll.vertical = true;
+                _scroll.verticalNormalizedPosition = 0f;
+                return;
+            }
+
+            var fixedHeight = OverlayCompactChatLayout.FixedChromeHeight(
+                HeaderHeight, StatusHeight, ComposerHeight);
+            var maxBodyHeight = OverlayCompactChatLayout.MaxBodyHeight(
+                ChatHeight, fixedHeight, CompactMinBodyHeight);
+            var enableScroll = OverlayCompactChatLayout.ShouldEnableVerticalScroll(
+                contentHeight, maxBodyHeight);
+            _content.anchoredPosition = Vector2.zero;
+            _scroll.vertical = enableScroll;
+            if (enableScroll)
+            {
+                _scroll.verticalNormalizedPosition = 0f;
             }
         }
 
@@ -986,8 +1043,9 @@ namespace CrazyChat.Overlay
             row.BubbleRt.anchorMin = row.BubbleRt.anchorMax = mine ? new Vector2(1f, 1f) : new Vector2(0f, 1f);
             row.BubbleRt.pivot = mine ? new Vector2(1f, 1f) : new Vector2(0f, 1f);
             row.BubbleRt.anchoredPosition = new Vector2(mine ? -10f : 10f, 0f);
-            row.BubbleRt.sizeDelta = new Vector2(bubbleW, 40f);
-            var textH = Mathf.Max(16f, row.Text.preferredHeight);
+            var textInnerW = Mathf.Max(8f, bubbleW - 16f);
+            var genSettings = row.Text.GetGenerationSettings(new Vector2(textInnerW, 0f));
+            var textH = Mathf.Max(16f, row.Text.cachedTextGeneratorForLayout.GetPreferredHeight(text, genSettings));
             var bubbleH = textH + 12f;
             row.BubbleRt.sizeDelta = new Vector2(bubbleW, bubbleH);
             return bubbleH;
