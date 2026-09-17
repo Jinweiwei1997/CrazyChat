@@ -663,13 +663,11 @@ namespace CrazyChat.Overlay
 
             if (_mode == ChatMode.Compact)
             {
-                // Height is owned by FitCompactHeight; only pin width here.
-                var height = _cardRt.sizeDelta.y > 0f
-                    ? _cardRt.sizeDelta.y
-                    : OverlayCompactChatLayout.CardHeight(
-                        OverlayCompactChatLayout.FixedChromeHeight(HeaderHeight, StatusHeight, ComposerHeight),
-                        CompactMinBodyHeight);
-                _cardRt.sizeDelta = new Vector2(ChatWidth, height);
+                // Always start from min; FitCompactHeight grows with content after Refresh.
+                var minH = OverlayCompactChatLayout.CardHeight(
+                    OverlayCompactChatLayout.FixedChromeHeight(HeaderHeight, StatusHeight, ComposerHeight),
+                    CompactMinBodyHeight);
+                _cardRt.sizeDelta = new Vector2(ChatWidth, minH);
                 return;
             }
 
@@ -973,8 +971,6 @@ namespace CrazyChat.Overlay
                 _content.anchoredPosition = Vector2.zero;
             }
 
-            LayoutRebuilder.ForceRebuildLayoutImmediate(_cardRt);
-
             if (_view != null && _view.TryGetFollowPosition(_friendId, out var position))
             {
                 PlaceCardAbove(position);
@@ -1084,9 +1080,16 @@ namespace CrazyChat.Overlay
             row.BubbleRt.anchorMin = row.BubbleRt.anchorMax = mine ? new Vector2(1f, 1f) : new Vector2(0f, 1f);
             row.BubbleRt.pivot = mine ? new Vector2(1f, 1f) : new Vector2(0f, 1f);
             row.BubbleRt.anchoredPosition = new Vector2(mine ? -10f : 10f, 0f);
+            // Set width first; never use generationExtents.y=0 (Unity TextGenerator inflates height).
+            row.BubbleRt.sizeDelta = new Vector2(bubbleW, 40f);
             var textInnerW = Mathf.Max(8f, bubbleW - 16f);
-            var genSettings = row.Text.GetGenerationSettings(new Vector2(textInnerW, 0f));
-            var textH = Mathf.Max(16f, row.Text.cachedTextGeneratorForLayout.GetPreferredHeight(text, genSettings));
+            var genSettings = row.Text.GetGenerationSettings(new Vector2(textInnerW, 16384f));
+            genSettings.horizontalOverflow = HorizontalWrapMode.Wrap;
+            genSettings.verticalOverflow = VerticalWrapMode.Overflow;
+            var textH = Mathf.Max(
+                16f,
+                row.Text.cachedTextGeneratorForLayout.GetPreferredHeight(text, genSettings) /
+                Mathf.Max(0.01f, row.Text.pixelsPerUnit));
             var bubbleH = textH + 12f;
             row.BubbleRt.sizeDelta = new Vector2(bubbleW, bubbleH);
             return bubbleH;
