@@ -766,6 +766,13 @@ namespace CrazyChat.Overlay
             }
 
             var id = _targetId;
+            // Enter also submits chat; if this friend is already open, do not re-Open (resets compact floor).
+            if (_chatUi != null && _chatUi.IsOpen && _chatUi.OpenFriendId == id)
+            {
+                StopTargeting();
+                return;
+            }
+
             StopTargeting();
             HideSettings();
             _bag?.ExpandFor(id);

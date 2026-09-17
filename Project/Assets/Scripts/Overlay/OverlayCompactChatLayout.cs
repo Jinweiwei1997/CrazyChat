@@ -1,7 +1,7 @@
 namespace CrazyChat.Overlay
 {
     /// <summary>
-    /// Pure compact-chat sizing/scroll policy (no Unity types) for tests and OverlayChatUi.
+    /// Pure compact-chat sizing/scroll/session policy (no Unity types).
     /// </summary>
     public static class OverlayCompactChatLayout
     {
@@ -36,12 +36,73 @@ namespace CrazyChat.Overlay
             return fixedChrome + bodyHeight;
         }
 
-        /// <summary>
-        /// Scroll only when content cannot fit inside the compact max body.
-        /// </summary>
         public static bool ShouldEnableVerticalScroll(float contentHeight, float maxBody)
         {
             return contentHeight > maxBody + 0.01f;
+        }
+
+        /// <summary>
+        /// Re-opening the same friend must keep the session floor; otherwise each Open+Send
+        /// pair collapses the compact list to only the newest message.
+        /// </summary>
+        public static bool ShouldReuseCompactSession(bool isOpen, ulong openFriendId, ulong friendId)
+        {
+            return isOpen && openFriendId != 0UL && openFriendId == friendId;
+        }
+
+        /// <summary>
+        /// firstUnreadPeerIndex: index of earliest unread peer message, or -1.
+        /// latestPeerIndex: index of latest peer message, or -1.
+        /// </summary>
+        public static int ResolveSessionStartIndex(
+            int messageCount,
+            int firstUnreadPeerIndex,
+            int latestPeerIndex)
+        {
+            if (messageCount <= 0)
+            {
+                return 0;
+            }
+
+            if (firstUnreadPeerIndex >= 0 && firstUnreadPeerIndex < messageCount)
+            {
+                return firstUnreadPeerIndex;
+            }
+
+            if (latestPeerIndex >= 0 && latestPeerIndex < messageCount)
+            {
+                return latestPeerIndex;
+            }
+
+            // Outbound-only thread: show only messages sent after this open.
+            return messageCount;
+        }
+
+        public static int ClampVisibleStart(int sessionStart, int messageCount, int maxVisible)
+        {
+            if (messageCount <= 0)
+            {
+                return 0;
+            }
+
+            var max = maxVisible < 1 ? 1 : maxVisible;
+            var start = sessionStart;
+            if (start < 0)
+            {
+                start = 0;
+            }
+
+            if (start > messageCount)
+            {
+                start = messageCount;
+            }
+
+            if (messageCount - start > max)
+            {
+                start = messageCount - max;
+            }
+
+            return start;
         }
     }
 }

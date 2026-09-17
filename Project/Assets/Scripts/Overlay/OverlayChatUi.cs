@@ -358,10 +358,18 @@ namespace CrazyChat.Overlay
                 return;
             }
 
+            // Re-Open same friend must keep the session floor; Enter/Confirm after Send used to
+            // re-resolve start=count and leave only the newest line visible.
+            var reuseSession = OverlayCompactChatLayout.ShouldReuseCompactSession(
+                IsOpen, _friendId, friendId);
             _friendId = friendId;
             _mode = ChatMode.Compact;
             var messages = _chat.Store.GetMessages(friendId);
-            _compactStartIndex = ResolveCompactStartIndex(messages, friendId);
+            if (!reuseSession)
+            {
+                _compactStartIndex = ResolveCompactStartIndex(messages, friendId);
+            }
+
             ApplyLayout();
             _backdrop.SetActive(true);
             _card.SetActive(true);
@@ -370,7 +378,11 @@ namespace CrazyChat.Overlay
             Refresh();
             if (_input != null)
             {
-                _input.text = string.Empty;
+                if (!reuseSession)
+                {
+                    _input.text = string.Empty;
+                }
+
                 if (focusInput)
                 {
                     KeepInputFocused(requestWindowFocus: true);
@@ -416,30 +428,56 @@ namespace CrazyChat.Overlay
         int ResolveCompactStartIndex(IReadOnlyList<OverlayChatMessage> messages, ulong friendId)
         {
             // Lock the session floor at open: later sends only append (until maxCompact slides).
-            if (messages == null || messages.Count == 0)
-            {
-                return 0;
-            }
-
+            var count = messages != null ? messages.Count : 0;
+            var firstUnread = -1;
             var unreadMessages = _chat.Store.GetUnreadPeerMessages(friendId);
-            var anchor = unreadMessages.Count > 0
-                ? unreadMessages[0]
-                : _chat.Store.GetLatestPeer(friendId);
-            if (anchor == null)
+            if (unreadMessages.Count > 0 && messages != null)
             {
-                // No peer messages: start empty, then keep everything sent in this open session.
-                return messages.Count;
+                for (var i = 0; i < count; i++)
+                {
+                    if (ReferenceEquals(messages[i], unreadMessages[0]))
+                    {
+                        firstUnread = i;
+                        break;
+                    }
+                }
+
+                if (firstUnread < 0)
+                {
+                    firstUnread = IndexOfLatestPeer(messages, count);
+                    // Walk back to earliest unread peer among the unread count.
+                    var remaining = unreadMessages.Count;
+                    for (var i = count - 1; i >= 0 && remaining > 0; i--)
+                    {
+                        if (messages[i] != null && !messages[i].mine)
+                        {
+                            firstUnread = i;
+                            remaining--;
+                        }
+                    }
+                }
             }
 
-            for (var i = 0; i < messages.Count; i++)
+            var latestPeer = IndexOfLatestPeer(messages, count);
+            return OverlayCompactChatLayout.ResolveSessionStartIndex(count, firstUnread, latestPeer);
+        }
+
+        static int IndexOfLatestPeer(IReadOnlyList<OverlayChatMessage> messages, int count)
+        {
+            if (messages == null)
             {
-                if (ReferenceEquals(messages[i], anchor))
+                return -1;
+            }
+
+            for (var i = count - 1; i >= 0; i--)
+            {
+                if (messages[i] != null && !messages[i].mine)
                 {
                     return i;
                 }
             }
 
-            return messages.Count;
+            return -1;
         }
 
         void OnEnable()
@@ -815,6 +853,11 @@ namespace CrazyChat.Overlay
                 return;
             }
 
+            if (_mode == ChatMode.Compact && _content != null && (_scroll == null || !_scroll.enabled))
+            {
+                _content.anchoredPosition = Vector2.zero;
+            }
+
             if (!_view.TryGetFollowPosition(_friendId, out var pos))
             {
                 return;
@@ -947,6 +990,7 @@ namespace CrazyChat.Overlay
 
             if (_mode != ChatMode.Compact)
             {
+                _scroll.enabled = true;
                 _scroll.vertical = true;
                 _scroll.verticalNormalizedPosition = 0f;
                 return;
@@ -959,6 +1003,8 @@ namespace CrazyChat.Overlay
             var enableScroll = OverlayCompactChatLayout.ShouldEnableVerticalScroll(
                 contentHeight, maxBodyHeight);
             _content.anchoredPosition = Vector2.zero;
+            // Disable ScrollRect entirely while content fits — prevents same-frame scroll offset clipping rows.
+            _scroll.enabled = enableScroll;
             _scroll.vertical = enableScroll;
             if (enableScroll)
             {
@@ -972,12 +1018,7 @@ namespace CrazyChat.Overlay
             var max = _view != null && _view.Config != null
                 ? Mathf.Max(1, _view.Config.maxCompactChatMessages)
                 : 10;
-            // Keep session floor from Open; only slide when over the compact max.
-            var start = Mathf.Clamp(_compactStartIndex, 0, count);
-            if (count - start > max)
-            {
-                start = count - max;
-            }
+            var start = OverlayCompactChatLayout.ClampVisibleStart(_compactStartIndex, count, max);
             for (var i = start; i < count; i++)
             {
                 if (messages[i] != null)
