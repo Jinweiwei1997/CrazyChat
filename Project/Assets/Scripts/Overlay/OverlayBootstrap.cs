@@ -60,15 +60,18 @@ namespace CrazyChat.Overlay
                 return;
             }
 
+            Debug.Log("[BOOT] AutoStart begin");
             var mutexOk = OverlaySessionGuard.TryAcquireLocalMutex();
             if (!mutexOk)
             {
+                Debug.Log("[BOOT] AutoStart mutex busy — quit");
                 OverlaySessionGuard.BeginQuit("CrazyChat 已在本机运行");
                 return;
             }
 
             var go = new GameObject("CrazyChatOverlay");
             go.AddComponent<OverlayBootstrap>();
+            Debug.Log("[BOOT] AutoStart OverlayBootstrap attached");
         }
 
         void Awake()
@@ -86,29 +89,42 @@ namespace CrazyChat.Overlay
             Application.targetFrameRate = 60;
             QualitySettings.vSyncCount = 0;
 
+            Debug.Log("[BOOT] OverlayBootstrap.Awake begin");
             ConfigureSceneCamera();
+            Debug.Log("[BOOT] EnsureSteamManager begin");
             EnsureSteamManager();
             _steamSessionOpen = SteamManager.Initialized;
+            Debug.Log("[BOOT] EnsureSteamManager done steam=" + _steamSessionOpen);
 
+            Debug.Log("[BOOT] SessionGuard begin");
             var session = gameObject.AddComponent<OverlaySessionGuard>();
             session.StartLeaseIfPossible();
+            Debug.Log("[BOOT] SessionGuard done");
 
+            Debug.Log("[BOOT] Friends+View+Window begin");
             var friends = gameObject.AddComponent<PlayingFriendsService>();
             friends.BindConfig(OverlayConfig.LoadOrDefault());
             var view = gameObject.AddComponent<FriendOverlayView>();
             var window = gameObject.AddComponent<TransparentOverlayWindow>();
+            Debug.Log("[BOOT] FriendOverlayView.Build begin");
             var raycaster = view.Build(friends);
+            Debug.Log("[BOOT] FriendOverlayView.Build done");
             window.BindRaycaster(raycaster);
+            Debug.Log("[BOOT] friends.Refresh begin");
             friends.Refresh();
+            Debug.Log("[BOOT] friends.Refresh done");
 #if UNITY_STANDALONE_WIN
             if (!Application.isEditor)
             {
+                Debug.Log("[BOOT] TrayIcon begin");
                 var tray = gameObject.AddComponent<OverlayTrayIcon>();
                 tray.BindStealth(
                     () => view.Stealth != null && view.Stealth.IsHidden,
                     () => view.Stealth?.RevealNow());
+                Debug.Log("[BOOT] TrayIcon done");
             }
 #endif
+            Debug.Log("[BOOT] OverlayBootstrap.Awake complete");
         }
 
         static void EnsureSteamManager()
