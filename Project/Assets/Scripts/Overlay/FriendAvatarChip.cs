@@ -9,7 +9,6 @@ namespace CrazyChat.Overlay
     {
         const float BubbleVisualScale = 1f;
         const float AvatarInset = 4f;
-        const float BubbleWidthRatio = 2f / 3f;
         const float BubbleHeight = 26f * BubbleVisualScale;
         const float BubbleOffsetY = 0f;
         const int BubbleFontSize = 16;
@@ -53,6 +52,8 @@ namespace CrazyChat.Overlay
         int _unread;
         bool _selected;
         bool _chatExpanded;
+        bool _todoExpanded;
+        string _todoPreview = "";
         Vector2 _layoutPos;
         bool _dragging;
         bool _settlingDrag;
@@ -223,7 +224,7 @@ namespace CrazyChat.Overlay
             bubbleRt.anchorMax = new Vector2(0.5f, 1f);
             bubbleRt.pivot = new Vector2(0.5f, 0f);
             bubbleRt.anchoredPosition = new Vector2(0f, BubbleOffsetY);
-            bubbleRt.sizeDelta = new Vector2(_size * BubbleWidthRatio, BubbleHeight);
+            bubbleRt.sizeDelta = new Vector2(_size - 2f * AvatarInset, BubbleHeight);
             var textViewport = new GameObject("TextViewport", typeof(RectTransform), typeof(RectMask2D));
             textViewport.transform.SetParent(_bubble.rectTransform, false);
             Stretch((RectTransform)textViewport.transform);
@@ -267,6 +268,15 @@ namespace CrazyChat.Overlay
             label.raycastTarget = false;
             Stretch((RectTransform)go.transform);
             return label;
+        }
+
+        static void AlignBubbleText(Text label, bool left)
+        {
+            if (label == null) return;
+            label.alignment = left ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter;
+            var rt = label.rectTransform;
+            rt.offsetMin = new Vector2(left ? 8f : 0f, rt.offsetMin.y);
+            rt.offsetMax = new Vector2(left ? -8f : 0f, rt.offsetMax.y);
         }
 
         void Apply()
@@ -545,16 +555,20 @@ namespace CrazyChat.Overlay
                     }
                 }
 
-                var showBubble = showChat && !_chatExpanded;
+                var showBubble = IsLocal ? !_todoExpanded && !string.IsNullOrEmpty(_todoPreview)
+                    : showChat && !_chatExpanded;
                 _bubble.gameObject.SetActive(showBubble);
+                AlignBubbleText(_bubbleText, IsLocal);
+                AlignBubbleText(_bubbleNextText, IsLocal);
                 if (showBubble && _bubbleText != null)
                 {
                     if (_bubbleSlideStartedAt < 0f)
                     {
-                        _bubbleText.text = string.IsNullOrEmpty(_bubbleContent) ? IdleBubbleText : _bubbleContent;
+                        _bubbleText.text = IsLocal ? _todoPreview :
+                            string.IsNullOrEmpty(_bubbleContent) ? IdleBubbleText : _bubbleContent;
                     }
 
-                    _bubble.rectTransform.sizeDelta = new Vector2(_size * BubbleWidthRatio, BubbleHeight);
+                    _bubble.rectTransform.sizeDelta = new Vector2(_size - 2f * AvatarInset, BubbleHeight);
                 }
             }
 
@@ -785,6 +799,18 @@ namespace CrazyChat.Overlay
 
             _snapAnchor = null;
             _settlingDrag = true;
+        }
+
+        public void SetTodoPreview(string text)
+        {
+            _todoPreview = Ellipsize(text ?? "", 7);
+            if (IsLocal) RefreshChatChrome();
+        }
+
+        public void SetTodoExpanded(bool expanded)
+        {
+            _todoExpanded = expanded;
+            if (IsLocal) RefreshChatChrome();
         }
 
         void UpdateDragMotion(float scale)

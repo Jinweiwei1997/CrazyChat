@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using UnityEngine;
@@ -28,6 +29,79 @@ namespace CrazyChat.Overlay
         public bool ReduceTransparency { get; private set; } = true;
         public int TargetDisplayIndex { get; private set; }
         public int AvatarVersion { get; private set; }
+        public List<TodoItem> Todos { get; private set; } = new List<TodoItem>();
+        public event Action TodosChanged;
+        public bool HasTodos => Todos.Exists(item => !string.IsNullOrWhiteSpace(item.text));
+
+        public enum TodoFrequency { Once, Daily, Weekly }
+
+        [Serializable]
+        public sealed class TodoItem
+        {
+            public string id;
+            public string text = "";
+            public TodoFrequency frequency;
+            public string completedPeriod = "";
+
+            public bool IsComplete(DateTime date) => completedPeriod == Period(date);
+
+            public void ToggleCompletion(DateTime date)
+            {
+                completedPeriod = IsComplete(date) ? "" : Period(date);
+            }
+
+            internal string Period(DateTime date)
+            {
+                if (frequency == TodoFrequency.Once) return "once";
+                var day = date.Date;
+                if (frequency == TodoFrequency.Weekly)
+                    day = day.AddDays(-(((int)day.DayOfWeek + 6) % 7));
+                return day.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+            }
+        }
+
+        public TodoItem AddTodo()
+        {
+            var item = new TodoItem { id = Guid.NewGuid().ToString("N") };
+            Todos.Add(item);
+            SaveTodos();
+            return item;
+        }
+
+        public void EditTodo(TodoItem item, string text, TodoFrequency frequency)
+        {
+            if (item == null || !Todos.Contains(item)) return;
+            if (item.frequency != frequency) item.completedPeriod = "";
+            item.text = (text ?? "").Trim();
+            item.frequency = frequency;
+            SaveTodos();
+        }
+
+        public void DeleteTodo(TodoItem item)
+        {
+            if (Todos.Remove(item)) SaveTodos();
+        }
+
+        public void CompleteTodo(TodoItem item)
+        {
+            if (item == null || !Todos.Contains(item) || string.IsNullOrWhiteSpace(item.text) ||
+                item.IsComplete(DateTime.Now)) return;
+            item.completedPeriod = item.Period(DateTime.Now);
+            SaveTodos();
+        }
+
+        public void ToggleTodo(TodoItem item)
+        {
+            if (item == null || !Todos.Contains(item) || string.IsNullOrWhiteSpace(item.text)) return;
+            item.ToggleCompletion(DateTime.Now);
+            SaveTodos();
+        }
+
+        void SaveTodos()
+        {
+            Save();
+            TodosChanged?.Invoke();
+        }
 
         public void Load()
         {
@@ -61,6 +135,14 @@ namespace CrazyChat.Overlay
                 ReduceTransparency = data.reduceTransparency;
                 TargetDisplayIndex = Mathf.Max(0, data.targetDisplayIndex);
                 AvatarVersion = data.avatarVersion;
+                Todos = data.todos ?? new List<TodoItem>();
+                Todos.RemoveAll(item => item == null);
+                foreach (var item in Todos)
+                {
+                    if (string.IsNullOrEmpty(item.id)) item.id = Guid.NewGuid().ToString("N");
+                    if (!Enum.IsDefined(typeof(TodoFrequency), item.frequency))
+                        item.frequency = TodoFrequency.Once;
+                }
                 if (!OverlayAvatarRules.IsEnabled(AvatarVersion, OverlayAvatarCodec.LocalPathA,
                         OverlayAvatarCodec.LocalPathB))
                 {
@@ -89,7 +171,8 @@ namespace CrazyChat.Overlay
                 themeIntensity = ThemeIntensity,
                 reduceTransparency = ReduceTransparency,
                 targetDisplayIndex = TargetDisplayIndex,
-                avatarVersion = AvatarVersion
+                avatarVersion = AvatarVersion,
+                todos = Todos
             }, true);
             WriteLocal(json);
         }
@@ -220,6 +303,7 @@ namespace CrazyChat.Overlay
             public bool reduceTransparency = true;
             public int targetDisplayIndex;
             public int avatarVersion;
+            public List<TodoItem> todos = new List<TodoItem>();
         }
     }
 

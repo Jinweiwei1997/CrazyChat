@@ -61,6 +61,13 @@ namespace CrazyChat.Overlay
         [SerializeField] Image _cardImage;
         [SerializeField] Image _closeImage;
         string _page = DefaultPage;
+        OverlayTodoUi _todosUi;
+
+        public void BindTodos(OverlayTodoUi todos)
+        {
+            _todosUi = todos;
+            todos.BindSettings(FindNode(_pagesRoot, "TodoPage"));
+        }
 
         public static OverlaySettingsUi Create(Transform chrome, Transform modal, FriendOverlayView view)
         {
@@ -106,6 +113,36 @@ namespace CrazyChat.Overlay
         public void EditorPopulate()
         {
             Build(null);
+        }
+
+        public void EditorAddTodoPage()
+        {
+            if (_tabBar.Find("TodoTab") == null)
+                AddTabButton(_tabBar, "TodoTab", "事项");
+            var source = FindNode(_pagesRoot, "SystemPage/DisplayRow/DisplayDropdown")?.GetComponent<Dropdown>();
+            if (source == null) throw new System.InvalidOperationException("缺少频率下拉框模板来源。");
+            OverlayTodoUi.EditorBuildSettingsPage(_pagesRoot, source);
+        }
+
+        [UnityEditor.MenuItem("CrazyChat/Add Todo Settings Page")]
+        static void EditorSaveTodoPage()
+        {
+            const string path = "Assets/Resources/Prefab/UI/SettingsMenu.prefab";
+            var root = UnityEditor.PrefabUtility.LoadPrefabContents(path);
+            try
+            {
+                root.GetComponent<OverlaySettingsUi>().EditorAddTodoPage();
+                // Save persistent fonts instead of runtime-generated font objects.
+                var font = root.transform.Find("SettingsPanel/Background/TabBar/GameTab")
+                    .GetComponentInChildren<Text>(true).font;
+                foreach (var text in root.transform.Find("SettingsPanel/Background/Pages/TodoPage")
+                    .GetComponentsInChildren<Text>(true)) text.font = font;
+                root.transform.Find("SettingsPanel/Background/TabBar/TodoTab")
+                    .GetComponentInChildren<Text>(true).font = font;
+                UnityEditor.PrefabUtility.SaveAsPrefabAsset(root, path);
+                Debug.Log("[Overlay] 已添加事项设置页。");
+            }
+            finally { UnityEditor.PrefabUtility.UnloadPrefabContents(root); }
         }
 
         public void EditorFitContent()
@@ -533,6 +570,9 @@ namespace CrazyChat.Overlay
             _displayDropdown = AddDisplayDropdownRow(systemPage);
             AddActionRow(systemPage, "ReloadConfigRow", "刷新配置");
             AddActionRow(systemPage, "QuitGameRow", "退出游戏", danger: true);
+#if UNITY_EDITOR
+            EditorAddTodoPage();
+#endif
         }
 
         void BuildThemeSelector(Transform displayPage)
@@ -1171,16 +1211,11 @@ namespace CrazyChat.Overlay
 
             var content = CreateEmpty("Content", templateRt);
             var contentRt = (RectTransform)content.transform;
-            Stretch(contentRt);
 
             var item = CreateImage("Item", contentRt, Color.clear, _controlSprite);
             item.raycastTarget = true;
             var itemRt = item.rectTransform;
-            itemRt.anchorMin = new Vector2(0f, 1f);
-            itemRt.anchorMax = new Vector2(1f, 1f);
-            itemRt.pivot = new Vector2(0.5f, 1f);
-            itemRt.anchoredPosition = Vector2.zero;
-            itemRt.sizeDelta = new Vector2(0f, 24f);
+            ConfigureDropdownTemplate(contentRt, itemRt, 24f);
             var itemToggle = item.gameObject.AddComponent<Toggle>();
             itemToggle.targetGraphic = item;
             itemToggle.transition = Selectable.Transition.None;
@@ -1239,15 +1274,11 @@ namespace CrazyChat.Overlay
             templateRt.sizeDelta = new Vector2(0f, 48f);
 
             var content = CreateEmpty("Content", templateRt);
-            Stretch((RectTransform)content.transform);
+            var contentRt = (RectTransform)content.transform;
             var item = CreateImage("Item", content.transform, Color.clear, _controlSprite);
             item.raycastTarget = true;
             var itemRt = item.rectTransform;
-            itemRt.anchorMin = new Vector2(0f, 1f);
-            itemRt.anchorMax = new Vector2(1f, 1f);
-            itemRt.pivot = new Vector2(0.5f, 1f);
-            itemRt.anchoredPosition = Vector2.zero;
-            itemRt.sizeDelta = new Vector2(0f, 24f);
+            ConfigureDropdownTemplate(contentRt, itemRt, 24f);
             var itemToggle = item.gameObject.AddComponent<Toggle>();
             itemToggle.targetGraphic = item;
             itemToggle.transition = Selectable.Transition.None;
@@ -1273,6 +1304,17 @@ namespace CrazyChat.Overlay
             dropdown.transition = Selectable.Transition.None;
             template.gameObject.SetActive(false);
             return dropdown;
+        }
+
+        static void ConfigureDropdownTemplate(
+            RectTransform content, RectTransform item, float itemHeight)
+        {
+            content.anchorMin = new Vector2(0f, 1f);
+            content.anchorMax = Vector2.one;
+            content.pivot = new Vector2(0.5f, 1f);
+            content.anchoredPosition = Vector2.zero;
+            content.sizeDelta = new Vector2(0f, itemHeight);
+            Stretch(item);
         }
 
         Text AddStatusRow(Transform parent, string id, string title)
@@ -1375,6 +1417,7 @@ namespace CrazyChat.Overlay
             }
 
             _view?.HideInteractMenu();
+            _view?.HideTodos();
             _panel.SetActive(true);
             _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput(forceSteal: true);
             RefreshLabels();
@@ -1692,6 +1735,7 @@ namespace CrazyChat.Overlay
             }
 
             RefreshAppearanceControls();
+            _todosUi?.ApplyTheme();
         }
 
         void SetToggle(Text label, bool on)

@@ -20,6 +20,7 @@ namespace CrazyChat.Overlay
         OverlayChatUi _chatUi;
         OverlayBagUi _bag;
         OverlaySettingsUi _settingsUi;
+        OverlayTodoUi _todoUi;
         OverlayInteractService _interact;
         OverlayInteractUi _interactUi;
         OverlayInteractFx _interactFx;
@@ -118,6 +119,8 @@ namespace CrazyChat.Overlay
                 _settings.ThemeHue,
                 _settings.ThemeIntensity);
             _settingsUi = OverlaySettingsUi.Create(_chromeLayer, _modalLayer, this);
+            _todoUi = OverlayTodoUi.Create(_windowLayer, this);
+            _settingsUi?.BindTodos(_todoUi);
 
             _chatStore = new OverlayChatStore();
             _chatStore.SetMaxPerFriend(Config.maxMessagesPerFriend);
@@ -158,6 +161,7 @@ namespace CrazyChat.Overlay
 
         public void CloseTransientPanels()
         {
+            _todoUi?.Hide();
             _chatUi?.Hide();
             _settingsUi?.Hide();
             HideInteractMenu();
@@ -198,6 +202,7 @@ namespace CrazyChat.Overlay
             _interactUi?.ApplySkin();
             _chatUi?.ApplyTheme();
             _settingsUi?.ApplyTheme();
+            _todoUi?.ApplyTheme();
             ReclampVisibleChips();
         }
 
@@ -468,6 +473,7 @@ namespace CrazyChat.Overlay
             }
 
             StopTargeting();
+            _todoUi?.Hide();
             HideSettings();
             _bag?.ExpandFor(friendId);
             _chatUi?.Toggle(friendId);
@@ -475,10 +481,22 @@ namespace CrazyChat.Overlay
 
         public void OnChipClicked(FriendAvatarChip chip)
         {
-            if (chip == null || chip.IsLocal || chip.SteamId == 0)
+            if (chip == null)
             {
                 return;
             }
+
+            if (chip.IsLocal)
+            {
+                if (_settings == null || !_settings.HasTodos) return;
+                StopTargeting();
+                HideSettings();
+                HideInteractMenu();
+                _chatUi?.Hide();
+                _todoUi?.Toggle();
+                return;
+            }
+            if (chip.SteamId == 0) return;
 
             OpenChat(chip.SteamId);
         }
@@ -487,6 +505,8 @@ namespace CrazyChat.Overlay
         {
             _settingsUi?.Hide();
         }
+
+        public void HideTodos() => _todoUi?.Hide();
 
         public void HideInteractMenu()
         {
@@ -682,6 +702,11 @@ namespace CrazyChat.Overlay
 
         void OnCancel()
         {
+            if (_todoUi != null && _todoUi.IsOpen)
+            {
+                _todoUi.Hide();
+                return;
+            }
             // Dialog Esc has highest priority even when another app is foreground
             // (GetAsyncKeyState still sees the key; OS may also deliver it to that app unless we stole focus).
             if (_chatUi != null && _chatUi.IsOpen)
