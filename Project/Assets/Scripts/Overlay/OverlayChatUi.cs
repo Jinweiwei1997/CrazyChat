@@ -45,9 +45,9 @@ namespace CrazyChat.Overlay
         ulong _friendId;
         ChatMode _mode;
         int _compactStartIndex;
+        int _compactMessageCount;
+        OverlayChatMessage _compactLastMessage;
         Coroutine _refocusRoutine;
-        Coroutine _compactRefitRoutine;
-        float _lastCompactContentHeight;
         readonly List<ChatRow> _rows = new List<ChatRow>();
         readonly List<OverlayChatMessage> _visibleMessages = new List<OverlayChatMessage>();
         Sprite _themeSprite;
@@ -360,17 +360,12 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            // Re-Open same friend must keep the session floor; Enter/Confirm after Send used to
-            // re-resolve start=count and leave only the newest line visible.
-            var reuseSession = OverlayCompactChatLayout.ShouldReuseCompactSession(
-                IsOpen, _friendId, friendId);
             _friendId = friendId;
             _mode = ChatMode.Compact;
             var messages = _chat.Store.GetMessages(friendId);
-            if (!reuseSession)
-            {
-                _compactStartIndex = ResolveCompactStartIndex(messages, friendId);
-            }
+            _compactStartIndex = ResolveCompactStartIndex(messages, friendId);
+            _compactMessageCount = messages != null ? messages.Count : 0;
+            _compactLastMessage = _compactMessageCount > 0 ? messages[_compactMessageCount - 1] : null;
 
             ApplyLayout();
             _backdrop.SetActive(true);
@@ -380,10 +375,7 @@ namespace CrazyChat.Overlay
             Refresh();
             if (_input != null)
             {
-                if (!reuseSession)
-                {
-                    _input.text = string.Empty;
-                }
+                _input.text = string.Empty;
 
                 if (focusInput)
                 {
@@ -402,12 +394,6 @@ namespace CrazyChat.Overlay
                 _refocusRoutine = null;
             }
 
-            if (_compactRefitRoutine != null)
-            {
-                StopCoroutine(_compactRefitRoutine);
-                _compactRefitRoutine = null;
-            }
-
             if (_input != null)
             {
                 _input.DeactivateInputField();
@@ -421,7 +407,8 @@ namespace CrazyChat.Overlay
             _mode = ChatMode.Closed;
             _friendId = 0;
             _compactStartIndex = 0;
-            _lastCompactContentHeight = 0f;
+            _compactMessageCount = 0;
+            _compactLastMessage = null;
             if (_card != null)
             {
                 _card.SetActive(false);
@@ -511,6 +498,19 @@ namespace CrazyChat.Overlay
             {
                 return;
             }
+
+            var messages = _chat.Store.GetMessages(_friendId);
+            var count = messages != null ? messages.Count : 0;
+            var lastMessage = count > 0 ? messages[count - 1] : null;
+            if (_mode == ChatMode.Compact &&
+                count == _compactMessageCount &&
+                !ReferenceEquals(lastMessage, _compactLastMessage) &&
+                _compactStartIndex > 0)
+            {
+                _compactStartIndex--;
+            }
+            _compactMessageCount = count;
+            _compactLastMessage = lastMessage;
 
             _chat.Store.MarkRead(_friendId);
             Refresh();
@@ -860,11 +860,6 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            if (_mode == ChatMode.Compact && _content != null && (_scroll == null || !_scroll.enabled))
-            {
-                _content.anchoredPosition = Vector2.zero;
-            }
-
             if (!_view.TryGetFollowPosition(_friendId, out var pos))
             {
                 return;
@@ -928,26 +923,16 @@ namespace CrazyChat.Overlay
                 _scroll.vertical = false;
             }
 
-            // Measure after canvas update so preferredHeight matches wrapped text.
-            for (var i = 0; i < _rows.Count; i++)
+            for (var i = visible; i < _rows.Count; i++)
             {
-                var row = _rows[i];
-                if (i >= visible)
-                {
-                    row.Root.SetActive(false);
-                    continue;
-                }
-
-                row.Root.SetActive(true);
-                BindRow(row, _visibleMessages[i]);
+                _rows[i].Root.SetActive(false);
             }
-
-            Canvas.ForceUpdateCanvases();
 
             var y = 10f;
             for (var i = 0; i < visible; i++)
             {
                 var row = _rows[i];
+                row.Root.SetActive(true);
                 var height = BindRow(row, _visibleMessages[i]);
                 row.Rt.anchoredPosition = new Vector2(0f, -y);
                 row.Rt.sizeDelta = new Vector2(0f, height);
@@ -955,7 +940,6 @@ namespace CrazyChat.Overlay
             }
 
             var contentHeight = Mathf.Max(8f, y + 2f);
-            _lastCompactContentHeight = contentHeight;
             if (_content != null)
             {
                 _content.sizeDelta = new Vector2(0f, contentHeight);
@@ -965,7 +949,6 @@ namespace CrazyChat.Overlay
             FitCompactHeight(contentHeight);
             Canvas.ForceUpdateCanvases();
             ApplyCompactScroll(contentHeight);
-            ScheduleCompactRefit();
         }
 
         void FitCompactHeight(float contentHeight)
@@ -988,10 +971,6 @@ namespace CrazyChat.Overlay
             // Prefab Body stretches from a 360-tall card; pin explicit body height so
             // viewport tracks content instead of leftover stretch from the prefab size.
             ApplyCompactBodyHeight(bodyHeight);
-            if (_content != null)
-            {
-                _content.anchoredPosition = Vector2.zero;
-            }
 
             if (_view != null && _view.TryGetFollowPosition(_friendId, out var position))
             {
@@ -1012,35 +991,6 @@ namespace CrazyChat.Overlay
             body.pivot = new Vector2(0.5f, 1f);
             body.anchoredPosition = new Vector2(0f, -(HeaderHeight + 1f));
             body.sizeDelta = new Vector2(-WindowInset * 2f, Mathf.Max(1f, bodyHeight));
-        }
-
-        void ScheduleCompactRefit()
-        {
-            if (_mode != ChatMode.Compact || !isActiveAndEnabled)
-            {
-                return;
-            }
-
-            if (_compactRefitRoutine != null)
-            {
-                StopCoroutine(_compactRefitRoutine);
-            }
-
-            _compactRefitRoutine = StartCoroutine(CompactRefitNextFrame());
-        }
-
-        IEnumerator CompactRefitNextFrame()
-        {
-            yield return null;
-            _compactRefitRoutine = null;
-            if (_mode != ChatMode.Compact || !IsOpen)
-            {
-                yield break;
-            }
-
-            FitCompactHeight(_lastCompactContentHeight);
-            Canvas.ForceUpdateCanvases();
-            ApplyCompactScroll(_lastCompactContentHeight);
         }
 
         void ApplyCompactScroll(float contentHeight)
@@ -1080,17 +1030,12 @@ namespace CrazyChat.Overlay
                 viewportBodyHeight = maxBodyHeight;
             }
 
-            OverlayCompactChatLayout.ResolveCompactScroll(
-                contentHeight,
-                viewportBodyHeight,
-                out var enableScroll,
-                out var contentAnchoredY,
-                out var verticalNormalizedPosition);
-
-            _content.anchoredPosition = new Vector2(0f, contentAnchoredY);
+            var enableScroll = OverlayCompactChatLayout.ShouldEnableVerticalScroll(
+                contentHeight, viewportBodyHeight);
+            _content.anchoredPosition = Vector2.zero;
             _scroll.enabled = enableScroll;
             _scroll.vertical = enableScroll;
-            _scroll.verticalNormalizedPosition = verticalNormalizedPosition;
+            _scroll.verticalNormalizedPosition = enableScroll ? 0f : 1f;
         }
 
         void CollectVisibleMessages(IReadOnlyList<OverlayChatMessage> messages, int count)

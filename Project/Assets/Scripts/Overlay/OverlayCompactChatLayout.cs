@@ -42,34 +42,6 @@ namespace CrazyChat.Overlay
         }
 
         /// <summary>
-        /// Compact scroll policy after FitCompactHeight.
-        /// Short content must stay top-aligned; only overflow pins to bottom.
-        /// Compare against the real body viewport height, not the theoretical max.
-        /// </summary>
-        public static void ResolveCompactScroll(
-            float contentHeight,
-            float viewportBodyHeight,
-            out bool enableScroll,
-            out float contentAnchoredY,
-            out float verticalNormalizedPosition)
-        {
-            enableScroll = ShouldEnableVerticalScroll(contentHeight, viewportBodyHeight);
-            contentAnchoredY = 0f;
-            // ScrollRect: 1 = top, 0 = bottom. Keep top when content fits to avoid
-            // a tall body with short content sitting on the bottom (empty gap above).
-            verticalNormalizedPosition = enableScroll ? 0f : 1f;
-        }
-
-        /// <summary>
-        /// Re-opening the same friend must keep the session floor; otherwise each Open+Send
-        /// pair collapses the compact list to only the newest message.
-        /// </summary>
-        public static bool ShouldReuseCompactSession(bool isOpen, ulong openFriendId, ulong friendId)
-        {
-            return isOpen && openFriendId != 0UL && openFriendId == friendId;
-        }
-
-        /// <summary>
         /// firstUnreadPeerIndex: index of earliest unread peer message, or -1.
         /// latestPeerIndex: index of latest peer message, or -1.
         /// </summary>
