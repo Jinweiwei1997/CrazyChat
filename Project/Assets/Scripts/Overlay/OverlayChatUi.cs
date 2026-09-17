@@ -46,6 +46,8 @@ namespace CrazyChat.Overlay
         ChatMode _mode;
         int _compactStartIndex;
         Coroutine _refocusRoutine;
+        Coroutine _compactRefitRoutine;
+        float _lastCompactContentHeight;
         readonly List<ChatRow> _rows = new List<ChatRow>();
         readonly List<OverlayChatMessage> _visibleMessages = new List<OverlayChatMessage>();
         Sprite _themeSprite;
@@ -392,12 +394,18 @@ namespace CrazyChat.Overlay
             _view?.RefreshChatSelection();
         }
 
-        public void Hide()
+        public         void Hide()
         {
             if (_refocusRoutine != null)
             {
                 StopCoroutine(_refocusRoutine);
                 _refocusRoutine = null;
+            }
+
+            if (_compactRefitRoutine != null)
+            {
+                StopCoroutine(_compactRefitRoutine);
+                _compactRefitRoutine = null;
             }
 
             if (_input != null)
@@ -413,6 +421,7 @@ namespace CrazyChat.Overlay
             _mode = ChatMode.Closed;
             _friendId = 0;
             _compactStartIndex = 0;
+            _lastCompactContentHeight = 0f;
             if (_card != null)
             {
                 _card.SetActive(false);
@@ -911,6 +920,14 @@ namespace CrazyChat.Overlay
                 _rows.Add(CreateRow());
             }
 
+            // Disable ScrollRect before measure/fit so a prior bottom-pin cannot
+            // keep short content stuck at the bottom of a tall body.
+            if (_scroll != null)
+            {
+                _scroll.enabled = false;
+                _scroll.vertical = false;
+            }
+
             // Measure after canvas update so preferredHeight matches wrapped text.
             for (var i = 0; i < _rows.Count; i++)
             {
@@ -938,6 +955,7 @@ namespace CrazyChat.Overlay
             }
 
             var contentHeight = Mathf.Max(8f, y + 2f);
+            _lastCompactContentHeight = contentHeight;
             if (_content != null)
             {
                 _content.sizeDelta = new Vector2(0f, contentHeight);
@@ -947,6 +965,7 @@ namespace CrazyChat.Overlay
             FitCompactHeight(contentHeight);
             Canvas.ForceUpdateCanvases();
             ApplyCompactScroll(contentHeight);
+            ScheduleCompactRefit();
         }
 
         void FitCompactHeight(float contentHeight)
@@ -966,6 +985,9 @@ namespace CrazyChat.Overlay
                 ChatWidth,
                 OverlayCompactChatLayout.CardHeight(fixedHeight, bodyHeight));
             ApplyComposerLayout();
+            // Prefab Body stretches from a 360-tall card; pin explicit body height so
+            // viewport tracks content instead of leftover stretch from the prefab size.
+            ApplyCompactBodyHeight(bodyHeight);
             if (_content != null)
             {
                 _content.anchoredPosition = Vector2.zero;
@@ -975,6 +997,50 @@ namespace CrazyChat.Overlay
             {
                 PlaceCardAbove(position);
             }
+        }
+
+        void ApplyCompactBodyHeight(float bodyHeight)
+        {
+            var body = FindNode(_cardRt, "Body") as RectTransform;
+            if (body == null)
+            {
+                return;
+            }
+
+            body.anchorMin = new Vector2(0f, 1f);
+            body.anchorMax = new Vector2(1f, 1f);
+            body.pivot = new Vector2(0.5f, 1f);
+            body.anchoredPosition = new Vector2(0f, -(HeaderHeight + 1f));
+            body.sizeDelta = new Vector2(-WindowInset * 2f, Mathf.Max(1f, bodyHeight));
+        }
+
+        void ScheduleCompactRefit()
+        {
+            if (_mode != ChatMode.Compact || !isActiveAndEnabled)
+            {
+                return;
+            }
+
+            if (_compactRefitRoutine != null)
+            {
+                StopCoroutine(_compactRefitRoutine);
+            }
+
+            _compactRefitRoutine = StartCoroutine(CompactRefitNextFrame());
+        }
+
+        IEnumerator CompactRefitNextFrame()
+        {
+            yield return null;
+            _compactRefitRoutine = null;
+            if (_mode != ChatMode.Compact || !IsOpen)
+            {
+                yield break;
+            }
+
+            FitCompactHeight(_lastCompactContentHeight);
+            Canvas.ForceUpdateCanvases();
+            ApplyCompactScroll(_lastCompactContentHeight);
         }
 
         void ApplyCompactScroll(float contentHeight)
@@ -992,20 +1058,39 @@ namespace CrazyChat.Overlay
                 return;
             }
 
+            // Prefer explicit Compact body sizeDelta (set by Fit); fall back to rect/max.
+            var body = FindNode(_cardRt, "Body") as RectTransform;
             var fixedHeight = OverlayCompactChatLayout.FixedChromeHeight(
                 HeaderHeight, StatusHeight, ComposerHeight);
             var maxBodyHeight = OverlayCompactChatLayout.MaxBodyHeight(
                 ChatHeight, fixedHeight, CompactMinBodyHeight);
-            var enableScroll = OverlayCompactChatLayout.ShouldEnableVerticalScroll(
-                contentHeight, maxBodyHeight);
-            _content.anchoredPosition = Vector2.zero;
-            // Disable ScrollRect entirely while content fits — prevents same-frame scroll offset clipping rows.
+            float viewportBodyHeight;
+            if (body != null && body.sizeDelta.y > 1f &&
+                Mathf.Abs(body.anchorMin.y - 1f) < 0.01f &&
+                Mathf.Abs(body.anchorMax.y - 1f) < 0.01f)
+            {
+                viewportBodyHeight = body.sizeDelta.y;
+            }
+            else if (body != null && body.rect.height > 1f)
+            {
+                viewportBodyHeight = body.rect.height;
+            }
+            else
+            {
+                viewportBodyHeight = maxBodyHeight;
+            }
+
+            OverlayCompactChatLayout.ResolveCompactScroll(
+                contentHeight,
+                viewportBodyHeight,
+                out var enableScroll,
+                out var contentAnchoredY,
+                out var verticalNormalizedPosition);
+
+            _content.anchoredPosition = new Vector2(0f, contentAnchoredY);
             _scroll.enabled = enableScroll;
             _scroll.vertical = enableScroll;
-            if (enableScroll)
-            {
-                _scroll.verticalNormalizedPosition = 0f;
-            }
+            _scroll.verticalNormalizedPosition = verticalNormalizedPosition;
         }
 
         void CollectVisibleMessages(IReadOnlyList<OverlayChatMessage> messages, int count)

@@ -36,9 +36,28 @@ namespace CrazyChat.Overlay
             return fixedChrome + bodyHeight;
         }
 
-        public static bool ShouldEnableVerticalScroll(float contentHeight, float maxBody)
+        public static bool ShouldEnableVerticalScroll(float contentHeight, float viewportBodyHeight)
         {
-            return contentHeight > maxBody + 0.01f;
+            return contentHeight > viewportBodyHeight + 0.01f;
+        }
+
+        /// <summary>
+        /// Compact scroll policy after FitCompactHeight.
+        /// Short content must stay top-aligned; only overflow pins to bottom.
+        /// Compare against the real body viewport height, not the theoretical max.
+        /// </summary>
+        public static void ResolveCompactScroll(
+            float contentHeight,
+            float viewportBodyHeight,
+            out bool enableScroll,
+            out float contentAnchoredY,
+            out float verticalNormalizedPosition)
+        {
+            enableScroll = ShouldEnableVerticalScroll(contentHeight, viewportBodyHeight);
+            contentAnchoredY = 0f;
+            // ScrollRect: 1 = top, 0 = bottom. Keep top when content fits to avoid
+            // a tall body with short content sitting on the bottom (empty gap above).
+            verticalNormalizedPosition = enableScroll ? 0f : 1f;
         }
 
         /// <summary>
