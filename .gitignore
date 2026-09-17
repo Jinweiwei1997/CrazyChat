@@ -4,8 +4,14 @@
 # Root-level VS Code Codicons source checkout
 /vscode-codicons-main/
 
-# Release archives stay local; commit the unpacked export folder instead.
+# Release outputs and archives stay local.
+/[Ee]xport/
 *.rar
+
+# Local Unity project settings
+/Project/ProjectSettings/PackageManagerSettings.asset
+/Project/ProjectSettings/ProjectSettings.asset
+/Project/ProjectSettings/ProjectVersion.txt
 
 .utmp/
 /Project/[Ll]ibrary/
