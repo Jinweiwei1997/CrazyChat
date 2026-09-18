@@ -16,13 +16,21 @@ namespace CrazyChat.Overlay
         GraphicRaycasterHost _raycasterHost;
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         bool _clickThrough = true;
+        bool _wantClickThrough = true;
+        float _wantClickThroughSince;
+        float _lastForceStealAt = -999f;
+        float _nextHeartbeatAt;
 #endif
         bool _applied;
         bool _alwaysOnTop = true;
         bool _suspendTopmost;
+        bool _appFocused = true;
         int _targetDisplayIndex;
         int _appliedDisplayIndex = -1;
         Coroutine _moveDisplayRoutine;
+
+        const float ClickThroughCaptureDebounce = 0.08f;
+        const float ForceStealMinInterval = 0.5f;
 
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         const int GwlStyle = -16;
@@ -248,7 +256,8 @@ namespace CrazyChat.Overlay
         {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
             if (!_applied || !EnsureWindowHandle()) return;
-            SetClickThrough(false);
+            // Opening chat/settings must take hits immediately (bypass capture debounce).
+            ApplyClickThrough(false, immediate: true);
             if (GetForegroundWindow() == _hwnd)
             {
                 SetFocus(_hwnd);
@@ -257,25 +266,37 @@ namespace CrazyChat.Overlay
 
             if (forceSteal)
             {
-                // One-shot steal when opening dialogs without a mouse gesture (keyboard open / Esc priority).
-                var foreground = GetForegroundWindow();
-                var windowThread = GetWindowThreadProcessId(_hwnd, IntPtr.Zero);
-                var foregroundThread = foreground != IntPtr.Zero
-                    ? GetWindowThreadProcessId(foreground, IntPtr.Zero)
-                    : 0;
-                var attached = windowThread != 0 && foregroundThread != 0 && foregroundThread != windowThread &&
-                               AttachThreadInput(windowThread, foregroundThread, true);
-                try
+                // One-shot steal for keyboard open (double-Ctrl+Enter) / Esc priority dialogs.
+                // Rate-limited so we never AttachThreadInput-spam against other apps.
+                var now = Time.unscaledTime;
+                var allowAttach = now - _lastForceStealAt >= ForceStealMinInterval;
+                if (allowAttach)
+                {
+                    _lastForceStealAt = now;
+                    var foreground = GetForegroundWindow();
+                    var windowThread = GetWindowThreadProcessId(_hwnd, IntPtr.Zero);
+                    var foregroundThread = foreground != IntPtr.Zero
+                        ? GetWindowThreadProcessId(foreground, IntPtr.Zero)
+                        : 0;
+                    var attached = windowThread != 0 && foregroundThread != 0 && foregroundThread != windowThread &&
+                                   AttachThreadInput(windowThread, foregroundThread, true);
+                    try
+                    {
+                        SetForegroundWindow(_hwnd);
+                        SetFocus(_hwnd);
+                    }
+                    finally
+                    {
+                        if (attached)
+                        {
+                            AttachThreadInput(windowThread, foregroundThread, false);
+                        }
+                    }
+                }
+                else
                 {
                     SetForegroundWindow(_hwnd);
                     SetFocus(_hwnd);
-                }
-                finally
-                {
-                    if (attached)
-                    {
-                        AttachThreadInput(windowThread, foregroundThread, false);
-                    }
                 }
             }
             else
@@ -300,6 +321,23 @@ namespace CrazyChat.Overlay
 #endif
         }
 
+        void OnApplicationFocus(bool focused)
+        {
+            _appFocused = focused;
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            if (!_applied)
+            {
+                return;
+            }
+
+            // Other apps took foreground: release hit-test immediately, never fight for focus.
+            if (!focused)
+            {
+                ApplyClickThrough(true, immediate: true);
+            }
+#endif
+        }
+
         void Update()
         {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
@@ -308,9 +346,16 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            var overUi = _raycasterHost != null && _raycasterHost.IsPointerOverInteractive();
-            SetClickThrough(!overUi);
+            if (!_appFocused)
+            {
+                ApplyClickThrough(true, immediate: true);
+                LogHeartbeat();
+                return;
+            }
 
+            var overUi = _raycasterHost != null && _raycasterHost.IsPointerOverInteractive();
+            ApplyClickThrough(!overUi, immediate: false);
+            LogHeartbeat();
 #endif
         }
 
@@ -346,7 +391,8 @@ namespace CrazyChat.Overlay
                 SwpNoMove | SwpNoSize | SwpFrameChanged | SwpShowWindow);
 
             _clickThrough = false;
-            SetClickThrough(true);
+            _wantClickThrough = true;
+            ApplyClickThrough(true, immediate: true);
             _applied = true;
             SetTargetDisplay(_targetDisplayIndex);
         }
@@ -386,15 +432,49 @@ namespace CrazyChat.Overlay
             _moveDisplayRoutine = null;
         }
 
-        void SetClickThrough(bool clickThrough)
+        void ApplyClickThrough(bool clickThrough, bool immediate)
         {
-            if (_clickThrough == clickThrough || !EnsureWindowHandle())
+            if (!EnsureWindowHandle())
+            {
+                return;
+            }
+
+            if (_wantClickThrough != clickThrough)
+            {
+                _wantClickThrough = clickThrough;
+                _wantClickThroughSince = Time.unscaledTime;
+            }
+
+            // Releasing capture (through=true) applies immediately so other apps stay usable.
+            // Taking capture (through=false) waits briefly to avoid SetWindowLong chatter at UI edges.
+            if (!immediate && !clickThrough &&
+                Time.unscaledTime - _wantClickThroughSince < ClickThroughCaptureDebounce)
+            {
+                return;
+            }
+
+            if (_clickThrough == clickThrough)
             {
                 return;
             }
 
             _clickThrough = clickThrough;
             ApplyExStyle(clickThrough);
+        }
+
+        void LogHeartbeat()
+        {
+            if (Time.unscaledTime < _nextHeartbeatAt)
+            {
+                return;
+            }
+
+            _nextHeartbeatAt = Time.unscaledTime + 1f;
+            var foreground = EnsureWindowHandle() && GetForegroundWindow() == _hwnd;
+            Debug.Log("[OVERLAY-HB] focused=" + _appFocused +
+                      " clickThrough=" + _clickThrough +
+                      " wantThrough=" + _wantClickThrough +
+                      " foreground=" + foreground);
         }
 
         void ApplyTopmost()

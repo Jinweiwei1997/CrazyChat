@@ -798,7 +798,8 @@ namespace CrazyChat.Overlay
             if (!IsOpen || !isActiveAndEnabled) return;
             if (_refocusRoutine != null) StopCoroutine(_refocusRoutine);
 
-            // Request now, during the opening action, never from a delayed callback.
+            // Only Open() passes true: one-shot window steal for keyboard open (double-Ctrl+Enter).
+            // Send / mode toggle must not AttachThreadInput against other apps.
             if (requestWindowFocus)
                 _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput(forceSteal: true);
 
