@@ -350,10 +350,16 @@ namespace CrazyChat.Overlay
 
         public void Open(ulong friendId)
         {
-            Open(friendId, true);
+            Open(friendId, focusInput: true, hardSteal: false);
         }
 
-        void Open(ulong friendId, bool focusInput)
+        /// <summary>Keyboard targeting Enter — may AttachThreadInput once to type into chat.</summary>
+        public void OpenFromKeyboard(ulong friendId)
+        {
+            Open(friendId, focusInput: true, hardSteal: true);
+        }
+
+        void Open(ulong friendId, bool focusInput, bool hardSteal)
         {
             if (friendId == 0 || _chat == null || _chat.Store == null || _view == null || !_view.IsPresent(friendId))
             {
@@ -379,7 +385,7 @@ namespace CrazyChat.Overlay
 
                 if (focusInput)
                 {
-                    KeepInputFocused(requestWindowFocus: true);
+                    KeepInputFocused(requestWindowFocus: true, hardSteal: hardSteal);
                 }
             }
 
@@ -793,15 +799,14 @@ namespace CrazyChat.Overlay
             }
         }
 
-        void KeepInputFocused(bool requestWindowFocus = false)
+        void KeepInputFocused(bool requestWindowFocus = false, bool hardSteal = false)
         {
             if (!IsOpen || !isActiveAndEnabled) return;
             if (_refocusRoutine != null) StopCoroutine(_refocusRoutine);
 
-            // Only Open() passes true: one-shot window steal for keyboard open (double-Ctrl+Enter).
-            // Send / mode toggle must not AttachThreadInput against other apps.
+            // hardSteal only for keyboard open (double-Ctrl+Enter). Mouse paths stay soft.
             if (requestWindowFocus)
-                _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput(forceSteal: true);
+                _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput(forceSteal: hardSteal);
 
             _refocusRoutine = StartCoroutine(RefocusInputNextFrame());
         }

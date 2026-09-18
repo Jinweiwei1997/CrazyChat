@@ -19,7 +19,7 @@ namespace CrazyChat.Overlay
         bool _wantClickThrough = true;
         float _wantClickThroughSince;
         float _lastForceStealAt = -999f;
-        float _nextHeartbeatAt;
+        int _lastHeartbeatKey = int.MinValue;
 #endif
         bool _applied;
         bool _alwaysOnTop = true;
@@ -99,6 +99,11 @@ namespace CrazyChat.Overlay
 
         [DllImport("user32.dll")]
         static extern IntPtr SetFocus(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        static extern short GetAsyncKeyState(int vKey);
+
+        const int VkLButton = 0x01;
 
 
         [StructLayout(LayoutKind.Sequential)]
@@ -266,43 +271,42 @@ namespace CrazyChat.Overlay
 
             if (forceSteal)
             {
-                // One-shot steal for keyboard open (double-Ctrl+Enter) / Esc priority dialogs.
-                // Rate-limited so we never AttachThreadInput-spam against other apps.
+                // AttachThreadInput only for keyboard-driven open (double-Ctrl+Enter).
+                // Mouse paths must stay soft — AttachThreadInput vs fullscreen apps causes AppHang.
                 var now = Time.unscaledTime;
-                var allowAttach = now - _lastForceStealAt >= ForceStealMinInterval;
-                if (allowAttach)
+                if (now - _lastForceStealAt < ForceStealMinInterval)
                 {
-                    _lastForceStealAt = now;
-                    var foreground = GetForegroundWindow();
-                    var windowThread = GetWindowThreadProcessId(_hwnd, IntPtr.Zero);
-                    var foregroundThread = foreground != IntPtr.Zero
-                        ? GetWindowThreadProcessId(foreground, IntPtr.Zero)
-                        : 0;
-                    var attached = windowThread != 0 && foregroundThread != 0 && foregroundThread != windowThread &&
-                                   AttachThreadInput(windowThread, foregroundThread, true);
-                    try
-                    {
-                        SetForegroundWindow(_hwnd);
-                        SetFocus(_hwnd);
-                    }
-                    finally
-                    {
-                        if (attached)
-                        {
-                            AttachThreadInput(windowThread, foregroundThread, false);
-                        }
-                    }
+                    SetForegroundWindow(_hwnd);
+                    SetFocus(_hwnd);
+                    return;
                 }
-                else
+
+                _lastForceStealAt = now;
+                var foreground = GetForegroundWindow();
+                var windowThread = GetWindowThreadProcessId(_hwnd, IntPtr.Zero);
+                var foregroundThread = foreground != IntPtr.Zero
+                    ? GetWindowThreadProcessId(foreground, IntPtr.Zero)
+                    : 0;
+                var attached = windowThread != 0 && foregroundThread != 0 && foregroundThread != windowThread &&
+                               AttachThreadInput(windowThread, foregroundThread, true);
+                try
                 {
                     SetForegroundWindow(_hwnd);
                     SetFocus(_hwnd);
                 }
+                finally
+                {
+                    if (attached)
+                    {
+                        AttachThreadInput(windowThread, foregroundThread, false);
+                    }
+                }
             }
             else
             {
-                // Soft request only; mouse-driven opens usually already own last input.
+                // Soft request only; mouse-driven opens already delivered input to us.
                 SetForegroundWindow(_hwnd);
+                SetFocus(_hwnd);
             }
 #endif
         }
@@ -324,8 +328,18 @@ namespace CrazyChat.Overlay
         void OnApplicationFocus(bool focused)
         {
             _appFocused = focused;
-            // Do not force full click-through while unfocused: hovering avatar/bag/settings
-            // must still take hits so drag works over other fullscreen apps.
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            if (!_applied)
+            {
+                return;
+            }
+
+            // Unfocused hover must not keep capture; release hit-test so fullscreen apps stay usable.
+            if (!focused)
+            {
+                ApplyClickThrough(true, immediate: true);
+            }
+#endif
         }
 
         void Update()
@@ -337,9 +351,11 @@ namespace CrazyChat.Overlay
             }
 
             var overUi = _raycasterHost != null && _raycasterHost.IsPointerOverInteractive();
-            // Capture immediately when over UI so drag/click can start without waiting debounce.
-            // Release remains immediate inside ApplyClickThrough when through=true.
-            ApplyClickThrough(!overUi, immediate: overUi);
+            var primaryDown = (GetAsyncKeyState(VkLButton) & 0x8000) != 0;
+            // Focused: hover captures. Unfocused: only capture while LMB is down over UI
+            // (avoids long-lived TOPMOST hit-test fights that AppHang against fullscreen apps).
+            var wantCapture = _appFocused ? overUi : (overUi && primaryDown);
+            ApplyClickThrough(!wantCapture, immediate: wantCapture);
             LogHeartbeat();
 #endif
         }
@@ -449,13 +465,15 @@ namespace CrazyChat.Overlay
 
         void LogHeartbeat()
         {
-            if (Time.unscaledTime < _nextHeartbeatAt)
+            // Production: log only on state change (1Hz flood previously hid real exits).
+            var foreground = EnsureWindowHandle() && GetForegroundWindow() == _hwnd;
+            var key = (_appFocused ? 1 : 0) | (_clickThrough ? 2 : 0) | (_wantClickThrough ? 4 : 0) | (foreground ? 8 : 0);
+            if (key == _lastHeartbeatKey)
             {
                 return;
             }
 
-            _nextHeartbeatAt = Time.unscaledTime + 1f;
-            var foreground = EnsureWindowHandle() && GetForegroundWindow() == _hwnd;
+            _lastHeartbeatKey = key;
             Debug.Log("[OVERLAY-HB] focused=" + _appFocused +
                       " clickThrough=" + _clickThrough +
                       " wantThrough=" + _wantClickThrough +

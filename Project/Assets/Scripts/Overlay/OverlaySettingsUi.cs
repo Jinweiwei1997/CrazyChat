@@ -1421,7 +1421,6 @@ namespace CrazyChat.Overlay
             _view?.HideInteractMenu();
             _view?.HideTodos();
             _panel.SetActive(true);
-            _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput(forceSteal: true);
             RefreshLabels();
         }
 
