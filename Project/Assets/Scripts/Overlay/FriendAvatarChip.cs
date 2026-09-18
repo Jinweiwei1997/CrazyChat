@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 namespace CrazyChat.Overlay
 {
-    public sealed class FriendAvatarChip : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
+    public sealed class FriendAvatarChip : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         const float BubbleVisualScale = 1f;
         const float AvatarInset = 4f;
@@ -736,6 +736,16 @@ namespace CrazyChat.Overlay
             }
         }
 
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Left)
+            {
+                return;
+            }
+
+            _view?.ClaimInteractionFocus();
+        }
+
         public void OnPointerClick(PointerEventData eventData)
         {
             if (_dragging || eventData == null || eventData.button != PointerEventData.InputButton.Left)
@@ -753,6 +763,7 @@ namespace CrazyChat.Overlay
                 return;
             }
 
+            _view?.ClaimInteractionFocus();
             _view?.HideInteractMenu();
             _dragging = true;
             _releaseStartedAt = -1f;

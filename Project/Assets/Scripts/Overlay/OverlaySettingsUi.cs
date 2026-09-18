@@ -1400,6 +1400,7 @@ namespace CrazyChat.Overlay
 
         void TogglePanel()
         {
+            _view?.ClaimInteractionFocus();
             if (_panel != null && _panel.activeSelf)
             {
                 Hide();
@@ -1416,6 +1417,7 @@ namespace CrazyChat.Overlay
                 return;
             }
 
+            _view?.ClaimInteractionFocus();
             _view?.HideInteractMenu();
             _view?.HideTodos();
             _panel.SetActive(true);

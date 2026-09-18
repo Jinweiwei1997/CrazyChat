@@ -56,7 +56,11 @@ namespace CrazyChat.Overlay
             toggleRt.anchoredPosition = Vector2.zero;
             toggleRt.sizeDelta = new Vector2(ToggleWidth, ToggleHeight);
             _toggleText = FillLabel(toggleRt, "收起", 12, Color.white);
-            toggle.gameObject.AddComponent<Button>().onClick.AddListener(Toggle);
+            toggle.gameObject.AddComponent<Button>().onClick.AddListener(() =>
+            {
+                _view?.ClaimInteractionFocus();
+                Toggle();
+            });
 
             _toggleBadge = CreateImage("Unread", toggleRt, new Color(0.92f, 0.28f, 0.28f, 1f), OverlaySprites.Circle);
             _toggleBadge.raycastTarget = false;
@@ -237,7 +241,7 @@ namespace CrazyChat.Overlay
         }
     }
 
-    public sealed class OverlayBagItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
+    public sealed class OverlayBagItem : MonoBehaviour, IPointerDownHandler, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         FriendOverlayView _view;
         PlayingFriend _friend;
@@ -369,6 +373,16 @@ namespace CrazyChat.Overlay
             _badge.gameObject.SetActive(false);
         }
 
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Left)
+            {
+                return;
+            }
+
+            _view?.ClaimInteractionFocus();
+        }
+
         public void OnPointerClick(PointerEventData eventData)
         {
             if (_dragging || _friend == null || eventData.dragging || Time.unscaledTime < _ignoreClickUntil)
@@ -376,6 +390,7 @@ namespace CrazyChat.Overlay
                 return;
             }
 
+            _view?.ClaimInteractionFocus();
             _view?.OpenChat(_friend.SteamId);
         }
 
@@ -413,6 +428,7 @@ namespace CrazyChat.Overlay
                 return;
             }
 
+            _view?.ClaimInteractionFocus();
             _dragging = true;
             _ghost = new GameObject("BagGhost", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             _ghost.transform.SetParent(_view != null ? _view.OverlayLayer : transform.root, false);

@@ -479,6 +479,11 @@ namespace CrazyChat.Overlay
             _chatUi?.Toggle(friendId);
         }
 
+        public void ClaimInteractionFocus()
+        {
+            GetComponent<TransparentOverlayWindow>()?.FocusForTextInput(forceSteal: true);
+        }
+
         public void OnChipClicked(FriendAvatarChip chip)
         {
             if (chip == null)
@@ -486,6 +491,7 @@ namespace CrazyChat.Overlay
                 return;
             }
 
+            ClaimInteractionFocus();
             if (chip.IsLocal)
             {
                 if (_settings == null || !_settings.HasTodos) return;

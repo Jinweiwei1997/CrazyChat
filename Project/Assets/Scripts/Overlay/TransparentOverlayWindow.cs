@@ -324,18 +324,8 @@ namespace CrazyChat.Overlay
         void OnApplicationFocus(bool focused)
         {
             _appFocused = focused;
-#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-            if (!_applied)
-            {
-                return;
-            }
-
-            // Other apps took foreground: release hit-test immediately, never fight for focus.
-            if (!focused)
-            {
-                ApplyClickThrough(true, immediate: true);
-            }
-#endif
+            // Do not force full click-through while unfocused: hovering avatar/bag/settings
+            // must still take hits so drag works over other fullscreen apps.
         }
 
         void Update()
@@ -346,15 +336,10 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            if (!_appFocused)
-            {
-                ApplyClickThrough(true, immediate: true);
-                LogHeartbeat();
-                return;
-            }
-
             var overUi = _raycasterHost != null && _raycasterHost.IsPointerOverInteractive();
-            ApplyClickThrough(!overUi, immediate: false);
+            // Capture immediately when over UI so drag/click can start without waiting debounce.
+            // Release remains immediate inside ApplyClickThrough when through=true.
+            ApplyClickThrough(!overUi, immediate: overUi);
             LogHeartbeat();
 #endif
         }
