@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -24,6 +25,9 @@ namespace CrazyChat.Overlay
         const float ComposerHeight = 44f;
         const float CompactMinBodyHeight = 48f;
         const float BubbleMaxWidth = 214f;
+        const float TimeHeight = 16f;
+        const float TimeGap = 2f;
+        const long TimeSeparatorSeconds = 300L;
         const float ToolbarButtonSize = 28f;
         const float SendButtonWidth = ToolbarButtonSize;
         const float HistoryButtonWidth = ToolbarButtonSize;
@@ -939,7 +943,7 @@ namespace CrazyChat.Overlay
             {
                 var row = _rows[i];
                 row.Root.SetActive(true);
-                var height = BindRow(row, _visibleMessages[i]);
+                var height = BindRow(row, _visibleMessages[i], i > 0 ? _visibleMessages[i - 1] : null);
                 row.Rt.anchoredPosition = new Vector2(0f, -y);
                 row.Rt.sizeDelta = new Vector2(0f, height);
                 y += height + 6f;
@@ -1083,21 +1087,41 @@ namespace CrazyChat.Overlay
             text.rectTransform.offsetMin = new Vector2(8f, 6f);
             text.rectTransform.offsetMax = new Vector2(-8f, -6f);
 
+            var time = PlaceAnchoredLabel(rt, "", 11, Color.white, TextAnchor.MiddleCenter);
+            var timeRt = time.rectTransform;
+            timeRt.anchorMin = new Vector2(0f, 1f);
+            timeRt.anchorMax = new Vector2(1f, 1f);
+            timeRt.pivot = new Vector2(0.5f, 1f);
+            timeRt.offsetMin = new Vector2(0f, -TimeHeight);
+            timeRt.offsetMax = Vector2.zero;
+            time.gameObject.SetActive(false);
+
             return new ChatRow
             {
                 Root = go,
                 Rt = rt,
                 Bubble = bubble,
                 BubbleRt = bubbleRt,
-                Text = text
+                Text = text,
+                Time = time
             };
         }
 
-        float BindRow(ChatRow row, OverlayChatMessage msg)
+        float BindRow(ChatRow row, OverlayChatMessage msg, OverlayChatMessage previous)
         {
             var mine = msg != null && msg.mine;
             var text = msg != null ? msg.text : "";
             var theme = _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
+            var stamp = TimeSeparator(msg, previous);
+            row.Time.gameObject.SetActive(stamp != null);
+            var timeOffset = 0f;
+            if (stamp != null)
+            {
+                row.Time.text = stamp;
+                row.Time.color = OverlaySkin.ThemeMuted(theme);
+                timeOffset = TimeHeight + TimeGap;
+            }
+
             row.Text.text = text;
             row.Text.alignment = TextAnchor.UpperLeft;
             row.Bubble.sprite = OverlaySprites.RoundedRect;
@@ -1115,7 +1139,7 @@ namespace CrazyChat.Overlay
             var bubbleW = Mathf.Clamp(row.Text.preferredWidth + 16f, 36f, maxWidth);
             row.BubbleRt.anchorMin = row.BubbleRt.anchorMax = mine ? new Vector2(1f, 1f) : new Vector2(0f, 1f);
             row.BubbleRt.pivot = mine ? new Vector2(1f, 1f) : new Vector2(0f, 1f);
-            row.BubbleRt.anchoredPosition = new Vector2(mine ? -10f : 10f, 0f);
+            row.BubbleRt.anchoredPosition = new Vector2(mine ? -10f : 10f, -timeOffset);
             // Set width first; never use generationExtents.y=0 (Unity TextGenerator inflates height).
             row.BubbleRt.sizeDelta = new Vector2(bubbleW, 40f);
             var textInnerW = Mathf.Max(8f, bubbleW - 16f);
@@ -1128,7 +1152,36 @@ namespace CrazyChat.Overlay
                 Mathf.Max(0.01f, row.Text.pixelsPerUnit));
             var bubbleH = textH + 12f;
             row.BubbleRt.sizeDelta = new Vector2(bubbleW, bubbleH);
-            return bubbleH;
+            return bubbleH + timeOffset;
+        }
+
+        /// <summary>微信式：首条以及与上一条间隔超过 5 分钟时，才在气泡上方插一行居中时间。</summary>
+        static string TimeSeparator(OverlayChatMessage msg, OverlayChatMessage previous)
+        {
+            if (msg == null || msg.time <= 0L)
+            {
+                return null;
+            }
+
+            if (previous != null && previous.time > 0L && msg.time - previous.time < TimeSeparatorSeconds)
+            {
+                return null;
+            }
+
+            var sent = DateTimeOffset.FromUnixTimeSeconds(msg.time).ToLocalTime().DateTime;
+            var today = DateTime.Now.Date;
+            var day = sent.Date;
+            if (day == today)
+            {
+                return sent.ToString("HH:mm");
+            }
+
+            if (day == today.AddDays(-1))
+            {
+                return "昨天 " + sent.ToString("HH:mm");
+            }
+
+            return sent.ToString(day.Year == today.Year ? "M月d日 HH:mm" : "yyyy年M月d日 HH:mm");
         }
 
         void PlaceCardAbove(Vector2 avatarPos)
@@ -1266,6 +1319,7 @@ namespace CrazyChat.Overlay
             public Image Bubble;
             public RectTransform BubbleRt;
             public Text Text;
+            public Text Time;
         }
     }
 }
