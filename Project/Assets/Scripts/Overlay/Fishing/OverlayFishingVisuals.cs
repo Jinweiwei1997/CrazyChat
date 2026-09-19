@@ -23,6 +23,7 @@ namespace CrazyChat.Overlay.Fishing
 
         FriendOverlayView _view;
         Transform _chrome;
+        RectTransform _rodLayer;
         readonly Dictionary<ulong, RodPair> _remote = new Dictionary<ulong, RodPair>();
         RodPair _local;
         RectTransform _bubble;
@@ -44,8 +45,8 @@ namespace CrazyChat.Overlay.Fishing
             public Vector3 rodRestEuler;
         }
 
-        /// <summary>Rod / water / bubble / catch all live on chrome (above FriendLayer avatars).</summary>
-        public static OverlayFishingVisuals Create(Transform chrome, FriendOverlayView view)
+        /// <summary>Bubble / catch live on chrome; rod and water live on UnderFriendLayer, behind the avatars.</summary>
+        public static OverlayFishingVisuals Create(Transform chrome, Transform underFriendLayer, FriendOverlayView view)
         {
             var go = new GameObject("FishingVisuals", typeof(RectTransform));
             go.transform.SetParent(chrome, false);
@@ -60,8 +61,21 @@ namespace CrazyChat.Overlay.Fishing
             var v = go.AddComponent<OverlayFishingVisuals>();
             v._view = view;
             v._chrome = chrome;
+            v._rodLayer = CreateFullScreenRoot("FishingRods", underFriendLayer != null ? underFriendLayer : chrome);
             v.BuildLocalUi();
             return v;
+        }
+
+        static RectTransform CreateFullScreenRoot(string name, Transform parent)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            return rt;
         }
 
         public void Tick()
@@ -183,17 +197,24 @@ namespace CrazyChat.Overlay.Fishing
             HideCatchUi();
         }
 
+        Transform RodParent => _rodLayer != null ? _rodLayer : transform;
+
+        void OnDestroy()
+        {
+            if (_rodLayer != null) Destroy(_rodLayer.gameObject);
+        }
+
         void EnsureLocal()
         {
             if (_local.root != null) return;
-            _local = BuildRodPair("LocalRod", transform);
+            _local = BuildRodPair("LocalRod", RodParent);
             _local.root.gameObject.SetActive(false);
         }
 
         RodPair EnsureRemote(ulong id)
         {
             if (_remote.TryGetValue(id, out var existing) && existing.root != null) return existing;
-            var pair = BuildRodPair("RemoteRod_" + id, transform);
+            var pair = BuildRodPair("RemoteRod_" + id, RodParent);
             _remote[id] = pair;
             return pair;
         }

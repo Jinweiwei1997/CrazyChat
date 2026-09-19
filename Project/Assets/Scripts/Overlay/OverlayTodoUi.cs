@@ -543,8 +543,10 @@ namespace CrazyChat.Overlay
 
             Color green = new Color32(46, 168, 83, 255);
             Color amber = new Color32(240, 173, 78, 255);
+            // Untouched slider reads as an off switch, then warms up as it travels.
+            Color off = new Color32(176, 176, 176, 255);
             var ramp = _checkSlide < 0.5f
-                ? Color.Lerp(OverlaySkin.ThemeDanger(_view.Settings.SettingsTheme), amber, _checkSlide * 2f)
+                ? Color.Lerp(off, amber, _checkSlide * 2f)
                 : Color.Lerp(amber, green, (_checkSlide - 0.5f) * 2f);
             _checkTrack.color = ramp;
 
