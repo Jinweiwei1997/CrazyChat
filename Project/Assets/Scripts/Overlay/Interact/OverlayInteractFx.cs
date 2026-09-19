@@ -12,6 +12,7 @@ namespace CrazyChat.Overlay.Interact
         Sprite _tomato;
         readonly List<Flight> _flights = new List<Flight>();
         readonly List<FireworkParticle> _fireworkParticles = new List<FireworkParticle>();
+        readonly List<FireworkShot> _fireworkShots = new List<FireworkShot>();
 
         static readonly Color[] FireworkColors =
         {
@@ -62,15 +63,61 @@ namespace CrazyChat.Overlay.Interact
         }
 
         /// <summary>
+        /// 问号从发起者头像飞到对方头顶，再从头顶把烟花弹打向屏幕中心区域的随机落点炸开。
+        /// </summary>
+        public void PlayFireworks(Vector2 from, Vector2 to)
+        {
+            var chipSize = ChipSize();
+            var avatarScale = _settings != null ? Mathf.Max(0.1f, _settings.Scale) : 1f;
+            var head = to + new Vector2(0f, chipSize * avatarScale * 0.62f);
+
+            var go = new GameObject("FireworkQuestion", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+            go.transform.SetParent(_layer, false);
+            var text = go.GetComponent<Text>();
+            text.font = OverlaySprites.UiFont;
+            text.fontStyle = FontStyle.Bold;
+            text.fontSize = Mathf.Max(12, Mathf.RoundToInt(chipSize * 0.315f * avatarScale));
+            text.alignment = TextAnchor.MiddleCenter;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.text = "?";
+            text.color = Color.white;
+            text.raycastTarget = false;
+            var outline = go.AddComponent<Outline>();
+            outline.effectColor = new Color(0f, 0f, 0f, 0.7f);
+            outline.effectDistance = new Vector2(1.5f, -1.5f);
+
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = Vector2.zero;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(chipSize * 0.45f, chipSize * 0.45f);
+            rt.anchoredPosition = from;
+
+            _fireworkShots.Add(new FireworkShot
+            {
+                rect = rt,
+                graphic = text,
+                stage = ShotStage.Question,
+                from = from,
+                to = head,
+                head = head,
+                landing = RandomCenterLanding(),
+                start = Time.unscaledTime,
+                duration = 0.55f,
+                arc = Mathf.Clamp(Vector2.Distance(from, head) * 0.3f, 48f, 150f)
+            });
+        }
+
+        /// <summary>
         /// Temporary procedural visual. Round sparks fly a tilted 3D path, then fall.
         /// </summary>
-        public void PlayFireworks(Vector2 center)
+        void SpawnBurst(Vector2 center)
         {
             const int particleCount = 56;
             const float goldenAngle = 2.3999632f;
-            var chipSize = _config != null ? Mathf.Max(32f, _config.chipSize) : 128f;
-            var sizeScale = _settings != null ? Mathf.Max(0.1f, _settings.FireworkScale) : 1f;
-            var maxRadius = chipSize * 2.4f * sizeScale;
+            var chipSize = ChipSize();
+            var sizeScale = FireworkScale();
+            var maxRadius = chipSize * BurstRadiusScale() * sizeScale;
             var start = Time.unscaledTime;
             var colorOffset = Random.Range(0, FireworkColors.Length);
             var tilt = Quaternion.Euler(-26f, Random.Range(0f, 360f), 0f);
@@ -150,6 +197,14 @@ namespace CrazyChat.Overlay.Interact
                 }
             }
 
+            for (var i = _fireworkShots.Count - 1; i >= 0; i--)
+            {
+                if (!UpdateShot(_fireworkShots[i]))
+                {
+                    _fireworkShots.RemoveAt(i);
+                }
+            }
+
             for (var i = _fireworkParticles.Count - 1; i >= 0; i--)
             {
                 var particle = _fireworkParticles[i];
@@ -185,13 +240,157 @@ namespace CrazyChat.Overlay.Interact
                     var parent = particle.rect.parent;
                     Destroy(particle.rect.gameObject);
                     _fireworkParticles.RemoveAt(i);
-                    if (parent != null && parent.childCount <= 1)
+                    if (parent != null && parent != _layer && parent.childCount <= 1)
                     {
                         Destroy(parent.gameObject);
                     }
                 }
             }
         }
+
+        /// <summary>返回 false 表示这一发烟花已经走完，可以从列表里移除。</summary>
+        bool UpdateShot(FireworkShot shot)
+        {
+            if (shot.rect == null || shot.graphic == null)
+            {
+                return false;
+            }
+
+            var t = Mathf.Clamp01((Time.unscaledTime - shot.start) / shot.duration);
+            var pos = Vector2.Lerp(shot.from, shot.to, t);
+            pos.y += shot.arc * 4f * t * (1f - t);
+            shot.rect.anchoredPosition = pos;
+
+            switch (shot.stage)
+            {
+                case ShotStage.Question:
+                    shot.rect.localScale = Vector3.one * (t < 0.2f ? Mathf.Lerp(0.4f, 1.1f, t / 0.2f) : Mathf.Lerp(1.1f, 1f, (t - 0.2f) / 0.8f));
+                    if (t >= 1f)
+                    {
+                        shot.stage = ShotStage.QuestionFade;
+                        shot.start = Time.unscaledTime;
+                        shot.duration = 0.22f;
+                        shot.from = shot.head;
+                        shot.to = shot.head;
+                        shot.arc = 0f;
+                    }
+
+                    return true;
+
+                case ShotStage.QuestionFade:
+                    shot.rect.localScale = Vector3.one * Mathf.Lerp(1f, 1.35f, t);
+                    var faded = shot.graphic.color;
+                    faded.a = 1f - t;
+                    shot.graphic.color = faded;
+                    if (t >= 1f)
+                    {
+                        Destroy(shot.rect.gameObject);
+                        StartShell(shot);
+                    }
+
+                    return true;
+
+                default:
+                    shot.rect.localScale = Vector3.one * Mathf.Lerp(1f, 0.75f, t);
+                    if (Time.unscaledTime >= shot.nextTrail)
+                    {
+                        shot.nextTrail = Time.unscaledTime + 0.025f;
+                        SpawnTrail(pos, shot.graphic.color);
+                    }
+
+                    if (t >= 1f)
+                    {
+                        Destroy(shot.rect.gameObject);
+                        SpawnBurst(shot.landing);
+                        return false;
+                    }
+
+                    return true;
+            }
+        }
+
+        void StartShell(FireworkShot shot)
+        {
+            var chipSize = ChipSize();
+            var sizeScale = FireworkScale();
+            var go = new GameObject("FireworkShell", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(_layer, false);
+
+            var image = go.GetComponent<Image>();
+            image.sprite = OverlaySprites.Circle;
+            image.color = new Color(1f, 0.92f, 0.62f);
+            image.raycastTarget = false;
+
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = Vector2.zero;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            var size = chipSize * ShellSizeScale() * sizeScale;
+            rt.sizeDelta = new Vector2(size, size);
+            rt.anchoredPosition = shot.head;
+
+            shot.rect = rt;
+            shot.graphic = image;
+            shot.stage = ShotStage.Shell;
+            shot.from = shot.head;
+            shot.to = shot.landing;
+            shot.start = Time.unscaledTime;
+            shot.duration = 0.8f;
+            shot.arc = Mathf.Clamp(Vector2.Distance(shot.head, shot.landing) * 0.45f, 140f, 360f);
+            shot.nextTrail = 0f;
+        }
+
+        void SpawnTrail(Vector2 position, Color color)
+        {
+            var size = ChipSize() * ShellSizeScale() * 0.5f * FireworkScale();
+            var go = new GameObject("FireworkTrail", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(_layer, false);
+
+            var image = go.GetComponent<Image>();
+            image.sprite = OverlaySprites.Circle;
+            image.color = color;
+            image.raycastTarget = false;
+
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = Vector2.zero;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(size, size);
+            rt.anchoredPosition = position;
+
+            _fireworkParticles.Add(new FireworkParticle
+            {
+                rect = rt,
+                image = image,
+                center = position,
+                direction = Vector3.zero,
+                distance = 0f,
+                fall = size * 1.5f,
+                duration = 0.32f,
+                start = Time.unscaledTime,
+                color = color
+            });
+        }
+
+        /// <summary>落点落在屏幕中心那一块占全屏 1/4 面积的区域内。</summary>
+        Vector2 RandomCenterLanding()
+        {
+            var size = _layer != null ? _layer.rect.size : Vector2.zero;
+            if (size.x < 1f || size.y < 1f)
+            {
+                size = new Vector2(Screen.width, Screen.height);
+            }
+
+            return new Vector2(
+                Random.Range(size.x * 0.25f, size.x * 0.75f),
+                Random.Range(size.y * 0.25f, size.y * 0.75f));
+        }
+
+        float ChipSize() => _config != null ? Mathf.Max(32f, _config.chipSize) : 128f;
+
+        float FireworkScale() => _settings != null ? Mathf.Max(0.1f, _settings.FireworkScale) : 1f;
+
+        float BurstRadiusScale() => _config != null ? Mathf.Max(0.1f, _config.fireworkBurstRadius) : 2.4f;
+
+        float ShellSizeScale() => _config != null ? Mathf.Max(0.01f, _config.fireworkShellSize) : 0.11f;
 
         void OnDestroy()
         {
@@ -255,6 +454,28 @@ namespace CrazyChat.Overlay.Interact
             public float duration;
             public float start;
             public float height;
+        }
+
+        enum ShotStage
+        {
+            Question,
+            QuestionFade,
+            Shell
+        }
+
+        sealed class FireworkShot
+        {
+            public RectTransform rect;
+            public Graphic graphic;
+            public ShotStage stage;
+            public Vector2 from;
+            public Vector2 to;
+            public Vector2 head;
+            public Vector2 landing;
+            public float start;
+            public float duration;
+            public float arc;
+            public float nextTrail;
         }
 
         struct FireworkParticle

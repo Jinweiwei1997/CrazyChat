@@ -24,3 +24,5 @@ MonoBehaviour:
   interactCooldown: 0.1
   hoverOpenSeconds: 0.2
   tomatoTapCost: 100
+  fireworkBurstRadius: 2.4
+  fireworkShellSize: 0.11

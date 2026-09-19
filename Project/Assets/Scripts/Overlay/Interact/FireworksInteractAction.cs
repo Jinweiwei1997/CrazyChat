@@ -12,7 +12,7 @@ namespace CrazyChat.Overlay.Interact
         {
             if (fx != null)
             {
-                fx.PlayFireworks(to);
+                fx.PlayFireworks(from, to);
             }
         }
     }

@@ -195,6 +195,14 @@ namespace CrazyChat.Overlay
         [Min(0)]
         public int tomatoTapCost = 1000;
 
+        [Tooltip("烟花爆开半径＝几个头像宽（再乘设置里的烟花大小）")]
+        [Range(0.5f, 8f)]
+        public float fireworkBurstRadius = 2.4f;
+
+        [Tooltip("烟花弹和尾迹大小＝几个头像宽（再乘设置里的烟花大小）")]
+        [Range(0.02f, 0.5f)]
+        public float fireworkShellSize = 0.11f;
+
         [Header("钓鱼")]
         [Tooltip("正式模式咬钩最短间隔（秒）")]
         [Min(1f)]
