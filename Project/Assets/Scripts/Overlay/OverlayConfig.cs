@@ -245,23 +245,28 @@ namespace CrazyChat.Overlay
             {
                 new OverlayFishDef
                 {
-                    id = "lo_small", displayName = "小鱼", highTier = false, points = 50, weight = 60
+                    id = "lo_small", displayName = "小鱼", highTier = false, points = 50, weight = 60,
+                    spriteResource = "Art/Generated/Fishing/fish_lo_blue"
                 },
                 new OverlayFishDef
                 {
-                    id = "lo_carp", displayName = "鲤鱼", highTier = false, points = 80, weight = 30
+                    id = "lo_carp", displayName = "鲤鱼", highTier = false, points = 80, weight = 30,
+                    spriteResource = "Art/Generated/Fishing/fish_lo_green"
                 },
                 new OverlayFishDef
                 {
-                    id = "lo_trash", displayName = "破鞋", highTier = false, points = 10, weight = 10
+                    id = "lo_trash", displayName = "破鞋", highTier = false, points = 10, weight = 10,
+                    spriteResource = "Art/Generated/Fishing/catch_8"
                 },
                 new OverlayFishDef
                 {
-                    id = "hi_gold", displayName = "金鱼", highTier = true, points = 200, weight = 70
+                    id = "hi_gold", displayName = "金鱼", highTier = true, points = 200, weight = 70,
+                    spriteResource = "Art/Generated/Fishing/fish_hi_orange"
                 },
                 new OverlayFishDef
                 {
-                    id = "hi_dragon", displayName = "龙鱼", highTier = true, points = 500, weight = 30
+                    id = "hi_dragon", displayName = "龙鱼", highTier = true, points = 500, weight = 30,
+                    spriteResource = "Art/Generated/Fishing/fish_hi_red"
                 }
             };
         }

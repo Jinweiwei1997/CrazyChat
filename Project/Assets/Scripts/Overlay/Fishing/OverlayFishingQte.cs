@@ -128,21 +128,24 @@ namespace CrazyChat.Overlay.Fishing
             _root.pivot = new Vector2(0.5f, 0.5f);
             _root.sizeDelta = new Vector2(BarWidth + 24f, BarHeight + 28f);
 
-            _barImage = CreateImage("Bar", _root, OverlaySkin.ThemeSection(1), OverlaySprites.RoundedRect);
+            _barImage = CreateImage("Bar", _root, Color.white, OverlayFishingArt.QteBar());
             _barImage.raycastTarget = true;
+            _barImage.type = Image.Type.Sliced;
             _bar = _barImage.rectTransform;
-            _bar.sizeDelta = new Vector2(BarWidth, BarHeight);
+            _bar.sizeDelta = new Vector2(BarWidth, BarHeight + 6f);
             _bar.anchoredPosition = Vector2.zero;
 
-            _zoneImage = CreateImage("Zone", _bar, OverlaySkin.ThemeAccent(1), OverlaySprites.RoundedRect);
+            _zoneImage = CreateImage("Zone", _bar, Color.white, OverlayFishingArt.QteZone());
             _zoneImage.raycastTarget = false;
+            _zoneImage.type = Image.Type.Sliced;
             _zone = _zoneImage.rectTransform;
-            _zone.sizeDelta = new Vector2(BarWidth * ZoneFraction, BarHeight - 4f);
+            _zone.sizeDelta = new Vector2(BarWidth * ZoneFraction, BarHeight);
 
-            _knobImage = CreateImage("Knob", _bar, Color.white, OverlaySprites.RoundedRect);
+            _knobImage = CreateImage("Knob", _bar, Color.white, OverlayFishingArt.QteKnob());
             _knobImage.raycastTarget = false;
+            _knobImage.preserveAspect = true;
             _knob = _knobImage.rectTransform;
-            _knob.sizeDelta = new Vector2(KnobWidth, BarHeight + 6f);
+            _knob.sizeDelta = new Vector2(KnobWidth + 8f, BarHeight + 14f);
         }
 
         void LayoutZone()
@@ -164,15 +167,31 @@ namespace CrazyChat.Overlay.Fishing
 
         void ApplyTheme()
         {
-            var theme = _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
-            if (_barImage != null) _barImage.color = OverlaySkin.ThemeSection(theme);
-            if (_zoneImage != null)
+            // Cartoon Kenney slides keep their authored colors; only fallback rects follow theme.
+            if (_barImage != null && _barImage.sprite == OverlaySprites.RoundedRect)
             {
+                var theme = _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
+                _barImage.color = OverlaySkin.ThemeSection(theme);
+            }
+            else if (_barImage != null)
+            {
+                _barImage.color = Color.white;
+            }
+
+            if (_zoneImage != null && _zoneImage.sprite == OverlaySprites.RoundedRect)
+            {
+                var theme = _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
                 var a = OverlaySkin.ThemeAccent(theme);
                 a.a = 0.55f;
                 _zoneImage.color = a;
             }
-            if (_knobImage != null) _knobImage.color = OverlaySkin.SettingsThemeText(theme);
+            else if (_zoneImage != null)
+            {
+                _zoneImage.color = Color.white;
+            }
+
+            if (_knobImage != null)
+                _knobImage.color = Color.white;
         }
 
         bool IsPointerOverPanel()

@@ -343,7 +343,10 @@ namespace CrazyChat.Overlay.Fishing
                 displayName = highTier ? "高级鱼" : "小鱼",
                 highTier = highTier,
                 points = highTier ? 200 : 50,
-                weight = 1
+                weight = 1,
+                spriteResource = highTier
+                    ? "Art/Generated/Fishing/fish_hi_orange"
+                    : "Art/Generated/Fishing/fish_lo_blue"
             };
         }
 

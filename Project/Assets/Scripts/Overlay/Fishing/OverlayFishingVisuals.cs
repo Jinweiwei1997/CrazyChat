@@ -194,12 +194,16 @@ namespace CrazyChat.Overlay.Fishing
             var chipHalf = (_view != null && _view.Config != null ? _view.Config.chipSize : 128f) * 0.5f;
             var rodPos = new Vector2(RodOffsetX, -chipHalf - lineTip.y);
 
-            var water = CreateImage("Water", root, new Color(0.35f, 0.7f, 1f, 0.35f), OverlaySprites.Circle);
+            var waterSprite = OverlayFishingArt.Water();
+            var water = CreateImage("Water", root, Color.white, waterSprite);
             water.raycastTarget = false;
-            water.rectTransform.sizeDelta = new Vector2(72f, 28f);
+            water.preserveAspect = true;
+            water.rectTransform.sizeDelta = new Vector2(80f, 40f);
             water.rectTransform.anchoredPosition = rodPos + lineTip;
+            if (waterSprite == OverlaySprites.Circle)
+                water.color = new Color(0.35f, 0.7f, 1f, 0.35f);
 
-            var rod = CreateImage("Rod", root, Color.white, LoadRodSprite());
+            var rod = CreateImage("Rod", root, Color.white, OverlayFishingArt.Rod());
             rod.raycastTarget = false;
             rod.preserveAspect = true;
             rod.rectTransform.sizeDelta = new Vector2(RodSize, RodSize);
@@ -300,29 +304,20 @@ namespace CrazyChat.Overlay.Fishing
             rod.localEulerAngles = baseEuler;
         }
 
-        static Sprite LoadRodSprite()
-        {
-            var s = Resources.Load<Sprite>("Art/Generated/Fishing/BambooFishingRod");
-            if (s != null) return s;
-            // Project art may not be under Resources — try absolute path via AssetDatabase only in editor.
-#if UNITY_EDITOR
-            s = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(
-                "Assets/Art/Generated/Fishing/BambooFishingRod.png");
-            if (s != null) return s;
-#endif
-            return OverlaySprites.Circle;
-        }
+        static Sprite LoadRodSprite() => OverlayFishingArt.Rod();
 
         static void ApplyFishSprite(Image image, OverlayFishDef fish)
         {
             if (image == null) return;
-            Sprite sprite = null;
-            if (fish != null && !string.IsNullOrEmpty(fish.spriteResource))
-                sprite = Resources.Load<Sprite>(fish.spriteResource);
-            image.sprite = sprite != null ? sprite : OverlaySprites.Circle;
-            image.color = fish != null && fish.highTier
-                ? new Color(1f, 0.85f, 0.35f, 1f)
-                : new Color(0.55f, 0.75f, 1f, 1f);
+            var sprite = OverlayFishingArt.FishOrFallback(fish != null ? fish.spriteResource : null);
+            image.sprite = sprite;
+            image.preserveAspect = true;
+            // Keep authored cartoon colors; only tint placeholder circles.
+            image.color = sprite != null && sprite != OverlaySprites.Circle
+                ? Color.white
+                : fish != null && fish.highTier
+                    ? new Color(1f, 0.85f, 0.35f, 1f)
+                    : new Color(0.55f, 0.75f, 1f, 1f);
         }
 
         static Image CreateImage(string name, Transform parent, Color color, Sprite sprite)

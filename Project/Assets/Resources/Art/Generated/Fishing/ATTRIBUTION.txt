@@ -1,0 +1,8 @@
+﻿Fishing art credits (free packs used in CrazyChat Overlay fishing):
+
+- Kenney Fish Pack 2.0 — CC0 — https://kenney.nl/assets/fish-pack
+- Kenney UI Pack — CC0 — https://kenney.nl/assets/ui-pack
+- CraftPix / Free Game Assets fishing pack (OGA-BY 3.0) — https://opengameart.org/content/fishing-game-assets-pixel-art
+  (Fish-rod, Water, Catch icons)
+
+sinigangs Pixel Fishing (itch.io) was preferred for rod+DDR UI but requires itch download login; CraftPix rod used instead.
