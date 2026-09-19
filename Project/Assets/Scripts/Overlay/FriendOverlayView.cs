@@ -423,6 +423,35 @@ namespace CrazyChat.Overlay
             }
         }
 
+        /// <summary>
+        /// 所有正在玩本游戏的好友（桌上 + 麻袋），不含自己与测试好友。
+        /// 通道 2 广播用这个；接收方再按「发送者是否在自己桌上」决定是否播放。
+        /// </summary>
+        public void VisitPlayingFriends(Action<ulong> visit)
+        {
+            if (visit == null || _service == null)
+            {
+                return;
+            }
+
+            var friends = _service.Friends;
+            for (var i = 0; i < friends.Count; i++)
+            {
+                var friend = friends[i];
+                if (friend == null || friend.IsLocal || friend.SteamId == 0)
+                {
+                    continue;
+                }
+
+                if (PlayingFriendsService.IsTestFriend(friend.SteamId))
+                {
+                    continue;
+                }
+
+                visit(friend.SteamId);
+            }
+        }
+
         void OnInteractReceived(ulong fromId, string actionId)
         {
             if (string.IsNullOrEmpty(actionId))
@@ -730,9 +759,9 @@ namespace CrazyChat.Overlay
 
             var payload = OverlayTapSync.Encode(vk);
             var sent = false;
-            VisitDesktopFriends(chip =>
+            VisitPlayingFriends(id =>
             {
-                _interact.Send(chip.SteamId, payload);
+                _interact.Send(id, payload);
                 sent = true;
             });
             if (sent)
@@ -1008,6 +1037,7 @@ namespace CrazyChat.Overlay
             RefreshChatPreviews();
             RefreshChatSelection();
             _interactUi?.Sync();
+            _fishing?.OnPlayingFriendsChanged();
             if (_chatUi != null && _chatUi.IsOpen && !IsPresent(_chatUi.OpenFriendId))
             {
                 _chatUi.Hide();

@@ -124,6 +124,12 @@ namespace CrazyChat.Overlay.Fishing
                 _service.Send(friendId, MsgEnter);
         }
 
+        /// <summary>好友列表变化时补发进入状态，让刚开游戏且把你放桌上的人立刻看到鱼竿。</summary>
+        public void OnPlayingFriendsChanged()
+        {
+            if (_fishing) Broadcast(MsgEnter);
+        }
+
         public void OnAdvancedBubbleClicked()
         {
             if (!_bitePending || !_highTierBite) return;
@@ -336,11 +342,7 @@ namespace CrazyChat.Overlay.Fishing
         void Broadcast(string msg)
         {
             if (_service == null || _view == null) return;
-            _view.VisitDesktopFriends(chip =>
-            {
-                if (chip == null || chip.IsLocal) return;
-                _service.Send(chip.SteamId, msg);
-            });
+            _view.VisitPlayingFriends(id => _service.Send(id, msg));
         }
     }
 

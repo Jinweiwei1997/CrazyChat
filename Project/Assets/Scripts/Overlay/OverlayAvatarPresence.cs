@@ -138,13 +138,7 @@ namespace CrazyChat.Overlay
             }
 
             var payload = OverlayAvatarSync.EncodePresence(active);
-            _view.VisitDesktopFriends(chip =>
-            {
-                if (chip != null && !chip.IsLocal)
-                {
-                    _interact.Send(chip.SteamId, payload);
-                }
-            });
+            _view.VisitPlayingFriends(id => _interact.Send(id, payload));
         }
 
         void Update()
@@ -251,13 +245,10 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            _view.VisitDesktopFriends(chip =>
+            _view.VisitPlayingFriends(id =>
             {
-                if (chip != null && !chip.IsLocal)
-                {
-                    PushImagesTo(chip.SteamId);
-                    _interact.Send(chip.SteamId, OverlayAvatarSync.EncodeVersion(_settings.AvatarVersion));
-                }
+                PushImagesTo(id);
+                _interact.Send(id, OverlayAvatarSync.EncodeVersion(_settings.AvatarVersion));
             });
         }
 
