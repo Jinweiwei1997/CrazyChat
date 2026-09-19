@@ -194,14 +194,10 @@ namespace CrazyChat.Overlay.Fishing
             var chipHalf = (_view != null && _view.Config != null ? _view.Config.chipSize : 128f) * 0.5f;
             var rodPos = new Vector2(RodOffsetX, -chipHalf - lineTip.y);
 
-            var waterSprite = OverlayFishingArt.Water();
-            var water = CreateImage("Water", root, Color.white, waterSprite);
+            var water = CreateImage("Water", root, new Color(0.35f, 0.7f, 1f, 0.45f), OverlaySprites.Circle);
             water.raycastTarget = false;
-            water.preserveAspect = true;
-            water.rectTransform.sizeDelta = new Vector2(80f, 40f);
+            water.rectTransform.sizeDelta = new Vector2(72f, 28f);
             water.rectTransform.anchoredPosition = rodPos + lineTip;
-            if (waterSprite == OverlaySprites.Circle)
-                water.color = new Color(0.35f, 0.7f, 1f, 0.35f);
 
             var rod = CreateImage("Rod", root, Color.white, OverlayFishingArt.Rod());
             rod.raycastTarget = false;

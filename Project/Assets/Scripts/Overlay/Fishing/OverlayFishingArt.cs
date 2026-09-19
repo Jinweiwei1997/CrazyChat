@@ -8,16 +8,15 @@ namespace CrazyChat.Overlay.Fishing
         const string Root = "Art/Generated/Fishing/";
 
         public static Sprite Rod() =>
-            Load("CartoonFishingRod") ?? Load("BambooFishingRod");
+            Load("BambooFishingRod") ?? Load("CartoonFishingRod");
 
-        public static Sprite Water() =>
-            Load("WaterRipple") ?? Load("bubble_water") ?? OverlaySprites.Circle;
+        public static Sprite Water() => OverlaySprites.Circle;
 
-        public static Sprite QteBar() => Load("qte_bar") ?? OverlaySprites.RoundedRect;
+        public static Sprite QteBar() => OverlaySprites.RoundedRect;
 
-        public static Sprite QteZone() => Load("qte_zone") ?? OverlaySprites.RoundedRect;
+        public static Sprite QteZone() => OverlaySprites.RoundedRect;
 
-        public static Sprite QteKnob() => Load("qte_knob") ?? OverlaySprites.RoundedRect;
+        public static Sprite QteKnob() => OverlaySprites.RoundedRect;
 
         public static Sprite FishOrFallback(string resource)
         {
