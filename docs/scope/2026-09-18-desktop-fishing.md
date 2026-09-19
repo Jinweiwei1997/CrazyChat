@@ -1,4 +1,4 @@
-> 状态：待批准 2026-09-18
+> 状态：已批准 2026-09-18
 >
 > 本文是钓鱼玩法的现行需求。实施前以本文 + [game-ui-rules.md](../game-ui-rules.md) + [ai-code-guide.md](../ai-code-guide.md) 为准。不要把 `桌面互动伙伴需求.md` 当现行需求。
 

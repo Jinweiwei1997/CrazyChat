@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using CrazyChat.Overlay.Interact;
+using CrazyChat.Overlay.Fishing;
 
 namespace CrazyChat.Overlay
 {
@@ -24,6 +25,7 @@ namespace CrazyChat.Overlay
         OverlayInteractService _interact;
         OverlayInteractUi _interactUi;
         OverlayInteractFx _interactFx;
+        OverlayFishingController _fishing;
         OverlayInputPopFx _inputPop;
         OverlayAvatarPresence _avatarPresence;
         OverlayStealthController _stealth;
@@ -49,6 +51,8 @@ namespace CrazyChat.Overlay
         public OverlayUserSettings Settings => _settings;
 
         public OverlayStealthController Stealth => _stealth;
+
+        public OverlayTapStats Stats => _stats;
 
         public OverlayConfig Config => _service != null && _service.Config != null
             ? _service.Config
@@ -133,6 +137,8 @@ namespace CrazyChat.Overlay
             _interact.Received += OnInteractReceived;
             _interactFx = OverlayInteractFx.Create(fxLayer);
             _interactUi = OverlayInteractUi.Create(_chromeLayer, _windowLayer, this, _interact, _interactFx);
+            _fishing = OverlayFishingController.Create(this, _interact, _chromeLayer, _windowLayer, fxLayer);
+            _interactUi.BindFishing(_fishing);
             _inputPop = OverlayInputPopFx.Create(_chromeLayer, Config);
 
             _stats = new OverlayTapStats();
@@ -311,6 +317,7 @@ namespace CrazyChat.Overlay
 
             _store.Remove(friendId);
             _store.Save();
+            _fishing?.NotifyChipOnDesk(friendId, false);
             Rebuild();
         }
 
@@ -418,6 +425,17 @@ namespace CrazyChat.Overlay
 
         void OnInteractReceived(ulong fromId, string actionId)
         {
+            if (string.IsNullOrEmpty(actionId))
+            {
+                return;
+            }
+
+            if (actionId.StartsWith("fish|", StringComparison.Ordinal))
+            {
+                _fishing?.HandleRemote(fromId, actionId);
+                return;
+            }
+
             if (!TryGetChip(fromId, out var fromChip) || fromChip == null)
             {
                 return;
@@ -435,6 +453,16 @@ namespace CrazyChat.Overlay
             }
 
             action.Play(_interactFx, fromChip.FollowPosition, LocalChip.FollowPosition);
+        }
+
+        public void RefreshLocalTapCount()
+        {
+            if (_stats == null)
+            {
+                return;
+            }
+
+            LocalChip?.SetTapCount(_stats.Count);
         }
 
         public void ApplyTomatoTapCost()
@@ -522,7 +550,7 @@ namespace CrazyChat.Overlay
 
         public void OnChipHoverEnter(FriendAvatarChip chip)
         {
-            if (chip == null || chip.IsLocal)
+            if (chip == null)
             {
                 return;
             }
@@ -532,7 +560,7 @@ namespace CrazyChat.Overlay
 
         public void OnChipHoverExit(FriendAvatarChip chip)
         {
-            if (chip == null || chip.IsLocal)
+            if (chip == null)
             {
                 return;
             }
@@ -917,6 +945,7 @@ namespace CrazyChat.Overlay
 
                     _avatarPresence?.OnDesktopFriendAdded(friend.SteamId);
                     _avatarPresence?.RefreshChip(chip);
+                    _fishing?.OnDesktopFriendAdded(friend.SteamId);
                 }
                 else
                 {
@@ -927,6 +956,7 @@ namespace CrazyChat.Overlay
                     }
 
                     _bagged.Add(friend);
+                    _fishing?.NotifyChipOnDesk(friend.SteamId, false);
                 }
             }
 
@@ -947,6 +977,7 @@ namespace CrazyChat.Overlay
                 }
 
                 _chips.Remove(stale[i]);
+                _fishing?.NotifyChipOnDesk(stale[i], false);
             }
 
             if (layoutDirty)

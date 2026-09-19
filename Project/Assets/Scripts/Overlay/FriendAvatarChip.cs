@@ -712,20 +712,14 @@ namespace CrazyChat.Overlay
         {
             _hover = true;
             RefreshNameVisibility();
-            if (!IsLocal)
-            {
-                _view?.OnChipHoverEnter(this);
-            }
+            _view?.OnChipHoverEnter(this);
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
             _hover = false;
             RefreshNameVisibility();
-            if (!IsLocal)
-            {
-                _view?.OnChipHoverExit(this);
-            }
+            _view?.OnChipHoverExit(this);
         }
 
         void RefreshNameVisibility()

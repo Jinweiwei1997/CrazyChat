@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using CrazyChat.Overlay.Fishing;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -10,6 +12,7 @@ namespace CrazyChat.Overlay.Interact
         const float SlotSize = 36f;
         const float SlotGap = 8f;
         const string ControlSpriteResource = "Overlay/UI/control_rect";
+        const int SelfFishSlot = 0;
 
         static readonly Vector2[] SlotDirections =
         {
@@ -22,6 +25,7 @@ namespace CrazyChat.Overlay.Interact
         FriendOverlayView _view;
         OverlayInteractService _service;
         OverlayInteractFx _fx;
+        OverlayFishingController _fishing;
         RectTransform _root;
         GameObject _ring;
         RectTransform _ringRt;
@@ -35,8 +39,14 @@ namespace CrazyChat.Overlay.Interact
         float _hideAt = -1f;
         float _showAt = -1f;
         ulong _pendingId;
+        bool _selfMode;
 
-        public static OverlayInteractUi Create(Transform chrome, Transform windows, FriendOverlayView view, OverlayInteractService service, OverlayInteractFx fx)
+        public static OverlayInteractUi Create(
+            Transform chrome,
+            Transform windows,
+            FriendOverlayView view,
+            OverlayInteractService service,
+            OverlayInteractFx fx)
         {
             var root = new GameObject("InteractUi", typeof(RectTransform));
             root.transform.SetParent(chrome, false);
@@ -47,6 +57,8 @@ namespace CrazyChat.Overlay.Interact
             ui.Build(windows != null ? windows : chrome);
             return ui;
         }
+
+        public void BindFishing(OverlayFishingController fishing) => _fishing = fishing;
 
         void Build(Transform layer)
         {
@@ -87,6 +99,12 @@ namespace CrazyChat.Overlay.Interact
 
         void RefreshSlots()
         {
+            if (_selfMode)
+            {
+                RefreshSelfSlots();
+                return;
+            }
+
             var actions = OverlayInteractCatalog.All;
             var theme = _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
             var control = Resources.Load<Sprite>(ControlSpriteResource);
@@ -94,95 +112,88 @@ namespace CrazyChat.Overlay.Interact
             {
                 _slotActions[i] = i < actions.Count ? actions[i] : null;
                 var filled = _slotActions[i] != null;
-                var bg = _slotBg[i];
-                if (bg == null)
-                {
-                    continue;
-                }
+                ApplySlotVisual(i, filled, filled ? ShortSlotLabel(_slotActions[i].Label) : string.Empty, selected: false, theme, control);
+            }
+        }
 
-                bg.gameObject.SetActive(true);
-                bg.sprite = control != null ? control : OverlaySprites.RoundedRect;
-                bg.type = Image.Type.Sliced;
-                if (filled)
-                {
-                    var accent = OverlaySkin.ThemeAccent(theme);
-                    accent.a = 0.3f;
-                    bg.color = accent;
-                }
+        void RefreshSelfSlots()
+        {
+            var theme = _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
+            var control = Resources.Load<Sprite>(ControlSpriteResource);
+            var fishingOn = _fishing != null && _fishing.IsFishing;
+            for (var i = 0; i < SlotCount; i++)
+            {
+                _slotActions[i] = null;
+                if (i == SelfFishSlot)
+                    ApplySlotVisual(i, true, "钓鱼", fishingOn, theme, control);
                 else
-                {
-                    bg.color = OverlaySkin.ThemeControl(theme);
-                }
+                    ApplySlotVisual(i, false, string.Empty, false, theme, control);
+            }
+        }
 
-                bg.raycastTarget = true;
-                var button = bg.GetComponent<Button>();
-                if (button != null)
-                {
-                    button.interactable = filled;
-                }
+        void ApplySlotVisual(int i, bool filled, string label, bool selected, int theme, Sprite control)
+        {
+            var bg = _slotBg[i];
+            if (bg == null) return;
 
-                if (_slotLabels[i] != null)
-                {
-                    _slotLabels[i].text = filled ? ShortSlotLabel(_slotActions[i].Label) : string.Empty;
-                    _slotLabels[i].color = OverlaySkin.SettingsThemeText(theme);
-                }
+            bg.gameObject.SetActive(true);
+            bg.sprite = control != null ? control : OverlaySprites.RoundedRect;
+            bg.type = Image.Type.Sliced;
+            if (filled)
+            {
+                var accent = OverlaySkin.ThemeAccent(theme);
+                accent.a = selected ? 0.55f : 0.3f;
+                bg.color = accent;
+            }
+            else
+            {
+                bg.color = OverlaySkin.ThemeControl(theme);
+            }
+
+            bg.raycastTarget = true;
+            var button = bg.GetComponent<Button>();
+            if (button != null) button.interactable = filled;
+
+            if (_slotLabels[i] != null)
+            {
+                _slotLabels[i].text = label;
+                _slotLabels[i].color = OverlaySkin.SettingsThemeText(theme);
             }
         }
 
         static string ShortSlotLabel(string label)
         {
-            if (string.IsNullOrEmpty(label))
-            {
-                return string.Empty;
-            }
-
-            if (label.Length <= 3)
-            {
-                return label;
-            }
-
-            if (label.StartsWith("测试"))
-            {
-                return "测试";
-            }
-
+            if (string.IsNullOrEmpty(label)) return string.Empty;
+            if (label.Length <= 3) return label;
+            if (label.StartsWith("测试")) return "测试";
             return label.StartsWith("扔") && label.Length > 1 ? label.Substring(1) : label;
         }
 
-        public void ApplySkin()
-        {
-            RefreshSlots();
-        }
+        public void ApplySkin() => RefreshSlots();
 
         public void Sync()
         {
             if (_openFor != 0 && (_view == null || !_view.TryGetChip(_openFor, out var chip) || chip == null))
-            {
                 HideMenu();
-            }
+            else if (_ring != null && _ring.activeSelf && _selfMode)
+                RefreshSelfSlots();
         }
 
         public void HideMenu()
         {
             _openFor = 0;
+            _selfMode = false;
             _hoverChip = false;
             _hoverRing = false;
             _hideAt = -1f;
             _showAt = -1f;
             _pendingId = 0;
-            if (_ring != null)
-            {
-                _ring.SetActive(false);
-            }
+            if (_ring != null) _ring.SetActive(false);
         }
 
         public void NotifyChipHoverEnter(ulong friendId)
         {
-            if (friendId == 0)
-            {
-                return;
-            }
-
+            if (friendId == 0) return;
             _hoverChip = true;
             _hideAt = -1f;
             if (_ring != null && _ring.activeSelf && _openFor == friendId)
@@ -203,10 +214,7 @@ namespace CrazyChat.Overlay.Interact
                 _pendingId = 0;
             }
 
-            if (_openFor != 0 && friendId != _openFor)
-            {
-                return;
-            }
+            if (_openFor != 0 && friendId != _openFor) return;
 
             _hoverChip = false;
             ScheduleHide();
@@ -214,10 +222,7 @@ namespace CrazyChat.Overlay.Interact
 
         void LateUpdate()
         {
-            if (_view == null)
-            {
-                return;
-            }
+            if (_view == null) return;
 
             if (_ring != null && _ring.activeSelf && _view.TryGetChip(_openFor, out var openChip) && openChip != null)
             {
@@ -231,18 +236,12 @@ namespace CrazyChat.Overlay.Interact
                 var id = _pendingId;
                 _showAt = -1f;
                 _pendingId = 0;
-                if (_hoverChip && id != 0)
-                {
-                    Show(id);
-                }
+                if (_hoverChip && id != 0) Show(id);
             }
 
             if (_ring != null && _ring.activeSelf && _hideAt > 0f && Time.unscaledTime >= _hideAt)
             {
-                if (!_hoverChip && !_hoverRing)
-                {
-                    HideMenu();
-                }
+                if (!_hoverChip && !_hoverRing) HideMenu();
             }
         }
 
@@ -279,6 +278,8 @@ namespace CrazyChat.Overlay.Interact
             _pendingId = 0;
             _view?.HideSettings();
             _openFor = friendId;
+            _selfMode = _view != null && _view.LocalChip != null && _view.LocalChip.SteamId == friendId;
+            RefreshSlots();
             if (_ring != null)
             {
                 _ring.SetActive(true);
@@ -288,35 +289,40 @@ namespace CrazyChat.Overlay.Interact
 
         void ScheduleHide()
         {
-            if (_hoverChip || _hoverRing)
-            {
-                return;
-            }
-
+            if (_hoverChip || _hoverRing) return;
             _hideAt = Time.unscaledTime + 0.22f;
         }
 
         void UseSlot(int index)
         {
-            if (index < 0 || index >= SlotCount)
+            if (index < 0 || index >= SlotCount) return;
+            if (_selfMode)
             {
+                UseSelfSlot(index);
                 return;
             }
 
             Use(_slotActions[index]);
         }
 
+        void UseSelfSlot(int index)
+        {
+            if (index != SelfFishSlot || _fishing == null || _view == null || Time.unscaledTime < _nextUse)
+                return;
+
+            var cooldown = _view.Config != null ? Mathf.Max(0f, _view.Config.interactCooldown) : 0.1f;
+            _nextUse = Time.unscaledTime + cooldown;
+            _fishing.ToggleLocal();
+            HideMenu();
+        }
+
         void Use(IOverlayInteractAction action)
         {
             if (action == null || _openFor == 0 || _view == null || Time.unscaledTime < _nextUse)
-            {
                 return;
-            }
 
             if (!_view.TryGetChip(_openFor, out var target) || target == null || _view.LocalChip == null)
-            {
                 return;
-            }
 
             var cooldown = _view.Config != null ? Mathf.Max(0f, _view.Config.interactCooldown) : 0.1f;
             _nextUse = Time.unscaledTime + cooldown;
@@ -328,14 +334,10 @@ namespace CrazyChat.Overlay.Interact
 
             action.Play(_fx, _view.LocalChip.FollowPosition, target.FollowPosition);
             if (action.Id == "tomato")
-            {
                 _view.ApplyTomatoTapCost();
-            }
 
             if (_service != null)
-            {
                 _service.Send(_openFor, action.Id);
-            }
         }
 
         void PlaceRing(Vector2 avatarPos, float chipSize, float scale)
@@ -346,11 +348,7 @@ namespace CrazyChat.Overlay.Interact
             for (var i = 0; i < SlotCount; i++)
             {
                 var bg = _slotBg[i];
-                if (bg == null)
-                {
-                    continue;
-                }
-
+                if (bg == null) continue;
                 bg.rectTransform.anchoredPosition = SlotDirections[i] * radius;
             }
         }

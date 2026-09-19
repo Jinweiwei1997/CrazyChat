@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using CrazyChat.Overlay.Fishing;
 using UnityEngine;
 
 namespace CrazyChat.Overlay
@@ -193,6 +194,77 @@ namespace CrazyChat.Overlay
         [Tooltip("扔番茄扣点击")]
         [Min(0)]
         public int tomatoTapCost = 1000;
+
+        [Header("钓鱼")]
+        [Tooltip("正式模式咬钩最短间隔（秒）")]
+        [Min(1f)]
+        public float fishingBiteMinSeconds = 300f;
+
+        [Tooltip("正式模式咬钩最长间隔（秒）")]
+        [Min(1f)]
+        public float fishingBiteMaxSeconds = 600f;
+
+        [Tooltip("测试模式咬钩最短间隔（秒）")]
+        [Min(1f)]
+        public float fishingTestBiteMinSeconds = 8f;
+
+        [Tooltip("测试模式咬钩最长间隔（秒）")]
+        [Min(1f)]
+        public float fishingTestBiteMaxSeconds = 20f;
+
+        [Tooltip("高级鱼概率（0～1）")]
+        [Range(0f, 1f)]
+        public float fishingHighTierChance = 0.2f;
+
+        [Tooltip("高级鱼气泡倒计时（秒）")]
+        [Min(0.5f)]
+        public float fishingBubbleSeconds = 10f;
+
+        [Tooltip("QTE 超时（秒）")]
+        [Min(0.5f)]
+        public float fishingQteSeconds = 5f;
+
+        [Tooltip("低级鱼图渐隐（秒）")]
+        [Min(0.1f)]
+        public float fishingLowFadeSeconds = 1.2f;
+
+        [Tooltip("奖励展示（秒）")]
+        [Min(0.1f)]
+        public float fishingRewardSeconds = 1.5f;
+
+        [Tooltip("鱼竿上吊（秒）")]
+        [Min(0.1f)]
+        public float fishingReelSeconds = 0.6f;
+
+        [Tooltip("鱼池（同池内按 weight 加权；highTier 区分高低级）")]
+        public OverlayFishDef[] fishingFish = DefaultFishingFish();
+
+        static OverlayFishDef[] DefaultFishingFish()
+        {
+            return new[]
+            {
+                new OverlayFishDef
+                {
+                    id = "lo_small", displayName = "小鱼", highTier = false, points = 50, weight = 60
+                },
+                new OverlayFishDef
+                {
+                    id = "lo_carp", displayName = "鲤鱼", highTier = false, points = 80, weight = 30
+                },
+                new OverlayFishDef
+                {
+                    id = "lo_trash", displayName = "破鞋", highTier = false, points = 10, weight = 10
+                },
+                new OverlayFishDef
+                {
+                    id = "hi_gold", displayName = "金鱼", highTier = true, points = 200, weight = 70
+                },
+                new OverlayFishDef
+                {
+                    id = "hi_dragon", displayName = "龙鱼", highTier = true, points = 500, weight = 30
+                }
+            };
+        }
 
         public string FormatUnread(int count)
         {
