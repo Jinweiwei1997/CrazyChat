@@ -17,6 +17,7 @@ namespace CrazyChat.Overlay
         static Sprite _roundedRect;
         static Sprite _roundedSquare;
         static Sprite _dashedRoundedSquare;
+        static Sprite _scallopBadge;
         static Font _font;
         static Material _roundedAvatarMaterial;
 
@@ -125,6 +126,20 @@ namespace CrazyChat.Overlay
                 }
 
                 return _dashedRoundedSquare;
+            }
+        }
+
+        // White so callers can tint it; matches the 8 lobe badge of the check-in animation.
+        public static Sprite ScallopBadge
+        {
+            get
+            {
+                if (_scallopBadge == null)
+                {
+                    _scallopBadge = CreateScallopBadge(128, 8);
+                }
+
+                return _scallopBadge;
             }
         }
 
@@ -279,6 +294,36 @@ namespace CrazyChat.Overlay
                     {
                         pixels[y * size + x] = new Color(1f, 1f, 1f, Mathf.Clamp01(outer - inner));
                     }
+                }
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply(false, false);
+            return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+        }
+
+        static Sprite CreateScallopBadge(int size, int lobes)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                name = "OverlayScallopBadge"
+            };
+
+            var c = size * 0.5f;
+            var baseRadius = c - 6f;
+            const float amplitude = 5f;
+            var pixels = new Color[size * size];
+            for (var y = 0; y < size; y++)
+            {
+                for (var x = 0; x < size; x++)
+                {
+                    var dx = x + 0.5f - c;
+                    var dy = y + 0.5f - c;
+                    var d = Mathf.Sqrt(dx * dx + dy * dy);
+                    var edge = baseRadius + amplitude * Mathf.Cos(lobes * Mathf.Atan2(dy, dx));
+                    pixels[y * size + x] = new Color(1f, 1f, 1f, Mathf.Clamp01(edge - d));
                 }
             }
 

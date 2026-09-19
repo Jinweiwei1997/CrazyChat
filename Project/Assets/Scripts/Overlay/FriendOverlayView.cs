@@ -556,17 +556,8 @@ namespace CrazyChat.Overlay
             }
 
             ClaimInteractionFocus();
-            if (chip.IsLocal)
-            {
-                if (_settings == null || !_settings.HasTodos) return;
-                StopTargeting();
-                HideSettings();
-                HideInteractMenu();
-                _chatUi?.Hide();
-                _todoUi?.Toggle();
-                return;
-            }
-            if (chip.SteamId == 0) return;
+            // Own avatar has no click action; check-in lives on its chrome strip.
+            if (chip.IsLocal || chip.SteamId == 0) return;
 
             OpenChat(chip.SteamId);
         }

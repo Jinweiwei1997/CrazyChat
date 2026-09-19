@@ -15,6 +15,18 @@ namespace CrazyChat.Overlay
         const string ThemeSpriteResource = "Overlay/UI/square_rect";
         const string ControlSpriteResource = "Overlay/UI/control_rect";
         const string CloseIconResource = "Overlay/UI/codicon_close";
+        const string CheckinSuccessSheetResource = "Overlay/UI/checkin_success_sheet";
+        // Shared so the drag mapping matches the knob's on-screen travel.
+        internal const float CheckinKnob = 28.8f;
+        const int CheckinSuccessColumns = 10;
+        const int CheckinSuccessRows = 9;
+        const int CheckinSuccessFrames = 90;
+        const int CheckinTickStartFrame = 20;
+        const int CheckinTickEndFrame = 69;
+        const int CheckinDoneFrame = 40;
+        const float CheckinSuccessFps = 45f;
+        const float CheckinSuccessSeconds =
+            (CheckinTickEndFrame - CheckinTickStartFrame + 1) / CheckinSuccessFps;
         FriendOverlayView _view;
         RectTransform _card;
         Image _cardImage;
@@ -37,18 +49,20 @@ namespace CrazyChat.Overlay
         RectTransform _checkBar;
         Image _checkTrack;
         Image _checkKnob;
-        Text _checkMark;
         RectTransform _checkHintRoot;
         Image _checkHintBg;
         Text _checkHint;
         RectTransform _checkEditor;
         InputField _checkInput;
         float _checkSlide;
+        float _checkSlideVelocity;
+        internal float CheckinSlide => _checkSlide;
         bool _checkHover;
         bool _checkDragging;
         bool _checkDragMoved;
-        float _checkPunch;
-        RectTransform _checkFxRoot;
+        RawImage _checkSuccess;
+        float _checkSuccessStarted = float.NegativeInfinity;
+
         public bool IsEditingCheckin => _checkEditor != null && _checkEditor.gameObject.activeSelf;
         public bool IsOpen => _card != null && _card.gameObject.activeSelf;
 
@@ -71,7 +85,6 @@ namespace CrazyChat.Overlay
         {
             if (_checkBar != null) Destroy(_checkBar.gameObject);
             if (_checkHintRoot != null) Destroy(_checkHintRoot.gameObject);
-            if (_checkFxRoot != null) Destroy(_checkFxRoot.gameObject);
             if (_view != null && _view.Settings != null)
                 _view.Settings.TodosChanged -= Refresh;
         }
@@ -298,7 +311,7 @@ namespace CrazyChat.Overlay
         {
             var chipW = _view.Config != null ? _view.Config.chipSize : 128f;
             const float trackH = 22f;
-            const float knob = 20f;
+            const float knob = CheckinKnob;
             const float editHit = 24f;
             const float gap = 2f;
             var trackW = Mathf.Max(48f, chipW - editHit - gap);
@@ -329,20 +342,20 @@ namespace CrazyChat.Overlay
             rim.rectTransform.offsetMin = new Vector2(2f, 2f);
             rim.rectTransform.offsetMax = new Vector2(-2f, -2f);
 
-            _checkKnob = ImageRect("Knob", _checkTrack.transform, Color.white, OverlaySprites.Circle);
+            // Tintable badge: the knob tracks the same color ramp as the track while sliding.
+            _checkKnob = ImageRect("Knob", _checkTrack.transform, Color.white, OverlaySprites.ScallopBadge);
+            _checkKnob.type = Image.Type.Simple;
             _checkKnob.raycastTarget = true;
             _checkKnob.rectTransform.sizeDelta = new Vector2(knob, knob);
-            var knobEdge = ImageRect("KnobEdge", _checkKnob.transform, new Color(0f, 0f, 0f, 0.18f), OverlaySprites.Circle);
-            knobEdge.raycastTarget = false;
-            knobEdge.rectTransform.anchorMin = Vector2.zero;
-            knobEdge.rectTransform.anchorMax = Vector2.one;
-            knobEdge.rectTransform.offsetMin = new Vector2(-2f, -2f);
-            knobEdge.rectTransform.offsetMax = new Vector2(2f, 2f);
-            knobEdge.transform.SetAsFirstSibling();
-            _checkMark = Label("Mark", _checkKnob.transform, "✓", 14);
-            _checkMark.alignment = TextAnchor.MiddleCenter;
-            _checkMark.raycastTarget = false;
-            _checkMark.gameObject.SetActive(false);
+            var successRoot = Rect("SuccessBadge", _checkTrack.transform);
+            // Sized so the baked badge renders at the knob diameter, no pop on success.
+            successRoot.sizeDelta = new Vector2(knob * 1.3f, knob * 1.3f);
+            _checkSuccess = successRoot.gameObject.AddComponent<RawImage>();
+            _checkSuccess.texture = Resources.Load<Texture2D>(CheckinSuccessSheetResource);
+            _checkSuccess.color = Color.white;
+            _checkSuccess.raycastTarget = false;
+            _checkSuccess.gameObject.SetActive(false);
+            SetCheckinSuccessFrame(0);
 
             var drag = toggle.gameObject.AddComponent<CheckinSlideDrag>();
             drag.Bind(this, rt);
@@ -382,9 +395,7 @@ namespace CrazyChat.Overlay
             _checkHint.rectTransform.offsetMax = new Vector2(-6f, 0f);
             _checkHintRoot.gameObject.SetActive(false);
 
-            _checkFxRoot = Rect("CheckinFx", chrome);
-            _checkFxRoot.anchorMin = _checkFxRoot.anchorMax = Vector2.zero;
-            _checkFxRoot.sizeDelta = Vector2.zero;
+
 
             _checkEditor = ImageRect("CheckinEditor", transform, OverlaySkin.ThemeBackground(1)).rectTransform;
             _checkEditor.anchorMin = _checkEditor.anchorMax = Vector2.zero;
@@ -412,6 +423,7 @@ namespace CrazyChat.Overlay
 
         internal bool CanDragCheckin()
         {
+            if (Time.unscaledTime - _checkSuccessStarted < CheckinSuccessSeconds) return false;
             if (_view == null || _view.Settings == null || !_view.Settings.ShowCheckin || IsEditingCheckin)
                 return false;
             if (_view.Settings.TestMode) return true;
@@ -421,6 +433,7 @@ namespace CrazyChat.Overlay
         internal void BeginCheckinDrag()
         {
             _checkDragging = true;
+            _checkSlideVelocity = 0f;
             _checkDragMoved = false;
             _view?.ClaimInteractionFocus();
         }
@@ -441,55 +454,25 @@ namespace CrazyChat.Overlay
             if (_checkDragMoved && _checkSlide >= 0.9f)
             {
                 _checkSlide = 1f;
+                _checkSuccessStarted = Time.unscaledTime;
                 if (!_view.Settings.TestMode)
                     _view.Settings.CompleteTodo(_view.Settings.Checkin);
-                StartCoroutine(PlayCheckinFx());
+
             }
             _checkDragMoved = false;
         }
 
-        IEnumerator PlayCheckinFx()
+        void SetCheckinSuccessFrame(int frame)
         {
-            _checkPunch = 1f;
-            if (_checkFxRoot == null || _checkKnob == null) yield break;
-            var origin = (Vector2)_checkKnob.rectTransform.position;
-            for (var i = 0; i < 6; i++)
-            {
-                var spark = ImageRect("Spark", _checkFxRoot, new Color32(80, 220, 120, 255), OverlaySprites.Circle);
-                spark.raycastTarget = false;
-                spark.rectTransform.sizeDelta = new Vector2(6f, 6f);
-                spark.rectTransform.position = origin;
-                var dir = new Vector2(Mathf.Cos(i * 1.047f), Mathf.Sin(i * 1.047f) + 0.35f);
-                StartCoroutine(AnimateSpark(spark, dir * 36f));
-            }
-            var t = 0f;
-            while (t < 0.28f)
-            {
-                t += Time.unscaledDeltaTime;
-                _checkPunch = Mathf.Lerp(1.35f, 1f, t / 0.28f);
-                yield return null;
-            }
-            _checkPunch = 0f;
-        }
-
-        IEnumerator AnimateSpark(Image spark, Vector2 delta)
-        {
-            var start = (Vector2)spark.rectTransform.anchoredPosition;
-            // Convert world kick into local delta roughly.
-            var from = spark.rectTransform.position;
-            var t = 0f;
-            while (t < 0.35f)
-            {
-                t += Time.unscaledDeltaTime;
-                var u = t / 0.35f;
-                spark.rectTransform.position = from + (Vector3)(delta * u);
-                var c = spark.color;
-                c.a = 1f - u;
-                spark.color = c;
-                spark.rectTransform.localScale = Vector3.one * (1.2f - 0.6f * u);
-                yield return null;
-            }
-            if (spark != null) Destroy(spark.gameObject);
+            if (_checkSuccess == null) return;
+            frame = Mathf.Clamp(frame, 0, CheckinSuccessFrames - 1);
+            var column = frame % CheckinSuccessColumns;
+            var row = frame / CheckinSuccessColumns;
+            _checkSuccess.uvRect = new Rect(
+                column / (float)CheckinSuccessColumns,
+                1f - (row + 1f) / CheckinSuccessRows,
+                1f / CheckinSuccessColumns,
+                1f / CheckinSuccessRows);
         }
 
         void OpenCheckinEdit()
@@ -530,7 +513,7 @@ namespace CrazyChat.Overlay
 
             var chipW = _view.Config != null ? _view.Config.chipSize : 128f;
             const float trackH = 22f;
-            const float knob = 20f;
+            const float knob = CheckinKnob;
             const float editHit = 24f;
             const float gap = 2f;
             var trackW = Mathf.Max(48f, chipW - editHit - gap);
@@ -548,27 +531,45 @@ namespace CrazyChat.Overlay
             _checkBar.localScale = Vector3.one * scale;
 
             var done = !_view.Settings.TestMode && _view.Settings.Checkin.IsComplete(DateTime.Now);
+            var successElapsed = Time.unscaledTime - _checkSuccessStarted;
+            var successFeedback = successElapsed < CheckinSuccessSeconds;
             if (!_checkDragging)
             {
-                var target = done ? 1f : 0f;
+                var target = done || successFeedback ? 1f : 0f;
                 // Test mode: after a successful slide, ease back so it can be tried again.
-                _checkSlide = Mathf.MoveTowards(_checkSlide, target, Time.unscaledDeltaTime / 0.16f);
+                _checkSlide = Mathf.SmoothDamp(_checkSlide, target, ref _checkSlideVelocity,
+                    0.08f, Mathf.Infinity, Time.unscaledDeltaTime);
             }
 
-            var green = new Color32(46, 168, 83, 255);
-            _checkTrack.color = Color.Lerp(OverlaySkin.ThemeDanger(_view.Settings.SettingsTheme), green, _checkSlide);
-            var travel = (trackW - knob) * 0.5f - 2f;
-            _checkKnob.rectTransform.anchoredPosition = new Vector2(Mathf.Lerp(-travel, travel, _checkSlide), 0f);
-            var showMark = done || _checkSlide >= 0.9f;
-            if (_checkMark != null)
-            {
-                _checkMark.gameObject.SetActive(showMark);
-                _checkMark.color = Color.white;
-                _checkMark.font = OverlaySprites.UiFont;
-            }
-            _checkKnob.color = showMark ? green : Color.white;
-            var punch = _checkDragging ? 1.12f : (_checkPunch > 0f ? _checkPunch : 1f);
+            Color green = new Color32(46, 168, 83, 255);
+            Color amber = new Color32(240, 173, 78, 255);
+            var ramp = _checkSlide < 0.5f
+                ? Color.Lerp(OverlaySkin.ThemeDanger(_view.Settings.SettingsTheme), amber, _checkSlide * 2f)
+                : Color.Lerp(amber, green, (_checkSlide - 0.5f) * 2f);
+            _checkTrack.color = ramp;
+
+            var travel = (trackW - knob) * 0.5f;
+            var knobPos = new Vector2(Mathf.Lerp(-travel, travel, _checkSlide), 0f);
+            var punch = _checkDragging ? 1.12f : 1f;
+            // The baked sheet takes over once the tick plays; before that the knob is the handle.
+            var baked = successFeedback || done;
+            _checkKnob.rectTransform.anchoredPosition = knobPos;
             _checkKnob.rectTransform.localScale = Vector3.one * punch;
+            _checkKnob.rectTransform.localEulerAngles = new Vector3(0f, 0f, -_checkSlide * 180f);
+            // Keeps the ramp's hue so it shifts with the track, but stays near white to read on it.
+            _checkKnob.color = baked ? Color.clear : Color.Lerp(ramp, Color.white, 0.82f);
+
+            _checkSuccess.gameObject.SetActive(baked);
+            if (baked)
+            {
+                _checkSuccess.rectTransform.anchoredPosition = knobPos;
+                _checkSuccess.rectTransform.localScale = Vector3.one * punch;
+                _checkSuccess.rectTransform.localEulerAngles = Vector3.zero;
+                SetCheckinSuccessFrame(successFeedback
+                    ? Mathf.Min(CheckinTickEndFrame,
+                        CheckinTickStartFrame + Mathf.FloorToInt(successElapsed * CheckinSuccessFps))
+                    : CheckinDoneFrame);
+            }
 
             var showHint = _checkHover && !IsEditingCheckin && !_checkDragging;
             if (_checkHintRoot != null)
@@ -624,14 +625,9 @@ namespace CrazyChat.Overlay
                 var pencil = _checkBar.Find("Edit/Pencil");
                 if (pencil != null)
                     foreach (var image in pencil.GetComponentsInChildren<Image>())
-                        image.color = themeText;
+                        image.color = OverlaySkin.SettingsEntryIconColor(theme);
                 if (_checkHintBg != null) _checkHintBg.color = new Color(0f, 0f, 0f, 0.55f);
                 if (_checkHint != null) _checkHint.color = Color.white;
-                if (_checkMark != null)
-                {
-                    _checkMark.font = OverlaySprites.UiFont;
-                    _checkMark.color = Color.white;
-                }
                 _checkEditor.GetComponent<Image>().color = OverlaySkin.ThemeBackground(theme);
                 _checkInput.GetComponent<Image>().color = OverlaySkin.ThemeInputBackground(theme);
                 _checkInput.GetComponent<Outline>().effectColor = OverlaySkin.ThemeDivider(theme);
@@ -896,14 +892,16 @@ namespace CrazyChat.Overlay
 #endif
     }
 
-    /// <summary>Drag the check-in knob across the track; click/tap alone never completes.</summary>
     sealed class CheckinSlideDrag : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler,
-        IPointerDownHandler, IPointerUpHandler
+        IPointerDownHandler, IPointerUpHandler, IInitializePotentialDragHandler
     {
         const float MoveThresholdPx = 10f;
         OverlayTodoUi _owner;
         RectTransform _track;
         Vector2 _pressScreen;
+        float _pressLocalX;
+        float _pressSlide;
+        bool _active;
 
         public void Bind(OverlayTodoUi owner, RectTransform track)
         {
@@ -913,30 +911,49 @@ namespace CrazyChat.Overlay
 
         public void OnPointerDown(PointerEventData eventData)
         {
-            if (_owner == null || !_owner.CanDragCheckin() || eventData == null) return;
+            if (_owner == null || !_owner.CanDragCheckin() || eventData == null ||
+                eventData.button != PointerEventData.InputButton.Left) return;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    _track, eventData.position, eventData.pressEventCamera, out var local)) return;
+            _active = true;
             _pressScreen = eventData.position;
+            _pressLocalX = local.x;
+            _pressSlide = _owner.CheckinSlide;
             _owner.BeginCheckinDrag();
             // Do not jump the knob to the click point — wait for a real drag.
         }
 
-        public void OnPointerUp(PointerEventData eventData) => _owner?.EndCheckinDrag();
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            if (!_active || eventData.button != PointerEventData.InputButton.Left) return;
+            OnDrag(eventData);
+            _active = false;
+            _owner.EndCheckinDrag();
+        }
+
+        public void OnInitializePotentialDrag(PointerEventData eventData) => eventData.useDragThreshold = false;
 
         public void OnBeginDrag(PointerEventData eventData)
         {
-            if (_owner == null || !_owner.CanDragCheckin() || eventData == null) return;
-            _pressScreen = eventData.position;
-            _owner.BeginCheckinDrag();
+            // PointerDown already captured the starting position; keep it throughout the gesture.
         }
 
         public void OnDrag(PointerEventData eventData)
         {
-            if (_owner == null || eventData == null) return;
-            if ((eventData.position - _pressScreen).sqrMagnitude >= MoveThresholdPx * MoveThresholdPx)
+            if (!_active || _owner == null || eventData == null) return;
+            if (Mathf.Abs(eventData.position.x - _pressScreen.x) >= MoveThresholdPx)
                 _owner.MarkCheckinDragMoved();
             Apply(eventData);
         }
 
-        public void OnEndDrag(PointerEventData eventData) => _owner?.EndCheckinDrag();
+        public void OnEndDrag(PointerEventData eventData) => OnPointerUp(eventData);
+
+        void OnDisable()
+        {
+            if (!_active) return;
+            _active = false;
+            _owner?.EndCheckinDrag();
+        }
 
         void Apply(PointerEventData eventData)
         {
@@ -944,9 +961,10 @@ namespace CrazyChat.Overlay
             if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
                     _track, eventData.position, eventData.pressEventCamera, out var local))
                 return;
-            var half = _track.rect.width * 0.5f;
-            if (half <= 0.01f) return;
-            _owner.DragCheckinTo(Mathf.InverseLerp(-half, half, local.x));
+            // Match the knob's actual travel: the track width minus the knob itself.
+            var travel = _track.rect.width - OverlayTodoUi.CheckinKnob;
+            if (travel <= 0.01f) return;
+            _owner.DragCheckinTo(_pressSlide + (local.x - _pressLocalX) / travel);
         }
     }
 }
