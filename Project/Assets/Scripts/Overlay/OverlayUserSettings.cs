@@ -23,6 +23,7 @@ namespace CrazyChat.Overlay
         public bool AutoStart { get; private set; }
         public bool ShowInputIcons { get; private set; }
         public bool TestMode { get; private set; }
+        public bool ShowCheckin { get; private set; } = true;
         public int SettingsTheme { get; private set; } = MinSettingsTheme;
         public float ThemeHue { get; private set; } = DefaultThemeHue;
         public float ThemeIntensity { get; private set; } = DefaultThemeIntensity;
@@ -145,6 +146,8 @@ namespace CrazyChat.Overlay
                 AutoStart = data.autoStart;
                 ShowInputIcons = data.showInputIcons;
                 TestMode = data.testMode;
+                // Missing field in old prefs → default true (JsonUtility bool defaults false).
+                ShowCheckin = !HasPrefsKey(json, "showCheckin") || data.showCheckin;
                 SettingsTheme = data.settingsTheme == MaxPresetTheme
                     ? MaxPresetTheme
                     : MinSettingsTheme;
@@ -185,6 +188,7 @@ namespace CrazyChat.Overlay
                 autoStart = AutoStart,
                 showInputIcons = ShowInputIcons,
                 testMode = TestMode,
+                showCheckin = ShowCheckin,
                 settingsTheme = SettingsTheme,
                 themeHue = ThemeHue,
                 themeIntensity = ThemeIntensity,
@@ -215,6 +219,7 @@ namespace CrazyChat.Overlay
         public void SetShowInputIcons(bool value) => ShowInputIcons = value;
 
         public void SetTestMode(bool value) => TestMode = value;
+        public void SetShowCheckin(bool value) => ShowCheckin = value;
 
         public void SetTargetDisplayIndex(int value) => TargetDisplayIndex = Mathf.Max(0, value);
 
@@ -306,6 +311,12 @@ namespace CrazyChat.Overlay
             }
         }
 
+        static bool HasPrefsKey(string json, string key)
+        {
+            if (string.IsNullOrEmpty(json) || string.IsNullOrEmpty(key)) return false;
+            return json.IndexOf("\"" + key + "\"", System.StringComparison.Ordinal) >= 0;
+        }
+
         [Serializable]
         class PrefsFile
         {
@@ -316,6 +327,7 @@ namespace CrazyChat.Overlay
             public bool autoStart;
             public bool showInputIcons;
             public bool testMode;
+            public bool showCheckin = true;
             public int settingsTheme = MinSettingsTheme;
             public float themeHue = DefaultThemeHue;
             public float themeIntensity = DefaultThemeIntensity;

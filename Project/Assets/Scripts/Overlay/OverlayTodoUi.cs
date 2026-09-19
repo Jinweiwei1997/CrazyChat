@@ -411,8 +411,10 @@ namespace CrazyChat.Overlay
 
         internal bool CanDragCheckin()
         {
-            return _view != null && _view.Settings != null &&
-                   !_view.Settings.Checkin.IsComplete(DateTime.Now) && !IsEditingCheckin;
+            if (_view == null || _view.Settings == null || !_view.Settings.ShowCheckin || IsEditingCheckin)
+                return false;
+            if (_view.Settings.TestMode) return true;
+            return !_view.Settings.Checkin.IsComplete(DateTime.Now);
         }
 
         internal void BeginCheckinDrag()
@@ -434,12 +436,9 @@ namespace CrazyChat.Overlay
             if (_checkSlide >= 0.9f)
             {
                 _checkSlide = 1f;
-                _view.Settings.CompleteTodo(_view.Settings.Checkin);
+                if (!_view.Settings.TestMode)
+                    _view.Settings.CompleteTodo(_view.Settings.Checkin);
                 StartCoroutine(PlayCheckinFx());
-            }
-            else
-            {
-                // Snap back — click alone never completes.
             }
         }
 
@@ -514,8 +513,9 @@ namespace CrazyChat.Overlay
         {
             if (_checkBar == null) return;
             var chip = _view.LocalChip;
-            _checkBar.gameObject.SetActive(chip != null);
-            if (chip == null)
+            var show = chip != null && _view.Settings != null && _view.Settings.ShowCheckin;
+            _checkBar.gameObject.SetActive(show);
+            if (!show)
             {
                 CancelCheckinEdit();
                 if (_checkHintRoot != null) _checkHintRoot.gameObject.SetActive(false);
@@ -541,10 +541,11 @@ namespace CrazyChat.Overlay
             _checkBar.anchoredPosition = pos;
             _checkBar.localScale = Vector3.one * scale;
 
-            var done = _view.Settings.Checkin.IsComplete(DateTime.Now);
+            var done = !_view.Settings.TestMode && _view.Settings.Checkin.IsComplete(DateTime.Now);
             if (!_checkDragging)
             {
                 var target = done ? 1f : 0f;
+                // Test mode: after a successful slide, ease back so it can be tried again.
                 _checkSlide = Mathf.MoveTowards(_checkSlide, target, Time.unscaledDeltaTime / 0.16f);
             }
 

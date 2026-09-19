@@ -33,6 +33,7 @@ namespace CrazyChat.Overlay
         [SerializeField] Text _scaleText;
         [SerializeField] Text _topmostText;
         [SerializeField] Text _testModeText;
+        [SerializeField] Text _showCheckinText;
         [SerializeField] Text _flipText;
         [SerializeField] Text _autoStartText;
         [SerializeField] Text _inputIconsText;
@@ -66,7 +67,16 @@ namespace CrazyChat.Overlay
         public void BindTodos(OverlayTodoUi todos)
         {
             _todosUi = todos;
-            todos.BindSettings(FindNode(_pagesRoot, "TodoPage"));
+            // Settings no longer hosts a Todo page; hide leftover prefab nodes if present.
+            HideTodoSettingsUi();
+        }
+
+        void HideTodoSettingsUi()
+        {
+            var tab = _tabBar != null ? _tabBar.Find("TodoTab") : null;
+            if (tab != null) tab.gameObject.SetActive(false);
+            var page = _pagesRoot != null ? _pagesRoot.Find("TodoPage") : null;
+            if (page != null) page.gameObject.SetActive(false);
         }
 
         public static OverlaySettingsUi Create(Transform chrome, Transform modal, FriendOverlayView view)
@@ -101,6 +111,8 @@ namespace CrazyChat.Overlay
             ui.Bind();
             ui._cardRt.localScale = new Vector3(CardVisualScale, CardVisualScale, 1f);
             ui.RestoreTextTabs();
+            ui.HideTodoSettingsUi();
+            ui.EnsureShowCheckinRow();
             ui.ApplyTypography();
             ui.ApplyIcons();
             ui.ApplyTheme();
@@ -230,6 +242,7 @@ namespace CrazyChat.Overlay
                 _view.ApplyUserSettings();
                 RefreshLabels();
             });
+            BindShowCheckinToggle();
             BindClick(FindNode(_cardRt, "Pages/GamePage/FlipHorizontalRow/Toggle"), () =>
             {
                 _view.Settings.SetFlipHorizontal(!_view.Settings.FlipHorizontal);
@@ -542,6 +555,7 @@ namespace CrazyChat.Overlay
             var gamePage = CreatePage(_pagesRoot, "GamePage");
             _scaleText = AddScaleRow(gamePage);
             _testModeText = AddToggleRow(gamePage, "TestModeRow", "测试模式");
+            _showCheckinText = AddToggleRow(gamePage, "ShowCheckinRow", "显示打卡");
             _flipText = AddToggleRow(gamePage, "FlipHorizontalRow", "水平翻转");
             _inputIconsText = AddToggleRow(gamePage, "InputIconsRow", "按键图标");
             AddActionRow(gamePage, "ResetLayoutRow", "复位头像位置");
@@ -570,9 +584,45 @@ namespace CrazyChat.Overlay
             _displayDropdown = AddDisplayDropdownRow(systemPage);
             AddActionRow(systemPage, "ReloadConfigRow", "刷新配置");
             AddActionRow(systemPage, "QuitGameRow", "退出游戏", danger: true);
-#if UNITY_EDITOR
-            EditorAddTodoPage();
-#endif
+        }
+
+        void EnsureShowCheckinRow()
+        {
+            var gamePage = FindNode(_pagesRoot, "GamePage");
+            if (gamePage == null) return;
+            var existing = FindNode(_cardRt, "Pages/GamePage/ShowCheckinRow");
+            if (existing != null)
+            {
+                _showCheckinText = existing.Find("Toggle")?.GetComponentInChildren<Text>(true);
+                if (_showCheckinText == null)
+                    _showCheckinText = existing.GetComponentInChildren<Text>(true);
+                return;
+            }
+
+            // Prefab may predate this row — append on Game page after TestMode when possible.
+            var test = gamePage.Find("TestModeRow");
+            _showCheckinText = AddToggleRow(gamePage, "ShowCheckinRow", "显示打卡");
+            if (test != null && _showCheckinText != null)
+            {
+                var toggle = _showCheckinText.transform.parent;
+                var row = toggle != null ? toggle.parent : null;
+                if (row != null && row.parent == gamePage)
+                    row.SetSiblingIndex(test.GetSiblingIndex() + 1);
+            }
+            BindShowCheckinToggle();
+            ApplyTheme();
+        }
+
+        void BindShowCheckinToggle()
+        {
+            var toggle = FindNode(_cardRt, "Pages/GamePage/ShowCheckinRow/Toggle");
+            if (toggle == null) return;
+            BindClick(toggle, () =>
+            {
+                _view.Settings.SetShowCheckin(!_view.Settings.ShowCheckin);
+                _view.ApplyUserSettings();
+                RefreshLabels();
+            });
         }
 
         void BuildThemeSelector(Transform displayPage)
@@ -1448,6 +1498,7 @@ namespace CrazyChat.Overlay
 
             SetToggle(_topmostText, settings.AlwaysOnTop);
             SetToggle(_testModeText, settings.TestMode);
+            SetToggle(_showCheckinText, settings.ShowCheckin);
             SetToggle(_flipText, settings.FlipHorizontal);
             SetToggle(_autoStartText, settings.AutoStart);
             SetToggle(_inputIconsText, settings.ShowInputIcons);
