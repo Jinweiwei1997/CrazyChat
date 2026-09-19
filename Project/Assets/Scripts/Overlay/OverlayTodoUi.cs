@@ -46,6 +46,7 @@ namespace CrazyChat.Overlay
         float _checkSlide;
         bool _checkHover;
         bool _checkDragging;
+        bool _checkDragMoved;
         float _checkPunch;
         RectTransform _checkFxRoot;
         public bool IsEditingCheckin => _checkEditor != null && _checkEditor.gameObject.activeSelf;
@@ -420,8 +421,11 @@ namespace CrazyChat.Overlay
         internal void BeginCheckinDrag()
         {
             _checkDragging = true;
+            _checkDragMoved = false;
             _view?.ClaimInteractionFocus();
         }
+
+        internal void MarkCheckinDragMoved() => _checkDragMoved = true;
 
         internal void DragCheckinTo(float normalized)
         {
@@ -433,13 +437,15 @@ namespace CrazyChat.Overlay
         {
             if (!_checkDragging) return;
             _checkDragging = false;
-            if (_checkSlide >= 0.9f)
+            // Must actually drag — click / tap on the track never completes.
+            if (_checkDragMoved && _checkSlide >= 0.9f)
             {
                 _checkSlide = 1f;
                 if (!_view.Settings.TestMode)
                     _view.Settings.CompleteTodo(_view.Settings.Checkin);
                 StartCoroutine(PlayCheckinFx());
             }
+            _checkDragMoved = false;
         }
 
         IEnumerator PlayCheckinFx()
@@ -890,12 +896,14 @@ namespace CrazyChat.Overlay
 #endif
     }
 
-    /// <summary>Drag the check-in knob across the track; click alone does not complete.</summary>
+    /// <summary>Drag the check-in knob across the track; click/tap alone never completes.</summary>
     sealed class CheckinSlideDrag : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler,
         IPointerDownHandler, IPointerUpHandler
     {
+        const float MoveThresholdPx = 10f;
         OverlayTodoUi _owner;
         RectTransform _track;
+        Vector2 _pressScreen;
 
         public void Bind(OverlayTodoUi owner, RectTransform track)
         {
@@ -906,19 +914,27 @@ namespace CrazyChat.Overlay
         public void OnPointerDown(PointerEventData eventData)
         {
             if (_owner == null || !_owner.CanDragCheckin() || eventData == null) return;
+            _pressScreen = eventData.position;
             _owner.BeginCheckinDrag();
-            Apply(eventData);
+            // Do not jump the knob to the click point — wait for a real drag.
         }
 
         public void OnPointerUp(PointerEventData eventData) => _owner?.EndCheckinDrag();
 
         public void OnBeginDrag(PointerEventData eventData)
         {
-            if (_owner == null || !_owner.CanDragCheckin()) return;
+            if (_owner == null || !_owner.CanDragCheckin() || eventData == null) return;
+            _pressScreen = eventData.position;
             _owner.BeginCheckinDrag();
         }
 
-        public void OnDrag(PointerEventData eventData) => Apply(eventData);
+        public void OnDrag(PointerEventData eventData)
+        {
+            if (_owner == null || eventData == null) return;
+            if ((eventData.position - _pressScreen).sqrMagnitude >= MoveThresholdPx * MoveThresholdPx)
+                _owner.MarkCheckinDragMoved();
+            Apply(eventData);
+        }
 
         public void OnEndDrag(PointerEventData eventData) => _owner?.EndCheckinDrag();
 
