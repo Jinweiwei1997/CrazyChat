@@ -93,6 +93,8 @@ namespace CrazyChat.Overlay
 
             _bag = OverlayBagUi.Create(MakeLayer(stealthRoot.transform, "BagLayer"), this);
 
+            // Anything that must read as being behind the avatars (fishing rod, water).
+            var underFriendLayer = MakeLayer(stealthRoot.transform, "UnderFriendLayer");
             _layer = MakeLayer(stealthRoot.transform, "FriendLayer");
 
             var hintGo = new GameObject("Hint", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
@@ -137,7 +139,7 @@ namespace CrazyChat.Overlay
             _interact.Received += OnInteractReceived;
             _interactFx = OverlayInteractFx.Create(fxLayer);
             _interactUi = OverlayInteractUi.Create(_chromeLayer, _windowLayer, this, _interact, _interactFx);
-            _fishing = OverlayFishingController.Create(this, _interact, _chromeLayer, _windowLayer, fxLayer);
+            _fishing = OverlayFishingController.Create(this, _interact, _chromeLayer, _windowLayer, underFriendLayer);
             _interactUi.BindFishing(_fishing);
             _inputPop = OverlayInputPopFx.Create(_chromeLayer, Config);
 
@@ -963,6 +965,7 @@ namespace CrazyChat.Overlay
                 {
                     desktopFriends++;
                     seenDesktop.Add(friend.SteamId);
+                    var wasOnDesk = _chips.ContainsKey(friend.SteamId);
                     var chip = EnsureChip(friend, i);
                     if (_store.TryGetPixel(friend.SteamId, out var pos))
                     {
@@ -971,7 +974,10 @@ namespace CrazyChat.Overlay
 
                     _avatarPresence?.OnDesktopFriendAdded(friend.SteamId);
                     _avatarPresence?.RefreshChip(chip);
-                    _fishing?.OnDesktopFriendAdded(friend.SteamId);
+                    if (!wasOnDesk)
+                    {
+                        _fishing?.OnDesktopFriendAdded(friend.SteamId);
+                    }
                 }
                 else
                 {

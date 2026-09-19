@@ -93,7 +93,7 @@ public static XxxUi Create(Transform parent, FriendOverlayView view)
 
 Canvas 已有层，按类型挂，不要新建 Canvas：
 
-`BagLayer` → 麻袋；`FriendLayer` → 头像；`FxLayer` → 飞行特效；`ChromeLayer` → 小按钮/图标；`WindowLayer` → 聊天卡/菜单；`ModalLayer` → 遮罩面板。
+`BagLayer` → 麻袋；`UnderFriendLayer` → 头像背后的道具（鱼竿/水面）；`FriendLayer` → 头像；`FxLayer` → 飞行特效；`ChromeLayer` → 小按钮/图标；`WindowLayer` → 聊天卡/菜单；`ModalLayer` → 遮罩面板。
 
 ---
 

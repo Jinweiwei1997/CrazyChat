@@ -17,7 +17,7 @@ namespace CrazyChat.Overlay
         const string CloseIconResource = "Overlay/UI/codicon_close";
         const string CheckinSuccessSheetResource = "Overlay/UI/checkin_success_sheet";
         // Shared so the drag mapping matches the knob's on-screen travel.
-        internal const float CheckinKnob = 28.8f;
+        internal const float CheckinKnob = 25.9f;
         const int CheckinSuccessColumns = 10;
         const int CheckinSuccessRows = 9;
         const int CheckinSuccessFrames = 90;

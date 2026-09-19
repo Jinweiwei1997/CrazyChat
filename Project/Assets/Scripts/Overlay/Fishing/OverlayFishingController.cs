@@ -7,13 +7,15 @@ using UnityEngine;
 namespace CrazyChat.Overlay.Fishing
 {
     /// <summary>
-    /// Local fishing state: enter/exit, bite schedule, catch flows, and channel-2 sync.
+    /// Local fishing: enter/exit/catch are pushed; missed state is pulled with fish|q.
     /// </summary>
     public sealed class OverlayFishingController : MonoBehaviour
     {
+        // Push: e enter / x exit / c catch. Pull: q ask, reply is e or x.
         public const string MsgEnter = "fish|e";
         public const string MsgCatch = "fish|c";
         public const string MsgExit = "fish|x";
+        public const string MsgQuery = "fish|q";
 
         FriendOverlayView _view;
         OverlayInteractService _service;
@@ -29,6 +31,7 @@ namespace CrazyChat.Overlay.Fishing
         Coroutine _lowCatchRoutine;
         Coroutine _rewardRoutine;
         readonly HashSet<ulong> _remoteFishing = new HashSet<ulong>();
+        readonly HashSet<ulong> _asked = new HashSet<ulong>();
 
         public bool IsFishing => _fishing;
 
@@ -37,14 +40,14 @@ namespace CrazyChat.Overlay.Fishing
             OverlayInteractService service,
             Transform chrome,
             Transform windowLayer,
-            Transform fxLayer)
+            Transform underFriendLayer)
         {
             var go = new GameObject("FishingController");
             go.transform.SetParent(view.transform, false);
             var ctrl = go.AddComponent<OverlayFishingController>();
             ctrl._view = view;
             ctrl._service = service;
-            ctrl._visuals = OverlayFishingVisuals.Create(chrome, fxLayer, view);
+            ctrl._visuals = OverlayFishingVisuals.Create(chrome, underFriendLayer, view);
             ctrl._qte = OverlayFishingQte.Create(windowLayer, ctrl);
             ctrl._qte.BindView(view);
             return ctrl;
@@ -81,26 +84,26 @@ namespace CrazyChat.Overlay.Fishing
         {
             if (fromId == 0 || string.IsNullOrEmpty(msg)) return;
 
+            if (msg == MsgQuery)
+            {
+                ReplyState(fromId);
+                return;
+            }
+
             if (msg == MsgEnter)
             {
-                _remoteFishing.Add(fromId);
-                if (_view.TryGetChip(fromId, out var chip) && chip != null && !chip.IsLocal)
-                    _visuals.SetRemoteFishing(fromId, true);
+                ApplyRemoteState(fromId, true);
                 return;
             }
 
             if (msg == MsgExit)
             {
-                _remoteFishing.Remove(fromId);
-                _visuals.SetRemoteFishing(fromId, false);
+                ApplyRemoteState(fromId, false);
                 return;
             }
 
-            if (msg == MsgCatch)
-            {
-                if (_view.TryGetChip(fromId, out var chip) && chip != null && !chip.IsLocal)
-                    _visuals.PlayRemoteCatch(fromId);
-            }
+            if (msg == MsgCatch && OnDesk(fromId))
+                _visuals.PlayRemoteCatch(fromId);
         }
 
         public void NotifyChipOnDesk(ulong friendId, bool onDesk)
@@ -115,19 +118,24 @@ namespace CrazyChat.Overlay.Fishing
                 _visuals.SetRemoteFishing(friendId, true);
         }
 
-        /// <summary>Friend landed on desk: show cached fishing flag and resend our enter if needed.</summary>
+        /// <summary>Friend landed on desk: show cached state and ask once if we have not yet.</summary>
         public void OnDesktopFriendAdded(ulong friendId)
         {
             if (friendId == 0) return;
             NotifyChipOnDesk(friendId, true);
-            if (_fishing && _service != null && !PlayingFriendsService.IsTestFriend(friendId))
-                _service.Send(friendId, MsgEnter);
+            Ask(friendId);
         }
 
-        /// <summary>好友列表变化时补发进入状态，让刚开游戏且把你放桌上的人立刻看到鱼竿。</summary>
+        /// <summary>启动或好友列表变化：向尚未问过的在玩好友问一次当前状态。</summary>
         public void OnPlayingFriendsChanged()
         {
-            if (_fishing) Broadcast(MsgEnter);
+            var live = new HashSet<ulong>();
+            _view.VisitPlayingFriends(id =>
+            {
+                live.Add(id);
+                Ask(id);
+            });
+            PruneGone(live);
         }
 
         public void OnAdvancedBubbleClicked()
@@ -343,6 +351,60 @@ namespace CrazyChat.Overlay.Fishing
         {
             if (_service == null || _view == null) return;
             _view.VisitPlayingFriends(id => _service.Send(id, msg));
+        }
+
+        void Ask(ulong friendId)
+        {
+            if (_service == null || friendId == 0 || PlayingFriendsService.IsTestFriend(friendId))
+                return;
+            if (!_asked.Add(friendId)) return;
+            _service.Send(friendId, MsgQuery);
+        }
+
+        void ReplyState(ulong friendId)
+        {
+            if (_service == null || PlayingFriendsService.IsTestFriend(friendId)) return;
+            _service.Send(friendId, _fishing ? MsgEnter : MsgExit);
+        }
+
+        void ApplyRemoteState(ulong friendId, bool fishing)
+        {
+            if (fishing) _remoteFishing.Add(friendId);
+            else _remoteFishing.Remove(friendId);
+            NotifyChipOnDesk(friendId, fishing && OnDesk(friendId));
+        }
+
+        bool OnDesk(ulong friendId)
+        {
+            return _view != null &&
+                   _view.TryGetChip(friendId, out var chip) &&
+                   chip != null &&
+                   !chip.IsLocal;
+        }
+
+        void PruneGone(HashSet<ulong> live)
+        {
+            if (_asked.Count > 0)
+            {
+                var staleAsk = new List<ulong>();
+                foreach (var id in _asked)
+                {
+                    if (!live.Contains(id)) staleAsk.Add(id);
+                }
+
+                for (var i = 0; i < staleAsk.Count; i++)
+                    _asked.Remove(staleAsk[i]);
+            }
+
+            if (_remoteFishing.Count == 0) return;
+            var gone = new List<ulong>();
+            foreach (var id in _remoteFishing)
+            {
+                if (!live.Contains(id)) gone.Add(id);
+            }
+
+            for (var i = 0; i < gone.Count; i++)
+                ApplyRemoteState(gone[i], false);
         }
     }
 

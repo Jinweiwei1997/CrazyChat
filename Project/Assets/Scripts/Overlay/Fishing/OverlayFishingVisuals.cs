@@ -9,8 +9,16 @@ namespace CrazyChat.Overlay.Fishing
     /// <summary>Rod / water / bubble / catch visuals for local and remote chips.</summary>
     public sealed class OverlayFishingVisuals : MonoBehaviour
     {
+        const float RodSize = 154f;
+        const float RodTilt = -28f;
+        const float RodOffsetX = 70f;
+        // Line tip measured on BambooFishingRod.png, as a fraction of the drawn rect from its center
+        // (y already folded with the 1312x1199 aspect), so the water follows any rod size or tilt.
+        static readonly Vector2 RodLineTip = new Vector2(0.284f, -0.227f);
+
         FriendOverlayView _view;
         Transform _chrome;
+        Transform _under;
         readonly Dictionary<ulong, RodPair> _remote = new Dictionary<ulong, RodPair>();
         RodPair _local;
         RectTransform _bubble;
@@ -28,13 +36,15 @@ namespace CrazyChat.Overlay.Fishing
             public Image water;
         }
 
-        public static OverlayFishingVisuals Create(Transform chrome, Transform fx, FriendOverlayView view)
+        /// <summary>Rods live under the avatars; bubble, QTE prompt and catch UI stay on chrome.</summary>
+        public static OverlayFishingVisuals Create(Transform chrome, Transform under, FriendOverlayView view)
         {
             var go = new GameObject("FishingVisuals", typeof(RectTransform));
             go.transform.SetParent(chrome, false);
             var v = go.AddComponent<OverlayFishingVisuals>();
             v._view = view;
             v._chrome = chrome;
+            v._under = under != null ? under : chrome;
             v.BuildLocalUi();
             return v;
         }
@@ -159,14 +169,14 @@ namespace CrazyChat.Overlay.Fishing
         void EnsureLocal()
         {
             if (_local.root != null) return;
-            _local = BuildRodPair("LocalRod", _chrome);
+            _local = BuildRodPair("LocalRod", _under);
             _local.root.gameObject.SetActive(false);
         }
 
         RodPair EnsureRemote(ulong id)
         {
             if (_remote.TryGetValue(id, out var existing) && existing.root != null) return existing;
-            var pair = BuildRodPair("RemoteRod_" + id, _chrome);
+            var pair = BuildRodPair("RemoteRod_" + id, _under);
             _remote[id] = pair;
             return pair;
         }
@@ -179,17 +189,22 @@ namespace CrazyChat.Overlay.Fishing
             root.pivot = new Vector2(0.5f, 0.5f);
             root.sizeDelta = Vector2.zero;
 
+            // Drop the rod so the line tip — and the water with it — lands on the avatar's bottom edge.
+            var lineTip = (Vector2)(Quaternion.Euler(0f, 0f, RodTilt) * (RodLineTip * RodSize));
+            var chipHalf = (_view != null && _view.Config != null ? _view.Config.chipSize : 128f) * 0.5f;
+            var rodPos = new Vector2(RodOffsetX, -chipHalf - lineTip.y);
+
             var water = CreateImage("Water", root, new Color(0.35f, 0.7f, 1f, 0.35f), OverlaySprites.Circle);
             water.raycastTarget = false;
             water.rectTransform.sizeDelta = new Vector2(72f, 28f);
-            water.rectTransform.anchoredPosition = new Vector2(0f, -58f);
+            water.rectTransform.anchoredPosition = rodPos + lineTip;
 
             var rod = CreateImage("Rod", root, Color.white, LoadRodSprite());
             rod.raycastTarget = false;
             rod.preserveAspect = true;
-            rod.rectTransform.sizeDelta = new Vector2(96f, 96f);
-            rod.rectTransform.anchoredPosition = new Vector2(52f, 8f);
-            rod.rectTransform.localEulerAngles = new Vector3(0f, 0f, -28f);
+            rod.rectTransform.sizeDelta = new Vector2(RodSize, RodSize);
+            rod.rectTransform.anchoredPosition = rodPos;
+            rod.rectTransform.localEulerAngles = new Vector3(0f, 0f, RodTilt);
 
             return new RodPair { root = root, rod = rod, water = water };
         }
