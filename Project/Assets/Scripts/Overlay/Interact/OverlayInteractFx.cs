@@ -7,14 +7,27 @@ namespace CrazyChat.Overlay.Interact
     public sealed class OverlayInteractFx : MonoBehaviour
     {
         RectTransform _layer;
+        OverlayConfig _config;
+        OverlayUserSettings _settings;
         Sprite _tomato;
         readonly List<Flight> _flights = new List<Flight>();
+        readonly List<FireworkParticle> _fireworkParticles = new List<FireworkParticle>();
 
-        public static OverlayInteractFx Create(Transform canvas)
+        static readonly Color[] FireworkColors =
+        {
+            new Color(1f, 0.78f, 0.18f),
+            new Color(1f, 0.28f, 0.48f),
+            new Color(0.25f, 0.82f, 1f),
+            new Color(0.45f, 1f, 0.52f)
+        };
+
+        public static OverlayInteractFx Create(Transform canvas, OverlayConfig config, OverlayUserSettings settings)
         {
             var root = new GameObject("InteractFx", typeof(RectTransform));
             root.transform.SetParent(canvas, false);
             var fx = root.AddComponent<OverlayInteractFx>();
+            fx._config = config;
+            fx._settings = settings;
             fx._layer = (RectTransform)root.transform;
             Stretch(fx._layer);
             return fx;
@@ -48,6 +61,67 @@ namespace CrazyChat.Overlay.Interact
             });
         }
 
+        /// <summary>
+        /// Temporary procedural visual. Round sparks fly a tilted 3D path, then fall.
+        /// </summary>
+        public void PlayFireworks(Vector2 center)
+        {
+            const int particleCount = 56;
+            const float goldenAngle = 2.3999632f;
+            var chipSize = _config != null ? Mathf.Max(32f, _config.chipSize) : 128f;
+            var sizeScale = _settings != null ? Mathf.Max(0.1f, _settings.FireworkScale) : 1f;
+            var maxRadius = chipSize * 2.4f * sizeScale;
+            var start = Time.unscaledTime;
+            var colorOffset = Random.Range(0, FireworkColors.Length);
+            var tilt = Quaternion.Euler(-26f, Random.Range(0f, 360f), 0f);
+
+            var burst = new GameObject("FireworkBurst", typeof(RectTransform));
+            burst.transform.SetParent(_layer, false);
+            var burstRt = (RectTransform)burst.transform;
+            burstRt.anchorMin = burstRt.anchorMax = Vector2.zero;
+            burstRt.pivot = new Vector2(0.5f, 0.5f);
+            burstRt.anchoredPosition = Vector2.zero;
+            burstRt.sizeDelta = Vector2.zero;
+
+            for (var i = 0; i < particleCount; i++)
+            {
+                var y = 1f - (i + 0.5f) / particleCount * 2f;
+                var ring = Mathf.Sqrt(Mathf.Max(0f, 1f - y * y));
+                var theta = goldenAngle * i + Random.Range(-0.08f, 0.08f);
+                var direction = tilt * new Vector3(Mathf.Cos(theta) * ring, y, Mathf.Sin(theta) * ring);
+
+                var go = new GameObject("FireworkParticle", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                go.transform.SetParent(burstRt, false);
+
+                var image = go.GetComponent<Image>();
+                image.sprite = OverlaySprites.Circle;
+                image.raycastTarget = false;
+                var color = FireworkColors[(i + colorOffset) % FireworkColors.Length];
+                image.color = color;
+
+                var rt = (RectTransform)go.transform;
+                rt.anchorMin = rt.anchorMax = Vector2.zero;
+                rt.pivot = new Vector2(0.5f, 0.5f);
+                var size = chipSize * Random.Range(0.08f, 0.13f) * sizeScale;
+                rt.sizeDelta = new Vector2(size, size);
+                rt.anchoredPosition = center;
+                rt.SetSiblingIndex(Mathf.RoundToInt((direction.z + 1f) * 40f));
+
+                _fireworkParticles.Add(new FireworkParticle
+                {
+                    rect = rt,
+                    image = image,
+                    center = center,
+                    direction = direction,
+                    distance = maxRadius * Random.Range(0.72f, 1f),
+                    fall = maxRadius * 0.38f,
+                    duration = Random.Range(0.95f, 1.25f),
+                    start = start + Random.Range(0f, 0.05f),
+                    color = color
+                });
+            }
+        }
+
         void Update()
         {
             for (var i = _flights.Count - 1; i >= 0; i--)
@@ -72,6 +146,48 @@ namespace CrazyChat.Overlay.Interact
                     {
                         Destroy(flight.rect.gameObject);
                         _flights.RemoveAt(i);
+                    }
+                }
+            }
+
+            for (var i = _fireworkParticles.Count - 1; i >= 0; i--)
+            {
+                var particle = _fireworkParticles[i];
+                if (particle.rect == null || particle.image == null)
+                {
+                    _fireworkParticles.RemoveAt(i);
+                    continue;
+                }
+
+                var elapsed = Time.unscaledTime - particle.start;
+                if (elapsed < 0f)
+                {
+                    var hidden = particle.color;
+                    hidden.a = 0f;
+                    particle.image.color = hidden;
+                    continue;
+                }
+
+                var t = Mathf.Clamp01(elapsed / particle.duration);
+                var spread = particle.distance * (1f - (1f - t) * (1f - t));
+                var world = particle.direction * spread;
+                world.y -= particle.fall * t * t;
+                var zNorm = Mathf.Clamp(world.z / Mathf.Max(1f, particle.distance), -1f, 1f);
+                var perspective = 1.25f / (1.25f - zNorm * 0.72f);
+                particle.rect.anchoredPosition = particle.center + new Vector2(world.x, world.y) * perspective;
+                var near = (zNorm + 1f) * 0.5f;
+                particle.rect.localScale = Vector3.one * (perspective * Mathf.Lerp(1.2f, 0.28f, t));
+                var color = Color.Lerp(particle.color, Color.white, near * 0.2f);
+                color.a = 1f - t;
+                particle.image.color = color;
+                if (t >= 1f)
+                {
+                    var parent = particle.rect.parent;
+                    Destroy(particle.rect.gameObject);
+                    _fireworkParticles.RemoveAt(i);
+                    if (parent != null && parent.childCount <= 1)
+                    {
+                        Destroy(parent.gameObject);
                     }
                 }
             }
@@ -139,6 +255,19 @@ namespace CrazyChat.Overlay.Interact
             public float duration;
             public float start;
             public float height;
+        }
+
+        struct FireworkParticle
+        {
+            public RectTransform rect;
+            public Image image;
+            public Vector2 center;
+            public Vector3 direction;
+            public float distance;
+            public float fall;
+            public float duration;
+            public float start;
+            public Color color;
         }
     }
 }

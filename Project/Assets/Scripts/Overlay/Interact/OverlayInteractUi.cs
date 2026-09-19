@@ -23,6 +23,9 @@ namespace CrazyChat.Overlay.Interact
             new Vector2(-1f, 0f)
         };
 
+        // Catalog actions fill top, right, left, then bottom so the third interaction owns the left slot.
+        static readonly int[] ActionSlotOrder = { 0, 1, 3, 2 };
+
         FriendOverlayView _view;
         OverlayInteractService _service;
         OverlayInteractFx _fx;
@@ -111,7 +114,16 @@ namespace CrazyChat.Overlay.Interact
             var control = Resources.Load<Sprite>(ControlSpriteResource);
             for (var i = 0; i < SlotCount; i++)
             {
-                _slotActions[i] = i < actions.Count ? actions[i] : null;
+                _slotActions[i] = null;
+            }
+
+            for (var i = 0; i < actions.Count && i < ActionSlotOrder.Length; i++)
+            {
+                _slotActions[ActionSlotOrder[i]] = actions[i];
+            }
+
+            for (var i = 0; i < SlotCount; i++)
+            {
                 var filled = _slotActions[i] != null;
                 ApplySlotVisual(i, filled, filled ? ShortSlotLabel(_slotActions[i].Label) : string.Empty, selected: false, theme, control);
             }

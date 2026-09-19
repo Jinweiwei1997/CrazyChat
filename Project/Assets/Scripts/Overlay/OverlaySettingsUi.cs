@@ -31,6 +31,7 @@ namespace CrazyChat.Overlay
         [SerializeField] RectTransform _tabBar;
         [SerializeField] RectTransform _pagesRoot;
         [SerializeField] Text _scaleText;
+        [SerializeField] Text _fireworkScaleText;
         [SerializeField] Text _topmostText;
         [SerializeField] Text _testModeText;
         [SerializeField] Text _showCheckinText;
@@ -113,6 +114,7 @@ namespace CrazyChat.Overlay
             ui.RestoreTextTabs();
             ui.HideTodoSettingsUi();
             ui.EnsureShowCheckinRow();
+            ui.EnsureFireworkScaleRow();
             ui.ApplyTypography();
             ui.ApplyIcons();
             ui.ApplyTheme();
@@ -236,6 +238,7 @@ namespace CrazyChat.Overlay
                 _view.ApplyUserSettings();
                 RefreshLabels();
             });
+            BindFireworkScaleButtons();
             BindClick(FindNode(_cardRt, "Pages/GamePage/TestModeRow/Toggle"), () =>
             {
                 _view.Settings.SetTestMode(!_view.Settings.TestMode);
@@ -553,7 +556,8 @@ namespace CrazyChat.Overlay
             _pagesRoot.offsetMax = new Vector2(0f, -(HeaderHeight + TabBarHeight));
 
             var gamePage = CreatePage(_pagesRoot, "GamePage");
-            _scaleText = AddScaleRow(gamePage);
+            _scaleText = AddScaleRow(gamePage, "ScaleRow", "放大倍数");
+            _fireworkScaleText = AddScaleRow(gamePage, "FireworkScaleRow", "烟花大小");
             _testModeText = AddToggleRow(gamePage, "TestModeRow", "测试模式");
             _showCheckinText = AddToggleRow(gamePage, "ShowCheckinRow", "显示打卡");
             _flipText = AddToggleRow(gamePage, "FlipHorizontalRow", "水平翻转");
@@ -620,6 +624,49 @@ namespace CrazyChat.Overlay
             BindClick(toggle, () =>
             {
                 _view.Settings.SetShowCheckin(!_view.Settings.ShowCheckin);
+                _view.ApplyUserSettings();
+                RefreshLabels();
+            });
+        }
+
+        void EnsureFireworkScaleRow()
+        {
+            var gamePage = FindNode(_pagesRoot, "GamePage");
+            if (gamePage == null) return;
+            var existing = FindNode(_cardRt, "Pages/GamePage/FireworkScaleRow");
+            if (existing != null)
+            {
+                _fireworkScaleText = existing.Find("Value")?.GetComponent<Text>();
+                BindFireworkScaleButtons();
+                return;
+            }
+
+            var scale = gamePage.Find("ScaleRow");
+            _fireworkScaleText = AddScaleRow(gamePage, "FireworkScaleRow", "烟花大小");
+            if (scale != null && _fireworkScaleText != null)
+            {
+                var row = _fireworkScaleText.transform.parent;
+                if (row != null && row.parent == gamePage)
+                    row.SetSiblingIndex(scale.GetSiblingIndex() + 1);
+            }
+
+            BindFireworkScaleButtons();
+            _themeImages.Clear();
+            _themeLabels.Clear();
+            ApplyTheme();
+        }
+
+        void BindFireworkScaleButtons()
+        {
+            BindClick(FindNode(_cardRt, "Pages/GamePage/FireworkScaleRow/Minus"), () =>
+            {
+                _view.Settings.AddFireworkScale(-0.1f);
+                _view.ApplyUserSettings();
+                RefreshLabels();
+            });
+            BindClick(FindNode(_cardRt, "Pages/GamePage/FireworkScaleRow/Plus"), () =>
+            {
+                _view.Settings.AddFireworkScale(0.1f);
                 _view.ApplyUserSettings();
                 RefreshLabels();
             });
@@ -1209,10 +1256,10 @@ namespace CrazyChat.Overlay
 #endif
         }
 
-        Text AddScaleRow(Transform parent)
+        Text AddScaleRow(Transform parent, string id, string title)
         {
-            var row = CreateRow(parent, "ScaleRow", RowHeight);
-            AddRowTitle(row, "放大倍数", muted: true);
+            var row = CreateRow(parent, id, RowHeight);
+            AddRowTitle(row, title, muted: true);
             AddRowButton(row, "Minus", "-", 24f, 14);
             var value = CreateRowLabel(row, "Value", "1.0x", 48f, 14);
             AddRowButton(row, "Plus", "+", 24f, 14);
@@ -1494,6 +1541,11 @@ namespace CrazyChat.Overlay
             if (_scaleText != null)
             {
                 _scaleText.text = settings.Scale.ToString("0.0") + "x";
+            }
+
+            if (_fireworkScaleText != null)
+            {
+                _fireworkScaleText.text = settings.FireworkScale.ToString("0.0") + "x";
             }
 
             SetToggle(_topmostText, settings.AlwaysOnTop);

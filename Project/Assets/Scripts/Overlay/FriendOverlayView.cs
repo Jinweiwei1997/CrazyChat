@@ -137,7 +137,7 @@ namespace CrazyChat.Overlay
             _chatUi = OverlayChatUi.Create(_windowLayer, this, _chat);
             _interact = gameObject.AddComponent<OverlayInteractService>();
             _interact.Received += OnInteractReceived;
-            _interactFx = OverlayInteractFx.Create(fxLayer);
+            _interactFx = OverlayInteractFx.Create(fxLayer, Config, Settings);
             _interactUi = OverlayInteractUi.Create(_chromeLayer, _windowLayer, this, _interact, _interactFx);
             _fishing = OverlayFishingController.Create(this, _interact, _chromeLayer, _windowLayer, underFriendLayer);
             _interactUi.BindFishing(_fishing);

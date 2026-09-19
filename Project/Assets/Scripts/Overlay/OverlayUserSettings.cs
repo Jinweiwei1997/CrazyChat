@@ -17,6 +17,7 @@ namespace CrazyChat.Overlay
         const float DefaultThemeIntensity = 0.24f;
 
         public float Scale { get; private set; } = 1f;
+        public float FireworkScale { get; private set; } = 1f;
         public bool AlwaysOnTop { get; private set; } = true;
         public bool DisableDrag { get; private set; }
         public bool FlipHorizontal { get; private set; }
@@ -140,6 +141,9 @@ namespace CrazyChat.Overlay
                 }
 
                 Scale = Mathf.Clamp(data.scale, MinScale, MaxScale);
+                FireworkScale = !HasPrefsKey(json, "fireworkScale")
+                    ? 1f
+                    : Mathf.Clamp(data.fireworkScale, MinScale, MaxScale);
                 AlwaysOnTop = data.alwaysOnTop;
                 DisableDrag = data.disableDrag;
                 FlipHorizontal = data.flipHorizontal;
@@ -182,6 +186,7 @@ namespace CrazyChat.Overlay
             var json = JsonUtility.ToJson(new PrefsFile
             {
                 scale = Scale,
+                fireworkScale = FireworkScale,
                 alwaysOnTop = AlwaysOnTop,
                 disableDrag = DisableDrag,
                 flipHorizontal = FlipHorizontal,
@@ -203,6 +208,11 @@ namespace CrazyChat.Overlay
         public void AddScale(float delta)
         {
             Scale = Mathf.Clamp(Mathf.Round((Scale + delta) * 10f) / 10f, MinScale, MaxScale);
+        }
+
+        public void AddFireworkScale(float delta)
+        {
+            FireworkScale = Mathf.Clamp(Mathf.Round((FireworkScale + delta) * 10f) / 10f, MinScale, MaxScale);
         }
 
         public void ResetScale()
@@ -321,6 +331,7 @@ namespace CrazyChat.Overlay
         class PrefsFile
         {
             public float scale = 1f;
+            public float fireworkScale = 1f;
             public bool alwaysOnTop = true;
             public bool disableDrag;
             public bool flipHorizontal;
