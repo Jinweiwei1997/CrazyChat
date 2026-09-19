@@ -74,18 +74,10 @@ namespace CrazyChat.Overlay
             Assert.IsTrue(restored.IsComplete(new DateTime(2026, 1, 4)));
 
             var prefab = Resources.Load<GameObject>("Prefab/UI/SettingsMenu");
-            var page = prefab.transform.Find("SettingsPanel/Background/Pages/TodoPage");
-            Assert.IsNotNull(page);
-            Assert.IsNotNull(page.Find("Add").GetComponent<UnityEngine.UI.Button>());
-            var scroll = page.Find("List").GetComponent<UnityEngine.UI.ScrollRect>();
-            Assert.IsTrue(scroll.vertical && !scroll.horizontal);
-            Assert.IsNotNull(scroll.content);
-            var row = page.Find("RowTemplate");
-            Assert.IsFalse(row.gameObject.activeSelf);
-            Assert.IsNotNull(row.GetComponentInChildren<UnityEngine.UI.InputField>(true));
-            Assert.AreEqual(3, row.GetComponentInChildren<UnityEngine.UI.Dropdown>(true).options.Count);
-            Assert.IsNotNull(row.Find("Delete").GetComponent<UnityEngine.UI.Button>());
-            Debug.Log("[Overlay] Todo checks passed: empty/blank tasks, completion/undo/recompletion, once/daily/weekly boundaries, serialization and settings prefab.");
+            Assert.IsNotNull(prefab);
+            Assert.IsNotNull(prefab.transform.Find("SettingsPanel/Background/Pages/GamePage"));
+            // Todo settings page is retired; Game page hosts ShowCheckin instead.
+            Debug.Log("[Overlay] Todo checks passed: empty/blank tasks, completion/undo/recompletion, once/daily/weekly boundaries, serialization.");
         }
     }
 }
