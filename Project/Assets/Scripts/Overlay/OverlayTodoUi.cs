@@ -34,9 +34,18 @@ namespace CrazyChat.Overlay
         float _nextRotate;
         int _previewIndex;
         FriendAvatarChip _previewChip;
+        RectTransform _checkBar;
+        Image _checkTrack;
+        Image _checkKnob;
+        Text _checkHint;
+        RectTransform _checkEditor;
+        InputField _checkInput;
+        float _checkSlide;
+        bool _checkHover;
+        public bool IsEditingCheckin => _checkEditor != null && _checkEditor.gameObject.activeSelf;
         public bool IsOpen => _card != null && _card.gameObject.activeSelf;
 
-        public static OverlayTodoUi Create(Transform parent, FriendOverlayView view)
+        public static OverlayTodoUi Create(Transform parent, Transform chrome, FriendOverlayView view)
         {
             var root = new GameObject("TodoUi", typeof(RectTransform));
             root.transform.SetParent(parent, false);
@@ -44,6 +53,7 @@ namespace CrazyChat.Overlay
             var ui = root.AddComponent<OverlayTodoUi>();
             ui._view = view;
             ui.Build();
+            ui.BuildCheckin(chrome);
             view.Settings.TodosChanged += ui.Refresh;
             ui.Refresh();
             ui.Hide();
@@ -52,6 +62,7 @@ namespace CrazyChat.Overlay
 
         void OnDestroy()
         {
+            if (_checkBar != null) Destroy(_checkBar.gameObject);
             if (_view != null && _view.Settings != null)
                 _view.Settings.TodosChanged -= Refresh;
         }
@@ -92,6 +103,7 @@ namespace CrazyChat.Overlay
 
         public void Hide()
         {
+            CancelCheckinEdit();
             _card.gameObject.SetActive(false);
             _view.LocalChip?.SetTodoExpanded(false);
         }
@@ -140,10 +152,10 @@ namespace CrazyChat.Overlay
 
         void Refresh()
         {
-            _date = DateTime.Now.Date;
+            _date = DateTime.Now;
             _visible.Clear();
             foreach (var item in _view.Settings.Todos)
-                if (!string.IsNullOrWhiteSpace(item.text)) _visible.Add(item);
+                if (item.IsCheckin || !string.IsNullOrWhiteSpace(item.text)) _visible.Add(item);
             RemoveStale(_rows, id => _visible.Exists(item => item.id == id));
             var y = 0f;
             foreach (var item in _visible)
@@ -163,7 +175,7 @@ namespace CrazyChat.Overlay
                     _rows.Add(item.id, button);
                 }
                 var text = button.GetComponentInChildren<Text>();
-                text.text = item.text;
+                text.text = item.DisplayText;
                 button.transform.Find("Check").GetComponentInChildren<Text>().text = Status(item);
                 text.supportRichText = false;
                 text.alignment = TextAnchor.MiddleLeft;
@@ -219,6 +231,10 @@ namespace CrazyChat.Overlay
                         _view.Settings.DeleteTodo(item));
                 }
                 PinTop((RectTransform)row.transform, y, 32f);
+                var rowInput = row.GetComponentInChildren<InputField>(true);
+                if (!rowInput.isFocused) rowInput.SetTextWithoutNotify(item.DisplayText ?? "");
+                row.GetComponentInChildren<Dropdown>(true).interactable = !item.IsCheckin;
+                row.transform.Find("Delete").gameObject.SetActive(!item.IsCheckin);
                 y += 36f;
             }
             ((RectTransform)_settingsContent).sizeDelta = new Vector2(0f, y);
@@ -241,27 +257,158 @@ namespace CrazyChat.Overlay
         void RefreshPreview()
         {
             _previewChip = _view.LocalChip;
-            var item = _visible.Count > 0 ? _visible[_previewIndex % _visible.Count] : null;
+            var previews = _visible.FindAll(value => !value.IsCheckin);
+            var item = previews.Count > 0 ? previews[_previewIndex % previews.Count] : null;
             _previewChip?.SetTodoPreview(item == null ? "" : Status(item) + " " + item.text);
         }
 
         void Update()
         {
-            if (_date != DateTime.Now.Date) Refresh();
+            var now = DateTime.Now;
+            if (_date.Date != now.Date || _date.AddHours(-6).Date != now.AddHours(-6).Date) Refresh();
             if (_previewChip != _view.LocalChip) RefreshPreview();
             if (Time.unscaledTime >= _nextRotate)
             {
                 _nextRotate = Time.unscaledTime + Mathf.Max(0.1f, _view.Config.bubbleRotateSeconds);
-                if (_visible.Count > 0) _previewIndex = (_previewIndex + 1) % _visible.Count;
+                var previewCount = _visible.FindAll(item => !item.IsCheckin).Count;
+                if (previewCount > 0) _previewIndex = (_previewIndex + 1) % previewCount;
                 RefreshPreview();
             }
             if (IsOpen && Input.GetMouseButtonDown(0) &&
                 !RectTransformUtility.RectangleContainsScreenPoint(_card, Input.mousePosition) &&
                 (_view.LocalChip == null || !RectTransformUtility.RectangleContainsScreenPoint(
                     (RectTransform)_view.LocalChip.transform, Input.mousePosition))) Hide();
+            if (IsEditingCheckin)
+            {
+                if (Input.GetKeyDown(KeyCode.Escape)) CancelCheckinEdit();
+                else if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) SaveCheckinEdit();
+                else if (Input.GetMouseButtonDown(0) &&
+                    !RectTransformUtility.RectangleContainsScreenPoint(_checkEditor, Input.mousePosition) &&
+                    !RectTransformUtility.RectangleContainsScreenPoint(_checkBar, Input.mousePosition)) CancelCheckinEdit();
+            }
         }
 
-        void LateUpdate() { if (IsOpen) PlaceCard(); }
+        void LateUpdate()
+        {
+            if (IsOpen) PlaceCard();
+            UpdateCheckin();
+        }
+
+        void BuildCheckin(Transform chrome)
+        {
+            _checkBar = Rect("CheckinBar", chrome);
+            _checkBar.anchorMin = _checkBar.anchorMax = Vector2.zero;
+            _checkBar.sizeDelta = new Vector2(72f, 28f);
+            var toggle = ButtonRect("CheckinSwitch", _checkBar, "");
+            var rt = (RectTransform)toggle.transform;
+            rt.anchoredPosition = new Vector2(-16f, 0f);
+            rt.sizeDelta = new Vector2(40f, 28f);
+            _checkTrack = ImageRect("Track", rt, Color.red, OverlaySprites.RoundedRect);
+            _checkTrack.raycastTarget = false;
+            _checkTrack.rectTransform.sizeDelta = new Vector2(36f, 20f);
+            _checkKnob = ImageRect("Knob", _checkTrack.transform, Color.white, OverlaySprites.Circle);
+            _checkKnob.raycastTarget = false;
+            _checkKnob.rectTransform.sizeDelta = new Vector2(16f, 16f);
+            toggle.onClick.AddListener(() => _view.Settings.CompleteTodo(_view.Settings.Checkin));
+            OverlayHoverRelay.Bind(toggle.gameObject, () => _checkHover = true, () => _checkHover = false);
+            var edit = ButtonRect("Edit", _checkBar, "");
+            ((RectTransform)edit.transform).anchoredPosition = new Vector2(22f, 0f);
+            ((RectTransform)edit.transform).sizeDelta = new Vector2(28f, 28f);
+            // A 16px outline pencil, matching the existing Codicon tool buttons without font glyph fallback.
+            var pencil = Rect("Pencil", edit.transform);
+            pencil.sizeDelta = new Vector2(16f, 16f);
+            pencil.localRotation = Quaternion.Euler(0f, 0f, -45f);
+            for (var i = 0; i < 4; i++)
+            {
+                var stroke = ImageRect("Stroke", pencil, Color.white);
+                stroke.raycastTarget = false;
+                stroke.rectTransform.sizeDelta = i < 2 ? new Vector2(1f, 11f) : new Vector2(5f, 1f);
+                stroke.rectTransform.anchoredPosition = i < 2 ? new Vector2(i == 0 ? -2f : 2f, 0f)
+                    : new Vector2(0f, i == 2 ? 5f : -5f);
+            }
+            edit.onClick.AddListener(OpenCheckinEdit);
+            StyleButton(edit);
+            var hint = ImageRect("Hint", _checkBar, OverlaySkin.ThemeBackground(1), OverlaySprites.RoundedRect);
+            hint.raycastTarget = false;
+            hint.rectTransform.anchoredPosition = new Vector2(0f, 30f);
+            hint.rectTransform.sizeDelta = new Vector2(180f, 26f);
+            _checkHint = Label("Text", hint.transform, "", 13);
+            _checkHint.alignment = TextAnchor.MiddleCenter;
+
+            _checkEditor = ImageRect("CheckinEditor", transform, OverlaySkin.ThemeBackground(1)).rectTransform;
+            _checkEditor.anchorMin = _checkEditor.anchorMax = Vector2.zero;
+            _checkEditor.sizeDelta = new Vector2(240f, 40f);
+            var inputImage = ImageRect("Input", _checkEditor, OverlaySkin.ThemeInputBackground(1));
+            inputImage.rectTransform.anchoredPosition = new Vector2(-16f, 0f);
+            inputImage.rectTransform.sizeDelta = new Vector2(192f, 28f);
+            var border = inputImage.gameObject.AddComponent<Outline>();
+            border.effectDistance = Vector2.one;
+            _checkInput = inputImage.gameObject.AddComponent<InputField>();
+            _checkInput.targetGraphic = inputImage;
+            _checkInput.textComponent = Label("Text", inputImage.transform, "", 13);
+            _checkInput.textComponent.rectTransform.offsetMin = new Vector2(6f, 0f);
+            _checkInput.textComponent.rectTransform.offsetMax = new Vector2(-6f, 0f);
+            _checkInput.lineType = InputField.LineType.SingleLine;
+            _checkInput.characterLimit = 100;
+            var confirm = ButtonRect("Confirm", _checkEditor, "✓");
+            ((RectTransform)confirm.transform).anchoredPosition = new Vector2(100f, 0f);
+            ((RectTransform)confirm.transform).sizeDelta = new Vector2(28f, 28f);
+            confirm.onClick.AddListener(SaveCheckinEdit);
+            StyleButton(confirm);
+            _checkEditor.gameObject.SetActive(false);
+            _checkSlide = _view.Settings.Checkin.IsComplete(DateTime.Now) ? 1f : 0f;
+        }
+
+        void OpenCheckinEdit()
+        {
+            _checkInput.SetTextWithoutNotify(_view.Settings.Checkin.DisplayText);
+            _checkEditor.gameObject.SetActive(true);
+            _checkEditor.SetAsLastSibling();
+            _view.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput(forceSteal: true);
+            _checkInput.Select();
+            _checkInput.ActivateInputField();
+        }
+
+        public void CancelCheckinEdit()
+        {
+            if (_checkEditor != null) _checkEditor.gameObject.SetActive(false);
+        }
+
+        void SaveCheckinEdit()
+        {
+            if (!IsEditingCheckin) return;
+            var value = _checkInput.text;
+            CancelCheckinEdit();
+            _view.Settings.EditTodo(_view.Settings.Checkin, value, OverlayUserSettings.TodoFrequency.Daily);
+        }
+
+        void UpdateCheckin()
+        {
+            if (_checkBar == null) return;
+            var chip = _view.LocalChip;
+            _checkBar.gameObject.SetActive(chip != null);
+            if (chip == null) { CancelCheckinEdit(); return; }
+            var scale = _view.Settings.Scale;
+            var pos = chip.FollowPosition + Vector2.up * (_view.Config.chipSize * 0.5f + _checkBar.sizeDelta.y * 0.5f) * scale;
+            var bounds = FriendOverlayView.OverlayPixelSize;
+            pos.x = Mathf.Clamp(pos.x, 38f * scale, bounds.x - 38f * scale);
+            pos.y = Mathf.Clamp(pos.y, 16f * scale, bounds.y - 16f * scale);
+            _checkBar.anchoredPosition = pos;
+            _checkBar.localScale = Vector3.one * scale;
+            var done = _view.Settings.Checkin.IsComplete(DateTime.Now);
+            _checkSlide = Mathf.MoveTowards(_checkSlide, done ? 1f : 0f, Time.unscaledDeltaTime / 0.18f);
+            _checkTrack.color = Color.Lerp(OverlaySkin.ThemeDanger(_view.Settings.SettingsTheme), new Color32(46, 168, 83, 255), _checkSlide);
+            _checkKnob.rectTransform.anchoredPosition = new Vector2(Mathf.Lerp(-8f, 8f, _checkSlide), 0f);
+            _checkHint.transform.parent.gameObject.SetActive(_checkHover && !IsEditingCheckin);
+            ((RectTransform)_checkHint.transform.parent).anchoredPosition = new Vector2(
+                (Mathf.Clamp(pos.x, 92f * scale, bounds.x - 92f * scale) - pos.x) / scale,
+                pos.y + 44f * scale > bounds.y ? -30f : 30f);
+            var text = _view.Settings.Checkin.DisplayText;
+            _checkHint.text = text.Length > 12 ? text.Substring(0, 12) + "…" : text;
+            if (IsEditingCheckin)
+                _checkEditor.anchoredPosition = new Vector2(Mathf.Clamp(pos.x, 124f, bounds.x - 124f),
+                    Mathf.Clamp(pos.y + 38f * scale, 24f, bounds.y - 24f));
+        }
 
         void PlaceCard()
         {
@@ -280,6 +427,19 @@ namespace CrazyChat.Overlay
         public void ApplyTheme()
         {
             var theme = _view.Settings.SettingsTheme;
+            if (_checkBar != null)
+            {
+                foreach (var label in _checkBar.GetComponentsInChildren<Text>(true)) label.color = OverlaySkin.SettingsThemeText(theme);
+                foreach (var image in _checkBar.Find("Edit/Pencil").GetComponentsInChildren<Image>())
+                    image.color = OverlaySkin.SettingsThemeText(theme);
+                _checkHint.transform.parent.GetComponent<Image>().color = OverlaySkin.ThemeBackground(theme);
+                _checkEditor.GetComponent<Image>().color = OverlaySkin.ThemeBackground(theme);
+                _checkInput.GetComponent<Image>().color = OverlaySkin.ThemeInputBackground(theme);
+                _checkInput.GetComponent<Outline>().effectColor = OverlaySkin.ThemeDivider(theme);
+                foreach (var label in _checkEditor.GetComponentsInChildren<Text>(true)) label.color = OverlaySkin.SettingsThemeText(theme);
+                _checkInput.customCaretColor = true;
+                _checkInput.caretColor = OverlaySkin.SettingsThemeText(theme);
+            }
             _themeSprite = _themeSprite != null ? _themeSprite : Resources.Load<Sprite>(ThemeSpriteResource);
             _controlSprite = _controlSprite != null ? _controlSprite : Resources.Load<Sprite>(ControlSpriteResource);
             ApplySurface(_cardImage, OverlaySprites.RoundedRect, OverlaySkin.ThemeBackground(theme));

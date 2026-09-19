@@ -31,7 +31,17 @@ namespace CrazyChat.Overlay
         public int AvatarVersion { get; private set; }
         public List<TodoItem> Todos { get; private set; } = new List<TodoItem>();
         public event Action TodosChanged;
-        public bool HasTodos => Todos.Exists(item => !string.IsNullOrWhiteSpace(item.text));
+        public const string CheckinId = "checkin";
+        public const string DefaultCheckinText = "嘀嘀嘀嘀，打开上班~";
+        public bool HasTodos => Todos.Exists(item => item.IsCheckin || !string.IsNullOrWhiteSpace(item.text));
+        public TodoItem Checkin => Todos.Find(item => item.IsCheckin);
+
+        public void EnsureCheckin()
+        {
+            var item = Checkin;
+            if (item == null) Todos.Insert(0, new TodoItem { id = CheckinId, frequency = TodoFrequency.Daily });
+            else item.frequency = TodoFrequency.Daily;
+        }
 
         public enum TodoFrequency { Once, Daily, Weekly }
 
@@ -42,18 +52,21 @@ namespace CrazyChat.Overlay
             public string text = "";
             public TodoFrequency frequency;
             public string completedPeriod = "";
+            public bool IsCheckin => id == CheckinId;
+            public string DisplayText => IsCheckin && string.IsNullOrWhiteSpace(text) ? DefaultCheckinText : text;
 
             public bool IsComplete(DateTime date) => completedPeriod == Period(date);
 
             public void ToggleCompletion(DateTime date)
             {
+                if (IsCheckin && IsComplete(date)) return;
                 completedPeriod = IsComplete(date) ? "" : Period(date);
             }
 
             internal string Period(DateTime date)
             {
                 if (frequency == TodoFrequency.Once) return "once";
-                var day = date.Date;
+                var day = frequency == TodoFrequency.Daily ? date.AddHours(-6).Date : date.Date;
                 if (frequency == TodoFrequency.Weekly)
                     day = day.AddDays(-(((int)day.DayOfWeek + 6) % 7));
                 return day.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
@@ -71,20 +84,23 @@ namespace CrazyChat.Overlay
         public void EditTodo(TodoItem item, string text, TodoFrequency frequency)
         {
             if (item == null || !Todos.Contains(item)) return;
+            if (item.IsCheckin) frequency = TodoFrequency.Daily;
             if (item.frequency != frequency) item.completedPeriod = "";
-            item.text = (text ?? "").Trim();
+            item.text = (text ?? "").Replace('\r', ' ').Replace('\n', ' ').Trim();
+            if (item.text.Length > 100) item.text = item.text.Substring(0, 100);
             item.frequency = frequency;
             SaveTodos();
         }
 
         public void DeleteTodo(TodoItem item)
         {
+            if (item != null && item.IsCheckin) return;
             if (Todos.Remove(item)) SaveTodos();
         }
 
         public void CompleteTodo(TodoItem item)
         {
-            if (item == null || !Todos.Contains(item) || string.IsNullOrWhiteSpace(item.text) ||
+            if (item == null || !Todos.Contains(item) || (!item.IsCheckin && string.IsNullOrWhiteSpace(item.text)) ||
                 item.IsComplete(DateTime.Now)) return;
             item.completedPeriod = item.Period(DateTime.Now);
             SaveTodos();
@@ -92,6 +108,7 @@ namespace CrazyChat.Overlay
 
         public void ToggleTodo(TodoItem item)
         {
+            if (item != null && item.IsCheckin) { CompleteTodo(item); return; }
             if (item == null || !Todos.Contains(item) || string.IsNullOrWhiteSpace(item.text)) return;
             item.ToggleCompletion(DateTime.Now);
             SaveTodos();
@@ -105,6 +122,7 @@ namespace CrazyChat.Overlay
 
         public void Load()
         {
+            EnsureCheckin();
             var json = ReadLocal();
 
             if (string.IsNullOrEmpty(json))
@@ -137,6 +155,7 @@ namespace CrazyChat.Overlay
                 AvatarVersion = data.avatarVersion;
                 Todos = data.todos ?? new List<TodoItem>();
                 Todos.RemoveAll(item => item == null);
+                EnsureCheckin();
                 foreach (var item in Todos)
                 {
                     if (string.IsNullOrEmpty(item.id)) item.id = Guid.NewGuid().ToString("N");

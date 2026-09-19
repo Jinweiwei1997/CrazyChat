@@ -38,11 +38,26 @@ namespace CrazyChat.Overlay
             item.frequency = OverlayUserSettings.TodoFrequency.Daily;
             item.completedPeriod = "2026-09-17";
             Assert.IsTrue(item.IsComplete(new DateTime(2026, 9, 17, 23, 59, 59)));
-            Assert.IsFalse(item.IsComplete(new DateTime(2026, 9, 18)));
+            Assert.IsTrue(item.IsComplete(new DateTime(2026, 9, 18, 5, 59, 59)));
+            Assert.IsFalse(item.IsComplete(new DateTime(2026, 9, 18, 6, 0, 0)));
             Assert.IsFalse(item.IsComplete(new DateTime(2026, 9, 16)));
             item.completedPeriod = "2028-02-29";
-            Assert.IsTrue(item.IsComplete(new DateTime(2028, 2, 29)));
-            Assert.IsFalse(item.IsComplete(new DateTime(2028, 3, 1)));
+            Assert.IsTrue(item.IsComplete(new DateTime(2028, 2, 29, 6, 0, 0)));
+            Assert.IsTrue(item.IsComplete(new DateTime(2028, 3, 1, 5, 59, 59)));
+            Assert.IsFalse(item.IsComplete(new DateTime(2028, 3, 1, 6, 0, 0)));
+
+            settings.EnsureCheckin();
+            var checkin = settings.Checkin;
+            Assert.AreEqual(OverlayUserSettings.DefaultCheckinText, checkin.DisplayText);
+            var count = settings.Todos.Count;
+            settings.EnsureCheckin();
+            Assert.AreEqual(count, settings.Todos.Count);
+            settings.DeleteTodo(checkin);
+            Assert.IsNotNull(settings.Checkin);
+            checkin.ToggleCompletion(new DateTime(2026, 9, 18, 6, 0, 0));
+            checkin.ToggleCompletion(new DateTime(2026, 9, 18, 7, 0, 0));
+            Assert.IsTrue(checkin.IsComplete(new DateTime(2026, 9, 19, 5, 59, 59)));
+            Assert.IsFalse(checkin.IsComplete(new DateTime(2026, 9, 19, 6, 0, 0)));
 
             item.frequency = OverlayUserSettings.TodoFrequency.Weekly;
             item.completedPeriod = "2026-09-14";

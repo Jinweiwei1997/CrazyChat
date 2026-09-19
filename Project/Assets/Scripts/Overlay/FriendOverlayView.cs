@@ -119,7 +119,7 @@ namespace CrazyChat.Overlay
                 _settings.ThemeHue,
                 _settings.ThemeIntensity);
             _settingsUi = OverlaySettingsUi.Create(_chromeLayer, _modalLayer, this);
-            _todoUi = OverlayTodoUi.Create(_windowLayer, this);
+            _todoUi = OverlayTodoUi.Create(_windowLayer, _chromeLayer, this);
             _settingsUi?.BindTodos(_todoUi);
 
             _chatStore = new OverlayChatStore();
@@ -709,6 +709,11 @@ namespace CrazyChat.Overlay
 
         void OnCancel()
         {
+            if (_todoUi != null && _todoUi.IsEditingCheckin)
+            {
+                _todoUi.CancelCheckinEdit();
+                return;
+            }
             if (_todoUi != null && _todoUi.IsOpen)
             {
                 _todoUi.Hide();
