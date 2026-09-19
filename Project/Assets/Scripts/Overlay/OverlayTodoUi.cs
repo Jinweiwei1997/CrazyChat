@@ -31,8 +31,6 @@ namespace CrazyChat.Overlay
         Sprite _themeSprite;
         Sprite _controlSprite;
         DateTime _date;
-        float _nextRotate;
-        int _previewIndex;
         FriendAvatarChip _previewChip;
         RectTransform _checkBar;
         Image _checkTrack;
@@ -65,6 +63,7 @@ namespace CrazyChat.Overlay
         void OnDestroy()
         {
             if (_checkBar != null) Destroy(_checkBar.gameObject);
+            if (_checkHintRoot != null) Destroy(_checkHintRoot.gameObject);
             if (_view != null && _view.Settings != null)
                 _view.Settings.TodosChanged -= Refresh;
         }
@@ -195,7 +194,6 @@ namespace CrazyChat.Overlay
             _card.sizeDelta = new Vector2(Width, 42f + Mathf.Clamp(y, 48f, 294f));
             if (_visible.Count == 0) Hide();
             RefreshSettingsRows();
-            _previewIndex = Mathf.Clamp(_previewIndex, 0, Mathf.Max(0, _visible.Count - 1));
             RefreshPreview();
             ApplyTheme();
         }
