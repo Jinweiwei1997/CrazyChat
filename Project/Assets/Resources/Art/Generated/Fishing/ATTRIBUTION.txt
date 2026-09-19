@@ -1,8 +1,16 @@
-﻿Fishing art credits (free packs used in CrazyChat Overlay fishing):
+﻿Fishing art credits (CrazyChat Overlay fishing):
 
+Primary pack (rods + fish):
+- sinigangs — Pixel Fishing Asset Pack — personal/commercial OK with credit
+  https://sinigangs.itch.io/pixel-fishing-assets
+  Used: STORE ITEMS rods (classic / intermediate / expert), FISH (anchovy / seaBass / tuna / gwShark),
+  bob, exclamation; idle frame sliced from FISHING ROD/fishingRodSprites.png
+
+Animated water pool (under avatar):
+- Zro Dfects — 16x16 Water Tiles Animated Tileset 3 - Starter Pack — free/commercial with credit
+  https://zrodfects.itch.io/16x16-water-tiles-animated-tileset-3-starter-pack
+  Used: blue #01, Cartoon Solid + Bubbles, 4-tiles-wide frames → water_zro_00..23.png
+
+Still present as fallback / misc:
 - Kenney Fish Pack 2.0 — CC0 — https://kenney.nl/assets/fish-pack
-- Kenney UI Pack — CC0 — https://kenney.nl/assets/ui-pack
-- CraftPix / Free Game Assets fishing pack (OGA-BY 3.0) — https://opengameart.org/content/fishing-game-assets-pixel-art
-  (Fish-rod, Water, Catch icons)
-
-sinigangs Pixel Fishing (itch.io) was preferred for rod+DDR UI but requires itch download login; CraftPix rod used instead.
+- CraftPix catch icons (OGA-BY 3.0) — catch_*.png / legacy rods

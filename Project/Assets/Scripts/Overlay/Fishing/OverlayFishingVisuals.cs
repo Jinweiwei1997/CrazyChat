@@ -9,16 +9,20 @@ namespace CrazyChat.Overlay.Fishing
     /// <summary>Rod / water / bubble / catch visuals for local and remote chips.</summary>
     public sealed class OverlayFishingVisuals : MonoBehaviour
     {
-        const float RodSize = 154f;
-        const float RodTilt = -28f;
-        const float RodOffsetX = 70f;
-        // Line tip measured on BambooFishingRod.png, as a fraction of the drawn rect from its center
-        // (y already folded with the 1312x1199 aspect), so the water follows any rod size or tilt.
-        static readonly Vector2 RodLineTip = new Vector2(0.284f, -0.227f);
+        // Pixel store rods are 16px art; keep near chip-scale, not bamboo-sized.
+        const float RodSize = 64f;
+        const float RodTilt = -8f;
+        // Rest pose: inside avatar, ~10% up from bottom edge, slightly to the right.
+        const float RodFromBottom = 0.10f;
+        const float RodOffsetXFrac = 0.18f;
+        // Zro cartoon water strip is 2:1; keep a readable pool under the chip.
+        const float WaterHeightFrac = 0.36f;
+        const float WaterFps = 12f;
+        const float ReelLiftDegrees = 42f;
+        const float ReelLiftUpPx = 16f;
 
         FriendOverlayView _view;
         Transform _chrome;
-        Transform _under;
         readonly Dictionary<ulong, RodPair> _remote = new Dictionary<ulong, RodPair>();
         RodPair _local;
         RectTransform _bubble;
@@ -28,23 +32,34 @@ namespace CrazyChat.Overlay.Fishing
         Image _catchImage;
         Text _rewardText;
         RectTransform _catchRt;
+        Coroutine _localReel;
+        float _waterAnimT;
 
         struct RodPair
         {
             public RectTransform root;
             public Image rod;
             public Image water;
+            public Vector2 rodRestPos;
+            public Vector3 rodRestEuler;
         }
 
-        /// <summary>Rods live under the avatars; bubble, QTE prompt and catch UI stay on chrome.</summary>
-        public static OverlayFishingVisuals Create(Transform chrome, Transform under, FriendOverlayView view)
+        /// <summary>Rod / water / bubble / catch all live on chrome (above FriendLayer avatars).</summary>
+        public static OverlayFishingVisuals Create(Transform chrome, FriendOverlayView view)
         {
             var go = new GameObject("FishingVisuals", typeof(RectTransform));
             go.transform.SetParent(chrome, false);
+            // Full-screen space so FollowPosition matches FriendLayer chip coords.
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            // Keep under other chrome UI (settings/chat/interact) but above FriendLayer.
+            go.transform.SetAsFirstSibling();
             var v = go.AddComponent<OverlayFishingVisuals>();
             v._view = view;
             v._chrome = chrome;
-            v._under = under != null ? under : chrome;
             v.BuildLocalUi();
             return v;
         }
@@ -53,6 +68,7 @@ namespace CrazyChat.Overlay.Fishing
         {
             FollowLocal();
             FollowRemotes();
+            TickWaterAnim();
             if (_bubble != null && _bubble.gameObject.activeSelf && _bubbleEnd > 0f)
             {
                 var left = Mathf.Max(0f, _bubbleEnd - Time.unscaledTime);
@@ -89,14 +105,15 @@ namespace CrazyChat.Overlay.Fishing
         public void PlayRemoteCatch(ulong id)
         {
             if (!_remote.TryGetValue(id, out var pair) || pair.rod == null) return;
-            pair.root.gameObject.StartCoroutineSafe(ReelPunch(pair.rod.rectTransform, 0.6f));
+            pair.root.gameObject.StartCoroutineSafe(ReelLift(pair, 0.6f));
         }
 
         public void PlayLocalReel(float seconds)
         {
             EnsureLocal();
-            if (_local.rod != null)
-                StartCoroutine(ReelPunch(_local.rod.rectTransform, seconds));
+            if (_local.rod == null) return;
+            if (_localReel != null) StopCoroutine(_localReel);
+            _localReel = StartCoroutine(ReelLift(_local, seconds));
         }
 
         public void ShowAdvancedBubble(float seconds, Action onClick)
@@ -169,14 +186,14 @@ namespace CrazyChat.Overlay.Fishing
         void EnsureLocal()
         {
             if (_local.root != null) return;
-            _local = BuildRodPair("LocalRod", _under);
+            _local = BuildRodPair("LocalRod", transform);
             _local.root.gameObject.SetActive(false);
         }
 
         RodPair EnsureRemote(ulong id)
         {
             if (_remote.TryGetValue(id, out var existing) && existing.root != null) return existing;
-            var pair = BuildRodPair("RemoteRod_" + id, _under);
+            var pair = BuildRodPair("RemoteRod_" + id, transform);
             _remote[id] = pair;
             return pair;
         }
@@ -189,24 +206,42 @@ namespace CrazyChat.Overlay.Fishing
             root.pivot = new Vector2(0.5f, 0.5f);
             root.sizeDelta = Vector2.zero;
 
-            // Drop the rod so the line tip — and the water with it — lands on the avatar's bottom edge.
-            var lineTip = (Vector2)(Quaternion.Euler(0f, 0f, RodTilt) * (RodLineTip * RodSize));
-            var chipHalf = (_view != null && _view.Config != null ? _view.Config.chipSize : 128f) * 0.5f;
-            var rodPos = new Vector2(RodOffsetX, -chipHalf - lineTip.y);
+            var chip = _view != null && _view.Config != null ? _view.Config.chipSize : 128f;
+            var chipHalf = chip * 0.5f;
+            var waterH = chip * WaterHeightFrac;
+            // Full avatar width; sit across the bottom edge so it reads as a pool under the chip.
+            var waterPos = new Vector2(0f, -chipHalf + waterH * 0.35f);
+            // Rod rests inside the avatar, ~10% up from the bottom.
+            var rodPos = new Vector2(chip * RodOffsetXFrac, -chipHalf + chip * RodFromBottom);
+            var rodEuler = new Vector3(0f, 0f, RodTilt);
 
-            var water = CreateImage("Water", root, new Color(0.35f, 0.7f, 1f, 0.45f), OverlaySprites.Circle);
+            var waterSprite = OverlayFishingArt.Water();
+            var waterTint = waterSprite != null && waterSprite != OverlaySprites.Circle
+                ? Color.white
+                : new Color(0.25f, 0.55f, 0.95f, 0.55f);
+            var water = CreateImage("Water", root, waterTint, waterSprite);
             water.raycastTarget = false;
-            water.rectTransform.sizeDelta = new Vector2(72f, 28f);
-            water.rectTransform.anchoredPosition = rodPos + lineTip;
+            water.preserveAspect = false;
+            water.rectTransform.sizeDelta = new Vector2(chip, waterH);
+            water.rectTransform.anchoredPosition = waterPos;
 
             var rod = CreateImage("Rod", root, Color.white, OverlayFishingArt.Rod());
             rod.raycastTarget = false;
             rod.preserveAspect = true;
             rod.rectTransform.sizeDelta = new Vector2(RodSize, RodSize);
             rod.rectTransform.anchoredPosition = rodPos;
-            rod.rectTransform.localEulerAngles = new Vector3(0f, 0f, RodTilt);
+            rod.rectTransform.localEulerAngles = rodEuler;
+            // Draw rod above the pool.
+            rod.rectTransform.SetAsLastSibling();
 
-            return new RodPair { root = root, rod = rod, water = water };
+            return new RodPair
+            {
+                root = root,
+                rod = rod,
+                water = water,
+                rodRestPos = rodPos,
+                rodRestEuler = rodEuler
+            };
         }
 
         void EnsureBubble()
@@ -232,12 +267,13 @@ namespace CrazyChat.Overlay.Fishing
             root.SetParent(_chrome, false);
             root.anchorMin = root.anchorMax = Vector2.zero;
             root.pivot = new Vector2(0.5f, 0.5f);
-            root.sizeDelta = new Vector2(96f, 64f);
+            root.sizeDelta = new Vector2(120f, 80f);
             _catchRt = root;
             _catchImage = CreateImage("Icon", root, Color.white, OverlaySprites.Circle);
             _catchImage.raycastTarget = false;
-            _catchImage.rectTransform.sizeDelta = new Vector2(48f, 48f);
-            _catchImage.rectTransform.anchoredPosition = new Vector2(-18f, 0f);
+            _catchImage.preserveAspect = true;
+            _catchImage.rectTransform.sizeDelta = new Vector2(72f, 72f);
+            _catchImage.rectTransform.anchoredPosition = new Vector2(-12f, 0f);
             _rewardText = CreateLabel(root, "+0", 16);
             _rewardText.alignment = TextAnchor.MiddleLeft;
             _rewardText.rectTransform.anchoredPosition = new Vector2(28f, 0f);
@@ -270,6 +306,27 @@ namespace CrazyChat.Overlay.Fishing
             }
         }
 
+        void TickWaterAnim()
+        {
+            var frames = OverlayFishingArt.WaterFrames();
+            if (frames == null || frames.Length == 0) return;
+
+            _waterAnimT += Time.unscaledDeltaTime;
+            var idx = Mathf.FloorToInt(_waterAnimT * WaterFps) % frames.Length;
+            var sprite = frames[idx];
+            if (sprite == null) return;
+
+            if (_local.water != null && _local.root != null && _local.root.gameObject.activeSelf)
+                _local.water.sprite = sprite;
+
+            foreach (var pair in _remote)
+            {
+                if (pair.Value.water == null || pair.Value.root == null) continue;
+                if (!pair.Value.root.gameObject.activeSelf) continue;
+                pair.Value.water.sprite = sprite;
+            }
+        }
+
         void PlaceAt(RectTransform rt, FriendAvatarChip chip)
         {
             var scale = _view.Settings != null ? _view.Settings.Scale : 1f;
@@ -284,21 +341,55 @@ namespace CrazyChat.Overlay.Fishing
             rt.localScale = Vector3.one * scale;
         }
 
-        static IEnumerator ReelPunch(RectTransform rod, float seconds)
+        /// <summary>Catch reel: tip lifts up, holds briefly, then settles back into the pool.</summary>
+        static IEnumerator ReelLift(RodPair pair, float seconds)
         {
-            if (rod == null) yield break;
-            var baseEuler = rod.localEulerAngles;
+            if (pair.rod == null) yield break;
+            var rod = pair.rod.rectTransform;
+            var restPos = pair.rodRestPos;
+            var restEuler = pair.rodRestEuler;
+            var liftEuler = restEuler + new Vector3(0f, 0f, ReelLiftDegrees);
+            var liftPos = restPos + new Vector2(0f, ReelLiftUpPx);
+            var dur = Mathf.Max(0.15f, seconds);
+            var up = dur * 0.35f;
+            var hold = dur * 0.25f;
+            var down = dur - up - hold;
+
             var t = 0f;
-            while (t < seconds)
+            while (t < up)
             {
                 t += Time.unscaledDeltaTime;
-                var u = t / seconds;
-                var wave = Mathf.Sin(u * Mathf.PI * 4f) * (1f - u) * 18f;
-                rod.localEulerAngles = baseEuler + new Vector3(0f, 0f, wave);
+                var u = EaseOutCubic(Mathf.Clamp01(t / up));
+                rod.anchoredPosition = Vector2.LerpUnclamped(restPos, liftPos, u);
+                rod.localEulerAngles = Vector3.LerpUnclamped(restEuler, liftEuler, u);
                 yield return null;
             }
-            rod.localEulerAngles = baseEuler;
+
+            rod.anchoredPosition = liftPos;
+            rod.localEulerAngles = liftEuler;
+            if (hold > 0f) yield return new WaitForSecondsRealtime(hold);
+
+            t = 0f;
+            while (t < down)
+            {
+                t += Time.unscaledDeltaTime;
+                var u = EaseInCubic(Mathf.Clamp01(t / down));
+                rod.anchoredPosition = Vector2.LerpUnclamped(liftPos, restPos, u);
+                rod.localEulerAngles = Vector3.LerpUnclamped(liftEuler, restEuler, u);
+                yield return null;
+            }
+
+            rod.anchoredPosition = restPos;
+            rod.localEulerAngles = restEuler;
         }
+
+        static float EaseOutCubic(float u)
+        {
+            var inv = 1f - u;
+            return 1f - inv * inv * inv;
+        }
+
+        static float EaseInCubic(float u) => u * u * u;
 
         static Sprite LoadRodSprite() => OverlayFishingArt.Rod();
 
@@ -308,8 +399,15 @@ namespace CrazyChat.Overlay.Fishing
             var sprite = OverlayFishingArt.FishOrFallback(fish != null ? fish.spriteResource : null);
             image.sprite = sprite;
             image.preserveAspect = true;
-            // Keep authored cartoon colors; only tint placeholder circles.
-            image.color = sprite != null && sprite != OverlaySprites.Circle
+            image.type = Image.Type.Simple;
+            // Keep authored colors; only tint true placeholder circles.
+            var placeholder = sprite == null
+                              || sprite == OverlaySprites.Circle
+                              || string.IsNullOrEmpty(sprite.name)
+                              || sprite.name == "Circle"
+                              || sprite.texture == null
+                              || sprite.texture.width <= 8;
+            image.color = !placeholder
                 ? Color.white
                 : fish != null && fish.highTier
                     ? new Color(1f, 0.85f, 0.35f, 1f)
