@@ -132,6 +132,23 @@ namespace CrazyChat.Overlay.Fishing
             _qte.Show(_view.LocalChip, OnQteResult);
         }
 
+        /// <summary>
+        /// 测试/调试：跳过气泡，直接弹出高级鱼 QTE。未在钓鱼时会先进入钓鱼。
+        /// </summary>
+        public void SimulateAdvancedQte()
+        {
+            if (_view == null || _view.LocalChip == null) return;
+            if (!_fishing) EnterLocal(broadcast: true);
+            CancelPendingBiteUi(award: false);
+            _nextBiteAt = -1f;
+            _bitePending = true;
+            _highTierBite = true;
+            _pendingFish = PickFish(highTier: true);
+            _bubbleDeadline = -1f;
+            _visuals.HideBubble();
+            _qte.Show(_view.LocalChip, OnQteResult);
+        }
+
         void Update()
         {
             if (_view == null) return;

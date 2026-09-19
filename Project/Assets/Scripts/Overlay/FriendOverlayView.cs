@@ -493,6 +493,12 @@ namespace CrazyChat.Overlay
             _chatStore.Add(friendId, text, false, friendId);
         }
 
+        /// <summary>测试：直接弹出钓鱼高级鱼 QTE（未钓鱼时先进入）。</summary>
+        public void SimulateFishingQte()
+        {
+            _fishing?.SimulateAdvancedQte();
+        }
+
         public void OpenChat(ulong friendId)
         {
             if (!IsPresent(friendId))

@@ -13,6 +13,7 @@ namespace CrazyChat.Overlay.Interact
         const float SlotGap = 8f;
         const string ControlSpriteResource = "Overlay/UI/control_rect";
         const int SelfFishSlot = 0;
+        const int SelfQteSlot = 1;
 
         static readonly Vector2[] SlotDirections =
         {
@@ -121,11 +122,14 @@ namespace CrazyChat.Overlay.Interact
             var theme = _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
             var control = Resources.Load<Sprite>(ControlSpriteResource);
             var fishingOn = _fishing != null && _fishing.IsFishing;
+            var testMode = _view != null && _view.Settings != null && _view.Settings.TestMode;
             for (var i = 0; i < SlotCount; i++)
             {
                 _slotActions[i] = null;
                 if (i == SelfFishSlot)
                     ApplySlotVisual(i, true, "钓鱼", fishingOn, theme, control);
+                else if (i == SelfQteSlot && testMode)
+                    ApplySlotVisual(i, true, "QTE", selected: false, theme, control);
                 else
                     ApplySlotVisual(i, false, string.Empty, false, theme, control);
             }
@@ -307,13 +311,26 @@ namespace CrazyChat.Overlay.Interact
 
         void UseSelfSlot(int index)
         {
-            if (index != SelfFishSlot || _fishing == null || _view == null || Time.unscaledTime < _nextUse)
+            if (_fishing == null || _view == null || Time.unscaledTime < _nextUse)
                 return;
 
             var cooldown = _view.Config != null ? Mathf.Max(0f, _view.Config.interactCooldown) : 0.1f;
-            _nextUse = Time.unscaledTime + cooldown;
-            _fishing.ToggleLocal();
-            HideMenu();
+            if (index == SelfFishSlot)
+            {
+                _nextUse = Time.unscaledTime + cooldown;
+                _fishing.ToggleLocal();
+                HideMenu();
+                return;
+            }
+
+            if (index == SelfQteSlot
+                && _view.Settings != null
+                && _view.Settings.TestMode)
+            {
+                _nextUse = Time.unscaledTime + cooldown;
+                _view.SimulateFishingQte();
+                HideMenu();
+            }
         }
 
         void Use(IOverlayInteractAction action)
