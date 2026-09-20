@@ -45,7 +45,7 @@ namespace CrazyChat.Overlay.Fishing
             public Vector3 rodRestEuler;
         }
 
-        /// <summary>Bubble / catch live on chrome; rod and water live on UnderFriendLayer, behind the avatars.</summary>
+        /// <summary>Rods, bubbles and catches live on chrome; water stays behind the avatars.</summary>
         public static OverlayFishingVisuals Create(Transform chrome, Transform underFriendLayer, FriendOverlayView view)
         {
             var go = new GameObject("FishingVisuals", typeof(RectTransform));
@@ -82,6 +82,8 @@ namespace CrazyChat.Overlay.Fishing
         {
             FollowLocal();
             FollowRemotes();
+            SyncRodForeground(_local);
+            foreach (var pair in _remote.Values) SyncRodForeground(pair);
             TickWaterAnim();
             if (_bubble != null && _bubble.gameObject.activeSelf && _bubbleEnd > 0f)
             {
@@ -246,7 +248,12 @@ namespace CrazyChat.Overlay.Fishing
             water.rectTransform.sizeDelta = new Vector2(chip, waterH);
             water.rectTransform.anchoredPosition = waterPos;
 
-            var rod = CreateImage("Rod", root, Color.white, OverlayFishingArt.Rod());
+            var foreground = new GameObject(name + "Foreground", typeof(RectTransform)).GetComponent<RectTransform>();
+            foreground.SetParent(transform, false);
+            foreground.anchorMin = foreground.anchorMax = Vector2.zero;
+            foreground.sizeDelta = Vector2.zero;
+            foreground.gameObject.SetActive(false);
+            var rod = CreateImage("Rod", foreground, Color.white, OverlayFishingArt.Rod());
             rod.raycastTarget = false;
             rod.preserveAspect = true;
             rod.rectTransform.sizeDelta = new Vector2(RodSize, RodSize);
@@ -263,6 +270,15 @@ namespace CrazyChat.Overlay.Fishing
                 rodRestPos = rodPos,
                 rodRestEuler = rodEuler
             };
+        }
+
+        static void SyncRodForeground(RodPair pair)
+        {
+            if (pair.root == null || pair.rod == null) return;
+            var foreground = (RectTransform)pair.rod.transform.parent;
+            foreground.gameObject.SetActive(pair.root.gameObject.activeInHierarchy);
+            foreground.position = pair.root.position;
+            foreground.localScale = pair.root.localScale;
         }
 
         void EnsureBubble()

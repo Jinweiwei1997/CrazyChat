@@ -7,11 +7,9 @@ namespace CrazyChat.Overlay.Interact
     public sealed class OverlayInteractUi : MonoBehaviour
     {
         const int SlotCount = 4;
-        const float RingThickness = 34f;
-        // Buttons sit on the bottom of the ring: one 30° arc each, separated by a small gap.
-        const float SlotArcDegrees = 30f;
-        const float SlotArcGapDegrees = 6f;
-        const float BottomAngleDegrees = -90f;
+        const float ButtonSize = 36f;
+        const float ButtonGap = 4f;
+        const float AvatarGap = 6f;
         const int SelfFishSlot = 0;
         const int SelfQteSlot = 1;
 
@@ -25,11 +23,6 @@ namespace CrazyChat.Overlay.Interact
         readonly Image[] _slotBg = new Image[SlotCount];
         readonly Text[] _slotLabels = new Text[SlotCount];
         readonly IOverlayInteractAction[] _slotActions = new IOverlayInteractAction[SlotCount];
-        Sprite _segmentSprite;
-        Sprite _trackSprite;
-        Image _track;
-        float _ringInnerRadius;
-        float _ringOuterRadius;
         int _hoverSlot = -1;
         ulong _openFor;
         float _nextUse;
@@ -64,29 +57,13 @@ namespace CrazyChat.Overlay.Interact
             _root = (RectTransform)transform;
             Stretch(_root);
 
-            _ring = new GameObject("ItemRing", typeof(RectTransform));
+            _ring = new GameObject("InteractionButtons", typeof(RectTransform));
             _ring.transform.SetParent(layer, false);
             _ringRt = (RectTransform)_ring.transform;
             _ringRt.anchorMin = _ringRt.anchorMax = new Vector2(0f, 0f);
             _ringRt.pivot = new Vector2(0.5f, 0.5f);
 
-            // The avatar square is inscribed in the inner circle, so its corners just touch the ring.
-            var chipSize = _view != null && _view.Config != null ? _view.Config.chipSize : 128f;
-            _ringInnerRadius = chipSize * 0.5f * Mathf.Sqrt(2f);
-            _ringOuterRadius = _ringInnerRadius + RingThickness;
-            _ringRt.sizeDelta = Vector2.one * (_ringOuterRadius * 2f);
-            var innerRatio = _ringInnerRadius / _ringOuterRadius;
-            _trackSprite = CreateArcSprite(innerRatio, 180f);
-            _segmentSprite = CreateArcSprite(innerRatio, SlotArcDegrees * 0.5f);
-
-            // Continuous ring behind the buttons so the whole thing still reads as one ring.
-            _track = CreateImage("RingTrack", _ringRt, Color.white, _trackSprite);
-            _track.raycastTarget = false;
-            var trackRt = _track.rectTransform;
-            trackRt.anchorMin = trackRt.anchorMax = new Vector2(0.5f, 0.5f);
-            trackRt.pivot = new Vector2(0.5f, 0.5f);
-            trackRt.sizeDelta = Vector2.one * (_ringOuterRadius * 2f);
-            trackRt.anchoredPosition = Vector2.zero;
+            _ringRt.sizeDelta = new Vector2(ButtonSize, ButtonSize);
 
             for (var i = 0; i < SlotCount; i++)
             {
@@ -99,15 +76,13 @@ namespace CrazyChat.Overlay.Interact
 
         void BuildSlot(int index, RectTransform parent)
         {
-            var slot = CreateImage("Segment_" + index, parent, Color.white, _segmentSprite);
+            var slot = CreateImage("Button_" + index, parent, Color.white, null);
             slot.type = Image.Type.Simple;
             slot.raycastTarget = true;
-            // Only the drawn wedge takes clicks, so the hole and the gaps stay click-through.
-            slot.alphaHitTestMinimumThreshold = 0.5f;
             var rt = slot.rectTransform;
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
             rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = Vector2.one * (_ringOuterRadius * 2f);
+            rt.sizeDelta = Vector2.one * ButtonSize;
             rt.anchoredPosition = Vector2.zero;
             _slotBg[index] = slot;
 
@@ -118,35 +93,27 @@ namespace CrazyChat.Overlay.Interact
                 () => HoverLeaveSlot(capturedIndex));
 
             var label = FillLabel(parent, string.Empty, 12, OverlaySkin.Text);
+            label.resizeTextForBestFit = true;
+            label.resizeTextMinSize = 9;
+            label.resizeTextMaxSize = 12;
             var labelRt = label.rectTransform;
             labelRt.anchorMin = labelRt.anchorMax = new Vector2(0.5f, 0.5f);
             labelRt.pivot = new Vector2(0.5f, 0.5f);
-            labelRt.sizeDelta = new Vector2(RingThickness + 12f, 22f);
+            labelRt.sizeDelta = new Vector2(ButtonSize, ButtonSize);
             _slotLabels[index] = label;
         }
 
-        /// <summary>按钮以正下方为中心左右排开。</summary>
         void PlaceSlot(int index, int count)
         {
-            var angle = BottomAngleDegrees + (index - (count - 1) * 0.5f) * (SlotArcDegrees + SlotArcGapDegrees);
-            var bg = _slotBg[index];
-            if (bg != null)
-            {
-                bg.rectTransform.localEulerAngles = new Vector3(0f, 0f, angle);
-            }
-
-            var label = _slotLabels[index];
-            if (label != null)
-            {
-                var radians = angle * Mathf.Deg2Rad;
-                var direction = new Vector2(Mathf.Cos(radians), Mathf.Sin(radians));
-                label.rectTransform.anchoredPosition = direction * ((_ringInnerRadius + _ringOuterRadius) * 0.5f);
-            }
+            var height = count * ButtonSize + Mathf.Max(0, count - 1) * ButtonGap;
+            _ringRt.sizeDelta = new Vector2(ButtonSize, height);
+            var position = new Vector2(0f, (height - ButtonSize) * 0.5f - index * (ButtonSize + ButtonGap));
+            if (_slotBg[index] != null) _slotBg[index].rectTransform.anchoredPosition = position;
+            if (_slotLabels[index] != null) _slotLabels[index].rectTransform.anchoredPosition = position;
         }
 
         void RefreshSlots()
         {
-            RefreshTrack();
             if (_selfMode)
             {
                 RefreshSelfSlots();
@@ -169,15 +136,6 @@ namespace CrazyChat.Overlay.Interact
                     HideSlot(i);
                 }
             }
-        }
-
-        void RefreshTrack()
-        {
-            if (_track == null) return;
-            var theme = _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
-            var color = OverlaySkin.ThemeControl(theme);
-            color.a = 0.35f;
-            _track.color = color;
         }
 
         void RefreshSelfSlots()
@@ -218,7 +176,7 @@ namespace CrazyChat.Overlay.Interact
             if (bg == null) return;
 
             bg.gameObject.SetActive(true);
-            bg.sprite = _segmentSprite;
+            bg.sprite = null;
             bg.type = Image.Type.Simple;
             if (selected)
             {
@@ -387,6 +345,8 @@ namespace CrazyChat.Overlay.Interact
             RefreshSlots();
             if (_ring != null)
             {
+                if (_view.TryGetChip(friendId, out var chip) && chip != null)
+                    PlaceRing(chip.FollowPosition, _view.Settings != null ? _view.Settings.Scale : 1f);
                 _ring.SetActive(true);
                 _ring.transform.SetAsLastSibling();
             }
@@ -460,73 +420,19 @@ namespace CrazyChat.Overlay.Interact
 
         void PlaceRing(Vector2 avatarPos, float scale)
         {
-            _ringRt.anchoredPosition = avatarPos;
+            var chipSize = _view.Config != null ? _view.Config.chipSize : 128f;
+            var position = avatarPos + Vector2.left * (chipSize * 0.5f + AvatarGap + ButtonSize * 0.5f) * scale;
+            var halfHeight = _ringRt.sizeDelta.y * scale * 0.5f;
+            var bounds = FriendOverlayView.OverlayPixelSize;
+            position.x = Mathf.Max(ButtonSize * scale * 0.5f, position.x);
+            position.y = Mathf.Clamp(position.y, halfHeight, Mathf.Max(halfHeight, bounds.y - halfHeight));
+            _ringRt.anchoredPosition = position;
             _ringRt.localScale = new Vector3(scale, scale, 1f);
         }
 
         void OnDestroy()
         {
-            DestroySprite(_segmentSprite);
-            DestroySprite(_trackSprite);
-            _segmentSprite = null;
-            _trackSprite = null;
-        }
-
-        void DestroySprite(Sprite sprite)
-        {
-            if (sprite == null) return;
-            var texture = sprite.texture;
-            Destroy(sprite);
-            if (texture != null) Destroy(texture);
-        }
-
-        /// <summary>程序化生成一段弧（halfArc=180 即整圈）：中间完全透明，头像从洞里露出来。</summary>
-        static Sprite CreateArcSprite(float innerRatio, float halfArc)
-        {
-            const int size = 256;
-            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
-            {
-                name = "InteractWheelArc",
-                filterMode = FilterMode.Bilinear,
-                wrapMode = TextureWrapMode.Clamp
-            };
-            var pixels = new Color32[size * size];
-            var center = (size - 1) * 0.5f;
-            var outer = center - 1f;
-            var inner = outer * Mathf.Clamp01(innerRatio);
-            var fullCircle = halfArc >= 180f;
-            for (var y = 0; y < size; y++)
-            {
-                for (var x = 0; x < size; x++)
-                {
-                    var dx = x - center;
-                    var dy = y - center;
-                    var radius = Mathf.Sqrt(dx * dx + dy * dy);
-                    if (radius < inner || radius > outer) continue;
-                    var angle = Mathf.Abs(Mathf.DeltaAngle(0f, Mathf.Atan2(dy, dx) * Mathf.Rad2Deg));
-                    if (!fullCircle && angle > halfArc) continue;
-
-                    // Soften the borders so the arc does not look stair-stepped.
-                    var alpha = Mathf.Clamp01(Mathf.Min(radius - inner, outer - radius));
-                    if (!fullCircle)
-                    {
-                        alpha = Mathf.Min(alpha, Mathf.Clamp01((halfArc - angle) * Mathf.Deg2Rad * radius));
-                    }
-
-                    pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
-                }
-            }
-
-            texture.SetPixels32(pixels);
-            // Keep it readable: Image.alphaHitTestMinimumThreshold samples the texture.
-            texture.Apply(false, false);
-            return Sprite.Create(
-                texture,
-                new Rect(0f, 0f, size, size),
-                new Vector2(0.5f, 0.5f),
-                100f,
-                0,
-                SpriteMeshType.FullRect);
+            if (_ring != null) Destroy(_ring);
         }
 
         static Image CreateImage(string name, Transform parent, Color color, Sprite sprite)
