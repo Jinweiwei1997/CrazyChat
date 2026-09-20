@@ -20,6 +20,9 @@ namespace CrazyChat.Overlay
         float _wantClickThroughSince;
         float _lastForceStealAt = -999f;
         int _lastHeartbeatKey = int.MinValue;
+        bool _primaryWasDown;
+        bool _pointerHeld;
+        float _pointerReleaseAfter;
 #endif
         bool _applied;
         bool _alwaysOnTop = true;
@@ -161,6 +164,18 @@ namespace CrazyChat.Overlay
             return true;
 #endif
         }
+
+        public static bool IsPrimaryPointerDown
+        {
+            get
+            {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+                return (GetAsyncKeyState(VkLButton) & 0x8000) != 0;
+#else
+                return Input.GetMouseButton(0);
+#endif
+            }
+        }
         public void BindRaycaster(GraphicRaycasterHost host)
         {
             _raycasterHost = host;
@@ -261,6 +276,11 @@ namespace CrazyChat.Overlay
         {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
             if (!_applied || !EnsureWindowHandle()) return;
+            if (IsPrimaryPointerDown)
+            {
+                _pointerHeld = true;
+                _pointerReleaseAfter = Time.unscaledTime + 0.12f;
+            }
             // Opening chat/settings must take hits immediately (bypass capture debounce).
             ApplyClickThrough(false, immediate: true);
             if (GetForegroundWindow() == _hwnd)
@@ -334,9 +354,10 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            // Unfocused hover must not keep capture; release hit-test so fullscreen apps stay usable.
             if (!focused)
             {
+                _pointerHeld = false;
+                _pointerReleaseAfter = 0f;
                 ApplyClickThrough(true, immediate: true);
             }
 #endif
@@ -351,10 +372,17 @@ namespace CrazyChat.Overlay
             }
 
             var overUi = _raycasterHost != null && _raycasterHost.IsPointerOverInteractive();
-            var primaryDown = (GetAsyncKeyState(VkLButton) & 0x8000) != 0;
-            // Focused: hover captures. Unfocused: only capture while LMB is down over UI
-            // (avoids long-lived TOPMOST hit-test fights that AppHang against fullscreen apps).
-            var wantCapture = _appFocused ? overUi : (overUi && primaryDown);
+            var primaryDown = IsPrimaryPointerDown;
+            // Arm hit-testing on hover BEFORE the press, without forcing window focus.
+            // Only retain gestures that started on our UI; an external drag stays external.
+            if (primaryDown && !_primaryWasDown && overUi && !_clickThrough)
+                _pointerHeld = true;
+            if (_pointerHeld && primaryDown)
+                _pointerReleaseAfter = Time.unscaledTime + 0.12f;
+            if (!primaryDown && Time.unscaledTime >= _pointerReleaseAfter)
+                _pointerHeld = false;
+            var wantCapture = _pointerHeld || (overUi && (!primaryDown || !_clickThrough));
+            _primaryWasDown = primaryDown;
             ApplyClickThrough(!wantCapture, immediate: wantCapture);
             LogHeartbeat();
 #endif
@@ -379,14 +407,7 @@ namespace CrazyChat.Overlay
 
             ApplyTopmost();
 
-            var margins = new Margins
-            {
-                cxLeftWidth = -1,
-                cxRightWidth = -1,
-                cyTopHeight = -1,
-                cyBottomHeight = -1
-            };
-            DwmExtendFrameIntoClientArea(_hwnd, ref margins);
+            ApplyTransparency();
 
             SetWindowPos(_hwnd, _alwaysOnTop ? HwndTopmost : HwndNoTopmost, 0, 0, 0, 0,
                 SwpNoMove | SwpNoSize | SwpFrameChanged | SwpShowWindow);
@@ -396,6 +417,20 @@ namespace CrazyChat.Overlay
             ApplyClickThrough(true, immediate: true);
             _applied = true;
             SetTargetDisplay(_targetDisplayIndex);
+        }
+
+        void ApplyTransparency()
+        {
+            var margins = new Margins
+            {
+                cxLeftWidth = -1,
+                cxRightWidth = -1,
+                cyTopHeight = -1,
+                cyBottomHeight = -1
+            };
+            var result = DwmExtendFrameIntoClientArea(_hwnd, ref margins);
+            if (result != 0)
+                Debug.LogError("[Overlay] Desktop transparency failed, HRESULT=0x" + result.ToString("X8"));
         }
 
         IEnumerator MoveToTargetDisplay()
@@ -429,6 +464,9 @@ namespace CrazyChat.Overlay
 
             SetWindowPos(_hwnd, _alwaysOnTop ? HwndTopmost : HwndNoTopmost, 0, 0, 0, 0,
                 SwpNoMove | SwpNoSize | SwpFrameChanged | SwpShowWindow);
+            // Moving the fullscreen window can recreate its surface and discard DWM margins.
+            ApplyExStyle(_clickThrough);
+            ApplyTransparency();
             _appliedDisplayIndex = index;
             _moveDisplayRoutine = null;
         }

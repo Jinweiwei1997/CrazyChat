@@ -626,6 +626,15 @@ namespace CrazyChat.Overlay
             }
 
             var userScale = _view != null && _view.Settings != null ? _view.Settings.Scale : 1f;
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            // Recover when Windows delivered mouse-up outside Unity after focus/capture changed.
+            if (_dragging && !TransparentOverlayWindow.IsPrimaryPointerDown)
+            {
+                var window = _view != null ? _view.GetComponent<TransparentOverlayWindow>() : null;
+                if (window != null && window.TryGetPointerPosition(out var pointer)) _dragPointer = pointer;
+                FinishDrag(true);
+            }
+#endif
             UpdateDragMotion(userScale);
             _rect.anchoredPosition = _layoutPos;
             _rect.localScale = new Vector3(userScale, userScale, 1f);
@@ -752,6 +761,7 @@ namespace CrazyChat.Overlay
 
         public void OnBeginDrag(PointerEventData eventData)
         {
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
             if (_view != null && _view.Settings != null && _view.Settings.DisableDrag)
             {
                 return;
@@ -794,16 +804,28 @@ namespace CrazyChat.Overlay
             }
 
             _dragPointer = eventData.position;
+            FinishDrag(true);
+        }
+
+        void FinishDrag(bool allowBag)
+        {
+            if (!_dragging) return;
             var scale = _view != null && _view.Settings != null ? _view.Settings.Scale : 1f;
             UpdateDragMotion(scale);
             _dragging = false;
-            if (_view != null && _view.TryPutInBag(this))
+            _view?.SetBagHover(Vector2.zero);
+            if (allowBag && _view != null && _view.TryPutInBag(this))
             {
                 return;
             }
 
             _snapAnchor = null;
             _settlingDrag = true;
+        }
+
+        void OnApplicationFocus(bool focused)
+        {
+            if (!focused) FinishDrag(false);
         }
 
         public void SetTodoPreview(string text)

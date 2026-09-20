@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using UnityEngine;
 
@@ -354,28 +355,37 @@ namespace CrazyChat.Overlay
         const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
         const string ValueName = "CrazyChat";
 
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+        static readonly IntPtr CurrentUser = new IntPtr(unchecked((int)0x80000001));
+
+        [DllImport("advapi32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+        static extern int RegSetKeyValueW(IntPtr key, string subKey, string valueName,
+            uint type, byte[] data, uint dataSize);
+
+        [DllImport("advapi32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+        static extern int RegDeleteKeyValueW(IntPtr key, string subKey, string valueName);
+#endif
+
         public static void Apply(bool enable)
         {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
             try
             {
-                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKey, true))
+                int result;
+                if (enable)
                 {
-                    if (key == null)
-                    {
-                        return;
-                    }
-
-                    if (enable)
-                    {
-                        var exe = Path.Combine(Directory.GetParent(Application.dataPath).FullName, Application.productName + ".exe");
-                        key.SetValue(ValueName, "\"" + exe + "\"");
-                    }
-                    else if (key.GetValue(ValueName) != null)
-                    {
-                        key.DeleteValue(ValueName);
-                    }
+                    var exe = Path.Combine(Directory.GetParent(Application.dataPath).FullName, Application.productName + ".exe");
+                    // REG_SZ requires UTF-16 data including the terminating null character.
+                    var data = Encoding.Unicode.GetBytes("\"" + exe + "\"\0");
+                    result = RegSetKeyValueW(CurrentUser, RunKey, ValueName, 1, data, (uint)data.Length);
                 }
+                else
+                {
+                    result = RegDeleteKeyValueW(CurrentUser, RunKey, ValueName);
+                    if (result == 2) return; // Already absent (ERROR_FILE_NOT_FOUND).
+                }
+                if (result != 0)
+                    Debug.LogWarning("[Overlay] 开机自启设置失败，Windows 错误码: " + result);
             }
             catch (Exception e)
             {

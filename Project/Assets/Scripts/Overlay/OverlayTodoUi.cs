@@ -56,10 +56,7 @@ namespace CrazyChat.Overlay
         InputField _checkInput;
         float _checkSlide;
         float _checkSlideVelocity;
-        internal float CheckinSlide => _checkSlide;
         bool _checkHover;
-        bool _checkDragging;
-        bool _checkDragMoved;
         RawImage _checkSuccess;
         float _checkSuccessStarted = float.NegativeInfinity;
 
@@ -357,8 +354,7 @@ namespace CrazyChat.Overlay
             _checkSuccess.gameObject.SetActive(false);
             SetCheckinSuccessFrame(0);
 
-            var drag = toggle.gameObject.AddComponent<CheckinSlideDrag>();
-            drag.Bind(this, rt);
+            toggle.onClick.AddListener(CompleteCheckin);
             OverlayHoverRelay.Bind(toggle.gameObject, () => _checkHover = true, () => _checkHover = false);
             OverlayHoverRelay.Bind(_checkKnob.gameObject, () => _checkHover = true, () => _checkHover = false);
 
@@ -421,7 +417,7 @@ namespace CrazyChat.Overlay
             _checkSlide = _view.Settings.Checkin.IsComplete(DateTime.Now) ? 1f : 0f;
         }
 
-        internal bool CanDragCheckin()
+        bool CanCompleteCheckin()
         {
             if (Time.unscaledTime - _checkSuccessStarted < CheckinSuccessSeconds) return false;
             if (_view == null || _view.Settings == null || !_view.Settings.ShowCheckin || IsEditingCheckin)
@@ -430,36 +426,14 @@ namespace CrazyChat.Overlay
             return !_view.Settings.Checkin.IsComplete(DateTime.Now);
         }
 
-        internal void BeginCheckinDrag()
+        void CompleteCheckin()
         {
-            _checkDragging = true;
+            if (!CanCompleteCheckin()) return;
+            _view.ClaimInteractionFocus();
             _checkSlideVelocity = 0f;
-            _checkDragMoved = false;
-            _view?.ClaimInteractionFocus();
-        }
-
-        internal void MarkCheckinDragMoved() => _checkDragMoved = true;
-
-        internal void DragCheckinTo(float normalized)
-        {
-            if (!_checkDragging) return;
-            _checkSlide = Mathf.Clamp01(normalized);
-        }
-
-        internal void EndCheckinDrag()
-        {
-            if (!_checkDragging) return;
-            _checkDragging = false;
-            // Must actually drag — click / tap on the track never completes.
-            if (_checkDragMoved && _checkSlide >= 0.9f)
-            {
-                _checkSlide = 1f;
-                _checkSuccessStarted = Time.unscaledTime;
-                if (!_view.Settings.TestMode)
-                    _view.Settings.CompleteTodo(_view.Settings.Checkin);
-
-            }
-            _checkDragMoved = false;
+            _checkSuccessStarted = Time.unscaledTime;
+            if (!_view.Settings.TestMode)
+                _view.Settings.CompleteTodo(_view.Settings.Checkin);
         }
 
         void SetCheckinSuccessFrame(int frame)
@@ -533,13 +507,10 @@ namespace CrazyChat.Overlay
             var done = !_view.Settings.TestMode && _view.Settings.Checkin.IsComplete(DateTime.Now);
             var successElapsed = Time.unscaledTime - _checkSuccessStarted;
             var successFeedback = successElapsed < CheckinSuccessSeconds;
-            if (!_checkDragging)
-            {
-                var target = done || successFeedback ? 1f : 0f;
-                // Test mode: after a successful slide, ease back so it can be tried again.
-                _checkSlide = Mathf.SmoothDamp(_checkSlide, target, ref _checkSlideVelocity,
-                    0.08f, Mathf.Infinity, Time.unscaledDeltaTime);
-            }
+            var target = done || successFeedback ? 1f : 0f;
+            // Click completes; test mode returns to idle after the success animation.
+            _checkSlide = Mathf.SmoothDamp(_checkSlide, target, ref _checkSlideVelocity,
+                0.08f, Mathf.Infinity, Time.unscaledDeltaTime);
 
             Color green = new Color32(46, 168, 83, 255);
             Color amber = new Color32(240, 173, 78, 255);
@@ -552,7 +523,7 @@ namespace CrazyChat.Overlay
 
             var travel = (trackW - knob) * 0.5f;
             var knobPos = new Vector2(Mathf.Lerp(-travel, travel, _checkSlide), 0f);
-            var punch = _checkDragging ? 1.12f : 1f;
+            const float punch = 1f;
             // The baked sheet takes over once the tick plays; before that the knob is the handle.
             var baked = successFeedback || done;
             _checkKnob.rectTransform.anchoredPosition = knobPos;
@@ -573,7 +544,7 @@ namespace CrazyChat.Overlay
                     : CheckinDoneFrame);
             }
 
-            var showHint = _checkHover && !IsEditingCheckin && !_checkDragging;
+            var showHint = _checkHover && !IsEditingCheckin;
             if (_checkHintRoot != null)
             {
                 _checkHintRoot.gameObject.SetActive(showHint);
@@ -894,79 +865,4 @@ namespace CrazyChat.Overlay
 #endif
     }
 
-    sealed class CheckinSlideDrag : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler,
-        IPointerDownHandler, IPointerUpHandler, IInitializePotentialDragHandler
-    {
-        const float MoveThresholdPx = 10f;
-        OverlayTodoUi _owner;
-        RectTransform _track;
-        Vector2 _pressScreen;
-        float _pressLocalX;
-        float _pressSlide;
-        bool _active;
-
-        public void Bind(OverlayTodoUi owner, RectTransform track)
-        {
-            _owner = owner;
-            _track = track;
-        }
-
-        public void OnPointerDown(PointerEventData eventData)
-        {
-            if (_owner == null || !_owner.CanDragCheckin() || eventData == null ||
-                eventData.button != PointerEventData.InputButton.Left) return;
-            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    _track, eventData.position, eventData.pressEventCamera, out var local)) return;
-            _active = true;
-            _pressScreen = eventData.position;
-            _pressLocalX = local.x;
-            _pressSlide = _owner.CheckinSlide;
-            _owner.BeginCheckinDrag();
-            // Do not jump the knob to the click point — wait for a real drag.
-        }
-
-        public void OnPointerUp(PointerEventData eventData)
-        {
-            if (!_active || eventData.button != PointerEventData.InputButton.Left) return;
-            OnDrag(eventData);
-            _active = false;
-            _owner.EndCheckinDrag();
-        }
-
-        public void OnInitializePotentialDrag(PointerEventData eventData) => eventData.useDragThreshold = false;
-
-        public void OnBeginDrag(PointerEventData eventData)
-        {
-            // PointerDown already captured the starting position; keep it throughout the gesture.
-        }
-
-        public void OnDrag(PointerEventData eventData)
-        {
-            if (!_active || _owner == null || eventData == null) return;
-            if (Mathf.Abs(eventData.position.x - _pressScreen.x) >= MoveThresholdPx)
-                _owner.MarkCheckinDragMoved();
-            Apply(eventData);
-        }
-
-        public void OnEndDrag(PointerEventData eventData) => OnPointerUp(eventData);
-
-        void OnDisable()
-        {
-            if (!_active) return;
-            _active = false;
-            _owner?.EndCheckinDrag();
-        }
-
-        void Apply(PointerEventData eventData)
-        {
-            if (_owner == null || _track == null || eventData == null) return;
-            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    _track, eventData.position, eventData.pressEventCamera, out var local))
-                return;
-            // Match the knob's actual travel: the track width minus the knob itself.
-            var travel = _track.rect.width - OverlayTodoUi.CheckinKnob;
-            if (travel <= 0.01f) return;
-            _owner.DragCheckinTo(_pressSlide + (local.x - _pressLocalX) / travel);
-        }
-    }
 }
