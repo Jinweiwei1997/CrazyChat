@@ -17,8 +17,8 @@ namespace CrazyChat.Overlay
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         bool _clickThrough = true;
         bool _wantClickThrough = true;
-        float _wantClickThroughSince;
-        float _lastForceStealAt = -999f;
+        float _nextStyleErrorLog;
+        float _nextPointerLog;
         int _lastHeartbeatKey = int.MinValue;
         bool _primaryWasDown;
         bool _pointerHeld;
@@ -32,9 +32,6 @@ namespace CrazyChat.Overlay
         int _appliedDisplayIndex = -1;
         Coroutine _moveDisplayRoutine;
 
-        const float ClickThroughCaptureDebounce = 0.08f;
-        const float ForceStealMinInterval = 0.5f;
-
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         const int GwlStyle = -16;
         const int GwlExStyle = -20;
@@ -42,7 +39,6 @@ namespace CrazyChat.Overlay
         const uint WsVisible = 0x10000000;
         const uint WsExLayered = 0x00080000;
         const uint WsExTransparent = 0x00000020;
-        const uint WsExTopmost = 0x00000008;
         const uint WsExToolWindow = 0x00000080;
         const uint SwpFrameChanged = 0x0020;
         const uint SwpShowWindow = 0x0040;
@@ -93,15 +89,6 @@ namespace CrazyChat.Overlay
 
         [DllImport("user32.dll")]
         static extern IntPtr GetForegroundWindow();
-
-        [DllImport("user32.dll")]
-        static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr processId);
-
-        [DllImport("user32.dll")]
-        static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach);
-
-        [DllImport("user32.dll")]
-        static extern IntPtr SetFocus(IntPtr hWnd);
 
         [DllImport("user32.dll")]
         static extern short GetAsyncKeyState(int vKey);
@@ -272,62 +259,13 @@ namespace CrazyChat.Overlay
             }
         }
 
-        public void FocusForTextInput(bool forceSteal = false)
+        public void FocusForTextInput()
         {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
             if (!_applied || !EnsureWindowHandle()) return;
-            if (IsPrimaryPointerDown)
-            {
-                _pointerHeld = true;
-                _pointerReleaseAfter = Time.unscaledTime + 0.12f;
-            }
-            // Opening chat/settings must take hits immediately (bypass capture debounce).
-            ApplyClickThrough(false, immediate: true);
-            if (GetForegroundWindow() == _hwnd)
-            {
-                SetFocus(_hwnd);
-                return;
-            }
-
-            if (forceSteal)
-            {
-                // AttachThreadInput only for keyboard-driven open (double-Ctrl+Enter).
-                // Mouse paths must stay soft — AttachThreadInput vs fullscreen apps causes AppHang.
-                var now = Time.unscaledTime;
-                if (now - _lastForceStealAt < ForceStealMinInterval)
-                {
-                    SetForegroundWindow(_hwnd);
-                    SetFocus(_hwnd);
-                    return;
-                }
-
-                _lastForceStealAt = now;
-                var foreground = GetForegroundWindow();
-                var windowThread = GetWindowThreadProcessId(_hwnd, IntPtr.Zero);
-                var foregroundThread = foreground != IntPtr.Zero
-                    ? GetWindowThreadProcessId(foreground, IntPtr.Zero)
-                    : 0;
-                var attached = windowThread != 0 && foregroundThread != 0 && foregroundThread != windowThread &&
-                               AttachThreadInput(windowThread, foregroundThread, true);
-                try
-                {
-                    SetForegroundWindow(_hwnd);
-                    SetFocus(_hwnd);
-                }
-                finally
-                {
-                    if (attached)
-                    {
-                        AttachThreadInput(windowThread, foregroundThread, false);
-                    }
-                }
-            }
-            else
-            {
-                // Soft request only; mouse-driven opens already delivered input to us.
-                SetForegroundWindow(_hwnd);
-                SetFocus(_hwnd);
-            }
+            ApplyClickThrough(false);
+            // Never join another application's input queue or force its focus synchronously.
+            if (GetForegroundWindow() != _hwnd) SetForegroundWindow(_hwnd);
 #endif
         }
         IEnumerator Start()
@@ -358,7 +296,7 @@ namespace CrazyChat.Overlay
             {
                 _pointerHeld = false;
                 _pointerReleaseAfter = 0f;
-                ApplyClickThrough(true, immediate: true);
+                // Unity is still dispatching focus/window messages here. Reconcile styles in Update.
             }
 #endif
         }
@@ -371,6 +309,9 @@ namespace CrazyChat.Overlay
                 return;
             }
 
+            if (!EnsureWindowHandle()) return;
+            // Unity may rewrite styles during a focus/display transition. Read native truth first.
+            _clickThrough = ((ulong)GetWindowLongPtr(_hwnd, GwlExStyle).ToInt64() & WsExTransparent) != 0;
             var overUi = _raycasterHost != null && _raycasterHost.IsPointerOverInteractive();
             var primaryDown = IsPrimaryPointerDown;
             // Arm hit-testing on hover BEFORE the press, without forcing window focus.
@@ -382,8 +323,9 @@ namespace CrazyChat.Overlay
             if (!primaryDown && Time.unscaledTime >= _pointerReleaseAfter)
                 _pointerHeld = false;
             var wantCapture = _pointerHeld || (overUi && (!primaryDown || !_clickThrough));
+            if (primaryDown && !_primaryWasDown) LogPointerPress(overUi);
             _primaryWasDown = primaryDown;
-            ApplyClickThrough(!wantCapture, immediate: wantCapture);
+            ApplyClickThrough(!wantCapture);
             LogHeartbeat();
 #endif
         }
@@ -414,7 +356,7 @@ namespace CrazyChat.Overlay
 
             _clickThrough = false;
             _wantClickThrough = true;
-            ApplyClickThrough(true, immediate: true);
+            ApplyClickThrough(true);
             _applied = true;
             SetTargetDisplay(_targetDisplayIndex);
         }
@@ -471,34 +413,23 @@ namespace CrazyChat.Overlay
             _moveDisplayRoutine = null;
         }
 
-        void ApplyClickThrough(bool clickThrough, bool immediate)
+        void ApplyClickThrough(bool clickThrough)
         {
-            if (!EnsureWindowHandle())
-            {
-                return;
-            }
-
-            if (_wantClickThrough != clickThrough)
-            {
-                _wantClickThrough = clickThrough;
-                _wantClickThroughSince = Time.unscaledTime;
-            }
-
-            // Releasing capture (through=true) applies immediately so other apps stay usable.
-            // Taking capture (through=false) waits briefly to avoid SetWindowLong chatter at UI edges.
-            if (!immediate && !clickThrough &&
-                Time.unscaledTime - _wantClickThroughSince < ClickThroughCaptureDebounce)
-            {
-                return;
-            }
-
-            if (_clickThrough == clickThrough)
-            {
-                return;
-            }
-
-            _clickThrough = clickThrough;
+            _wantClickThrough = clickThrough;
+            // ApplyExStyle compares with the actual HWND, not a cached desired state.
             ApplyExStyle(clickThrough);
+        }
+
+        void LogPointerPress(bool overUi)
+        {
+            if (Time.unscaledTime < _nextPointerLog) return;
+            _nextPointerLog = Time.unscaledTime + 5f;
+            var events = EventSystem.current;
+            Debug.Log("[Overlay-input] mouse press overUi=" + overUi + " hwnd=0x" + _hwnd.ToInt64().ToString("X") +
+                " through=" + _clickThrough + " foreground=" + (GetForegroundWindow() == _hwnd) +
+                " unityFocus=" + Application.isFocused + " eventFocus=" + (events != null && events.isFocused) +
+                " module=" + (events != null && events.currentInputModule != null ? events.currentInputModule.GetType().Name : "none") +
+                " unityMouseDown=" + Input.GetMouseButtonDown(0));
         }
 
         void LogHeartbeat()
@@ -539,14 +470,7 @@ namespace CrazyChat.Overlay
             var original = (ulong)GetWindowLongPtr(_hwnd, GwlExStyle).ToInt64();
             var ex = original;
             ex |= WsExLayered | WsExToolWindow;
-            if (_alwaysOnTop && !_suspendTopmost)
-            {
-                ex |= WsExTopmost;
-            }
-            else
-            {
-                ex &= ~WsExTopmost;
-            }
+            // TOPMOST is managed by SetWindowPos, not by changing extended style bits.
 
             if (clickThrough)
             {
@@ -560,7 +484,18 @@ namespace CrazyChat.Overlay
             if (ex != original)
             {
                 SetWindowLongPtr(_hwnd, GwlExStyle, new IntPtr((long)ex));
+                var error = Marshal.GetLastWin32Error();
+                var actual = (ulong)GetWindowLongPtr(_hwnd, GwlExStyle).ToInt64();
+                const ulong mask = WsExLayered | WsExToolWindow | WsExTransparent;
+                if ((actual & mask) != (ex & mask) && Time.unscaledTime >= _nextStyleErrorLog)
+                {
+                    _nextStyleErrorLog = Time.unscaledTime + 5f;
+                    Debug.LogWarning("[Overlay-input] Window style write did not apply. Win32=" + error +
+                        " requested=0x" + ex.ToString("X") + " actual=0x" + actual.ToString("X"));
+                }
+                ex = actual;
             }
+            _clickThrough = (ex & WsExTransparent) != 0;
         }
 
         bool EnsureWindowHandle()

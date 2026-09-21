@@ -354,16 +354,16 @@ namespace CrazyChat.Overlay
 
         public void Open(ulong friendId)
         {
-            Open(friendId, focusInput: true, hardSteal: false);
+            Open(friendId, focusInput: true);
         }
 
-        /// <summary>Keyboard targeting Enter — may AttachThreadInput once to type into chat.</summary>
+        /// <summary>Keyboard targeting Enter uses the same focus request as a mouse open.</summary>
         public void OpenFromKeyboard(ulong friendId)
         {
-            Open(friendId, focusInput: true, hardSteal: true);
+            Open(friendId, focusInput: true);
         }
 
-        void Open(ulong friendId, bool focusInput, bool hardSteal)
+        void Open(ulong friendId, bool focusInput)
         {
             if (friendId == 0 || _chat == null || _chat.Store == null || _view == null || !_view.IsPresent(friendId))
             {
@@ -389,7 +389,7 @@ namespace CrazyChat.Overlay
 
                 if (focusInput)
                 {
-                    KeepInputFocused(requestWindowFocus: true, hardSteal: hardSteal);
+                    KeepInputFocused(requestWindowFocus: true);
                 }
             }
 
@@ -803,14 +803,14 @@ namespace CrazyChat.Overlay
             }
         }
 
-        void KeepInputFocused(bool requestWindowFocus = false, bool hardSteal = false)
+        void KeepInputFocused(bool requestWindowFocus = false)
         {
             if (!IsOpen || !isActiveAndEnabled) return;
             if (_refocusRoutine != null) StopCoroutine(_refocusRoutine);
 
-            // hardSteal only for keyboard open (double-Ctrl+Enter). Mouse paths stay soft.
+            // Request only during the explicit open action, never from delayed refocusing.
             if (requestWindowFocus)
-                _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput(forceSteal: hardSteal);
+                _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput();
 
             _refocusRoutine = StartCoroutine(RefocusInputNextFrame());
         }

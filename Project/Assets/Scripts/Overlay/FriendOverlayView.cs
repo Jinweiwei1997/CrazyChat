@@ -546,8 +546,8 @@ namespace CrazyChat.Overlay
 
         public void ClaimInteractionFocus()
         {
-            // Soft only — mouse already delivered input; AttachThreadInput hangs vs fullscreen apps.
-            GetComponent<TransparentOverlayWindow>()?.FocusForTextInput(forceSteal: false);
+            // Request foreground only for this explicit UI action.
+            GetComponent<TransparentOverlayWindow>()?.FocusForTextInput();
         }
 
         public void OnChipClicked(FriendAvatarChip chip)
