@@ -32,6 +32,82 @@ namespace CrazyChat.Overlay
         public bool ReduceTransparency { get; private set; } = true;
         public int TargetDisplayIndex { get; private set; }
         public int AvatarVersion { get; private set; }
+        public const int AvatarPresetCount = 3;
+        AvatarPreset[] _avatarPresets = new AvatarPreset[AvatarPresetCount];
+
+        [Serializable]
+        public sealed class AvatarPreset
+        {
+            public string imageA;
+            public string imageB;
+            public float scale = 1f;
+        }
+
+        public AvatarPreset GetAvatarPreset(int index) =>
+            index >= 0 && index < AvatarPresetCount ? _avatarPresets[index] : null;
+
+        public void DeleteAvatarPreset(int index)
+        {
+            if (index < 0 || index >= AvatarPresetCount) return;
+            _avatarPresets[index] = null;
+            Save();
+        }
+
+        public bool TryPutAvatarPreset(int index)
+        {
+            if (index < 0 || index >= AvatarPresetCount || !AvatarEnabled) return false;
+            try
+            {
+                var preset = new AvatarPreset
+                {
+                    imageA = Convert.ToBase64String(File.ReadAllBytes(OverlayAvatarCodec.LocalPathA)),
+                    imageB = Convert.ToBase64String(File.ReadAllBytes(OverlayAvatarCodec.LocalPathB)),
+                    scale = Scale
+                };
+                _avatarPresets[index] = preset;
+                Save();
+                return true;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[Overlay] 放入形象失败: " + e.Message);
+                return false;
+            }
+        }
+
+        public bool TryTakeAvatarPreset(int index)
+        {
+            var preset = GetAvatarPreset(index);
+            if (preset == null) return false;
+            try
+            {
+                // Decode both images before touching the active pair.
+                var a = OverlayAvatarCodec.ProcessToPng(Convert.FromBase64String(preset.imageA));
+                var b = OverlayAvatarCodec.ProcessToPng(Convert.FromBase64String(preset.imageB));
+                if (a == null || b == null) return false;
+                var pathA = OverlayAvatarCodec.LocalPathA;
+                var pathB = OverlayAvatarCodec.LocalPathB;
+                var oldA = File.Exists(pathA) ? File.ReadAllBytes(pathA) : null;
+                var oldB = File.Exists(pathB) ? File.ReadAllBytes(pathB) : null;
+                if (!OverlayAvatarCodec.TryWrite(pathA, a) || !OverlayAvatarCodec.TryWrite(pathB, b))
+                {
+                    if (oldA != null) OverlayAvatarCodec.TryWrite(pathA, oldA);
+                    else OverlayAvatarCodec.DeleteQuiet(pathA);
+                    if (oldB != null) OverlayAvatarCodec.TryWrite(pathB, oldB);
+                    else OverlayAvatarCodec.DeleteQuiet(pathB);
+                    return false;
+                }
+                Scale = Mathf.Clamp(preset.scale, MinScale, MaxScale);
+                AvatarVersion = Mathf.Max(1, AvatarVersion + 1);
+                Save();
+                return true;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[Overlay] 取出形象失败: " + e.Message);
+                return false;
+            }
+        }
         public List<TodoItem> Todos { get; private set; } = new List<TodoItem>();
         public event Action TodosChanged;
         public const string CheckinId = "checkin";
@@ -161,6 +237,9 @@ namespace CrazyChat.Overlay
                 ReduceTransparency = data.reduceTransparency;
                 TargetDisplayIndex = Mathf.Max(0, data.targetDisplayIndex);
                 AvatarVersion = data.avatarVersion;
+                _avatarPresets = new AvatarPreset[AvatarPresetCount];
+                if (data.avatarPresets != null)
+                    Array.Copy(data.avatarPresets, _avatarPresets, Math.Min(data.avatarPresets.Length, AvatarPresetCount));
                 Todos = data.todos ?? new List<TodoItem>();
                 Todos.RemoveAll(item => item == null);
                 EnsureCheckin();
@@ -201,6 +280,7 @@ namespace CrazyChat.Overlay
                 reduceTransparency = ReduceTransparency,
                 targetDisplayIndex = TargetDisplayIndex,
                 avatarVersion = AvatarVersion,
+                avatarPresets = _avatarPresets,
                 todos = Todos
             }, true);
             WriteLocal(json);
@@ -346,6 +426,7 @@ namespace CrazyChat.Overlay
             public bool reduceTransparency = true;
             public int targetDisplayIndex;
             public int avatarVersion;
+            public AvatarPreset[] avatarPresets;
             public List<TodoItem> todos = new List<TodoItem>();
         }
     }

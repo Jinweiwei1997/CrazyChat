@@ -23,6 +23,24 @@ namespace CrazyChat.Overlay
         const string ControlSpriteResource = "Overlay/UI/control_rect";
         const string SettingsIconResource = "Overlay/UI/codicon_settings";
         const string CloseIconResource = "Overlay/UI/codicon_close";
+        // 角标画到 11px，codicon 原笔画（约 1.3/16）细到看不清，另烘一版加粗的。
+        const string CheckBoldIconResource = "Overlay/UI/codicon_check_bold";
+        const string CloseBoldIconResource = "Overlay/UI/codicon_close_bold";
+        const string SaveIconResource = "Overlay/UI/codicon_save";
+        // 收藏格一排三个，列按锚点均分（页面宽 CardWidth-24，每格约 76px），缩略图允许压出格子。
+        const float PresetSlotWidth = 72f;
+        const float PresetSlotHeight = 90f;
+        const float PresetHitSize = 52f;
+        const float PresetHitY = 16f;
+        const float PresetPhotoSize = 42f;
+        // × 和 √：缩略图左右上角的小圆底；保存仍是格子下方的大图标。
+        const float PresetCornerSize = 15f;
+        const float PresetCornerIcon = 11f;
+        const float PresetCornerX = 22f;
+        const float PresetCornerY = 22f;
+        const float PresetBadgeSize = 30f;
+        const float PresetBadgeIcon = 22f;
+        const float PresetPutY = -28f;
 
         FriendOverlayView _view;
         [SerializeField] GameObject _panel;
@@ -53,9 +71,18 @@ namespace CrazyChat.Overlay
         Sprite _controlSprite;
         Sprite _settingsIcon;
         Sprite _closeIcon;
+        Sprite _checkBoldIcon;
+        Sprite _closeBoldIcon;
+        Sprite _saveIcon;
         Text _avatarSetupStatus;
         Image _slotAImage;
         Image _slotBImage;
+        readonly Image[] _presetImages = new Image[OverlayUserSettings.AvatarPresetCount];
+        readonly Image[] _presetDynamicImages = new Image[OverlayUserSettings.AvatarPresetCount];
+        readonly Image[] _presetHits = new Image[OverlayUserSettings.AvatarPresetCount];
+        readonly Button[] _presetPutButtons = new Button[OverlayUserSettings.AvatarPresetCount];
+        readonly Button[] _presetTakeButtons = new Button[OverlayUserSettings.AvatarPresetCount];
+        readonly Button[] _presetDeleteButtons = new Button[OverlayUserSettings.AvatarPresetCount];
         GameObject _avatarSetup;
         OverlayAvatarCropUi _cropUi;
         Coroutine _pickRoutine;
@@ -124,6 +151,25 @@ namespace CrazyChat.Overlay
         }
 
 #if UNITY_EDITOR
+        [UnityEditor.MenuItem("CrazyChat/Add Avatar Preset Slots")]
+        static void EditorSaveAvatarPresets()
+        {
+            const string path = "Assets/Resources/Prefab/UI/SettingsMenu.prefab";
+            var root = UnityEditor.PrefabUtility.LoadPrefabContents(path);
+            try
+            {
+                var ui = root.GetComponent<OverlaySettingsUi>();
+                var setup = FindNode(ui._cardRt, "Pages/DynamicPage/DynamicHost/AvatarSetup");
+                if (setup == null) throw new System.InvalidOperationException("缺少动态页 AvatarSetup。");
+                var font = setup.Find("Title").GetComponent<Text>().font;
+                ui.BuildAvatarPresets(setup);
+                foreach (var label in setup.Find("Presets").GetComponentsInChildren<Text>(true))
+                    label.font = font;
+                UnityEditor.PrefabUtility.SaveAsPrefabAsset(root, path);
+            }
+            finally { UnityEditor.PrefabUtility.UnloadPrefabContents(root); }
+        }
+
         public void EditorPopulate()
         {
             Build(null);
@@ -169,10 +215,6 @@ namespace CrazyChat.Overlay
             return FindNode(_cardRt, "Pages/DisplayPage/ThemeRow");
         }
 
-        public void EditorEnsureColorRows()
-        {
-        }
-
         public Transform EditorEnsureBackdrop()
         {
             var existing = FindNode(_panel != null ? _panel.transform : null, "Backdrop");
@@ -201,8 +243,6 @@ namespace CrazyChat.Overlay
 
         int ThemeId => _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
         Color ThemeBackground => OverlaySkin.ThemeBackground(ThemeId);
-        Color ThemeHeader => OverlaySkin.ThemeHeader(ThemeId);
-        Color ThemeSection => OverlaySkin.ThemeSection(ThemeId);
         Color ThemeControl => OverlaySkin.ThemeControl(ThemeId);
         Color ThemeAccent => OverlaySkin.ThemeAccent(ThemeId);
         Color ThemeText => OverlaySkin.SettingsThemeText(ThemeId);
@@ -923,6 +963,73 @@ namespace CrazyChat.Overlay
             CreateSlot(cardRt, new Vector2(-56f, 22f), true);
             CreateSlot(cardRt, new Vector2(56f, 22f), false);
             AddSetupBtn(cardRt, "Clear", "清除", new Vector2(0f, -72f));
+            BuildAvatarPresets(cardRt);
+        }
+
+        void BuildAvatarPresets(Transform root)
+        {
+            ((RectTransform)root.Find("Clear")).anchoredPosition = new Vector2(0f, -12f);
+            ((RectTransform)root.Find("SlotA")).anchoredPosition = new Vector2(-56f, 44f);
+            ((RectTransform)root.Find("SlotB")).anchoredPosition = new Vector2(56f, 44f);
+            var row = root.Find("Presets") as RectTransform;
+            if (row == null) row = (RectTransform)CreateEmpty("Presets", root).transform;
+            LayoutPresetRow(row);
+            for (var i = 0; i < OverlayUserSettings.AvatarPresetCount; i++)
+            {
+                var slot = row.Find("Preset" + i) as RectTransform;
+                if (slot == null)
+                {
+                    slot = (RectTransform)CreateEmpty("Preset" + i, row).transform;
+                    var preview = CreateImage("Preview", slot, Color.white, OverlaySprites.RoundedSquare);
+                    preview.raycastTarget = false;
+                    preview.type = Image.Type.Simple;
+                    preview.preserveAspect = true;
+                    var empty = PlaceLabel(slot, "空槽位", 10, OverlaySkin.TextMuted,
+                        Vector2.zero, new Vector2(PresetHitSize, PresetHitSize));
+                    empty.name = "Empty";
+                    // 角标结构：左上√ / 右上红叉 / 左下保存，图标在 ApplyIcons 接上。
+                    AddSetupBtn(slot, "Take", "", Vector2.zero);
+                    AddSetupBtn(slot, "Delete", "", Vector2.zero);
+                    AddSetupBtn(slot, "Put", "", Vector2.zero);
+                }
+                else if (slot.Find("Delete") == null)
+                {
+                    AddSetupBtn(slot, "Delete", "", Vector2.zero);
+                }
+
+                BuildPresetPhotos(slot);
+                LayoutPresetSlot(slot, i);
+            }
+        }
+
+        void BuildPresetPhotos(RectTransform slot)
+        {
+            var hit = slot.Find("PresetHit")?.GetComponent<Image>();
+            if (hit == null) hit = CreateImage("PresetHit", slot, Color.clear, OverlaySprites.RoundedSquare);
+            hit.raycastTarget = true;
+            if (hit.GetComponent<Button>() == null) hit.gameObject.AddComponent<Button>();
+            for (var side = 0; side < 2; side++)
+            {
+                var name = side == 0 ? "PhotoBack" : "PhotoFront";
+                var frame = hit.transform.Find(name)?.GetComponent<Image>();
+                if (frame == null) frame = CreateImage(name, hit.transform, Color.white, null);
+                frame.raycastTarget = false;
+                frame.rectTransform.localRotation = Quaternion.Euler(0f, 0f, side == 0 ? 0f : -30f);
+                var preview = frame.transform.Find("Preview")?.GetComponent<Image>();
+                if (preview == null && side == 0) preview = slot.Find("Preview")?.GetComponent<Image>();
+                if (preview == null) preview = CreateImage("Preview", frame.transform, Color.white, null);
+                preview.transform.SetParent(frame.transform, false);
+                preview.raycastTarget = false;
+                preview.type = Image.Type.Simple;
+                preview.preserveAspect = true;
+                Stretch(preview.rectTransform);
+            }
+            var empty = slot.Find("Empty").GetComponent<Text>();
+            empty.text = "+";
+            empty.fontSize = 24;
+            empty.transform.SetAsLastSibling();
+            foreach (var name in new[] { "Put", "Take", "Delete" })
+                slot.Find(name).gameObject.SetActive(false);
         }
 
         void BindAvatarSetup()
@@ -943,6 +1050,28 @@ namespace CrazyChat.Overlay
             _slotBImage = FindNode(root, "SlotB/Preview")?.GetComponent<Image>();
             BindSlot(FindNode(root, "SlotA"), true);
             BindSlot(FindNode(root, "SlotB"), false);
+            LayoutPresetRow(root.Find("Presets"));
+            for (var i = 0; i < OverlayUserSettings.AvatarPresetCount; i++)
+            {
+                var index = i;
+                var slot = root.Find("Presets/Preset" + i);
+                if (slot == null) continue;
+                _presetHits[i] = slot.Find("PresetHit").GetComponent<Image>();
+                _presetImages[i] = slot.Find("PresetHit/PhotoBack/Preview").GetComponent<Image>();
+                _presetDynamicImages[i] = slot.Find("PresetHit/PhotoFront/Preview").GetComponent<Image>();
+                _presetPutButtons[i] = slot.Find("Put").GetComponent<Button>();
+                _presetTakeButtons[i] = slot.Find("Take").GetComponent<Button>();
+                _presetDeleteButtons[i] = slot.Find("Delete")?.GetComponent<Button>();
+                LayoutPresetSlot(slot, i);
+                BindClick(_presetPutButtons[i], () => UseAvatarPreset(index, true));
+                BindClick(_presetTakeButtons[i], () => UseAvatarPreset(index, false));
+                BindClick(_presetDeleteButtons[i], () =>
+                {
+                    if (_view == null || _view.Settings == null) return;
+                    _view.Settings.DeleteAvatarPreset(index);
+                    RefreshAvatarSlots();
+                });
+            }
             BindClick(FindNode(root, "Clear"), () =>
             {
                 if (_view == null || _view.Settings == null)
@@ -966,6 +1095,112 @@ namespace CrazyChat.Overlay
             }
 
             BindClick(slot, () => BeginPickSlot(slotA));
+        }
+
+        /// <summary>收藏格摆位，连带缩略图和三个图标按钮；编辑器构建与运行时绑定共用。</summary>
+        static void LayoutPresetSlot(Transform node, int index)
+        {
+            var slot = node as RectTransform;
+            if (slot == null)
+            {
+                return;
+            }
+
+            var count = OverlayUserSettings.AvatarPresetCount;
+            slot.anchorMin = slot.anchorMax = new Vector2((index + 0.5f) / count, 0f);
+            slot.pivot = new Vector2(0.5f, 0f);
+            slot.sizeDelta = new Vector2(PresetSlotWidth, PresetSlotHeight);
+            slot.anchoredPosition = Vector2.zero;
+
+            var hit = slot.Find("PresetHit") as RectTransform;
+            if (hit != null)
+            {
+                hit.sizeDelta = new Vector2(PresetHitSize, PresetHitSize);
+                hit.anchoredPosition = new Vector2(0f, PresetHitY);
+                PlacePresetPhoto(hit.Find("PhotoBack") as RectTransform, true);
+                PlacePresetPhoto(hit.Find("PhotoFront") as RectTransform, false);
+            }
+
+            var empty = slot.Find("Empty") as RectTransform;
+            if (empty != null)
+            {
+                empty.sizeDelta = new Vector2(PresetHitSize, PresetHitSize);
+                empty.anchoredPosition = new Vector2(0f, PresetHitY);
+            }
+
+            PlacePresetBadge(slot.Find("Take"), -PresetCornerX, PresetHitY + PresetCornerY, PresetCornerSize);
+            PlacePresetBadge(slot.Find("Delete"), PresetCornerX, PresetHitY + PresetCornerY, PresetCornerSize);
+            PlacePresetBadge(slot.Find("Put"), 0f, PresetPutY, PresetBadgeSize);
+        }
+
+        static void LayoutPresetRow(Transform node)
+        {
+            var row = node as RectTransform;
+            if (row == null)
+            {
+                return;
+            }
+
+            row.anchorMin = new Vector2(0f, 0f);
+            row.anchorMax = new Vector2(1f, 0f);
+            row.pivot = new Vector2(0.5f, 0f);
+            row.sizeDelta = new Vector2(0f, PresetSlotHeight);
+            row.anchoredPosition = Vector2.zero;
+            for (var i = OverlayUserSettings.AvatarPresetCount; ; i++)
+            {
+                var extra = row.Find("Preset" + i);
+                if (extra == null)
+                {
+                    break;
+                }
+
+                extra.gameObject.SetActive(false);
+            }
+        }
+
+        /// <summary>两张错位的相片，放大到压出格子边界；方形白底垫在图片下面。</summary>
+        static void PlacePresetPhoto(RectTransform frame, bool back)
+        {
+            if (frame == null)
+            {
+                return;
+            }
+
+            frame.sizeDelta = new Vector2(PresetPhotoSize, PresetPhotoSize);
+            frame.anchoredPosition = back ? new Vector2(-5f, 3f) : new Vector2(5f, -3f);
+            var image = frame.GetComponent<Image>();
+            if (image != null)
+            {
+                image.sprite = null;
+                image.color = Color.white;
+            }
+
+            var preview = frame.Find("Preview") as RectTransform;
+            if (preview != null)
+            {
+                preview.offsetMin = Vector2.zero;
+                preview.offsetMax = Vector2.zero;
+            }
+        }
+
+        /// <summary>收藏格按钮：隐藏文字，位置和尺寸由调用方指定；圆底在 ApplyTheme 里按名字上色。</summary>
+        static void PlacePresetBadge(Transform node, float x, float y, float size)
+        {
+            var rt = node as RectTransform;
+            if (rt == null)
+            {
+                return;
+            }
+
+            var label = rt.GetComponentInChildren<Text>(true);
+            if (label != null)
+            {
+                label.gameObject.SetActive(false);
+            }
+
+            rt.sizeDelta = new Vector2(size, size);
+            rt.anchoredPosition = new Vector2(x, y);
+            rt.SetAsLastSibling();
         }
 
         void CreateSlot(Transform parent, Vector2 pos, bool slotA)
@@ -1008,11 +1243,6 @@ namespace CrazyChat.Overlay
             rt.sizeDelta = new Vector2(72f, 28f);
             FillLabel(rt, title, 13, OverlaySkin.Text);
             img.gameObject.AddComponent<Button>();
-        }
-
-        void OpenAvatarSetup()
-        {
-            ShowPage("DynamicPage");
         }
 
         void BeginPickSlot(bool slotA)
@@ -1088,6 +1318,7 @@ namespace CrazyChat.Overlay
 
         void RefreshAvatarSlots()
         {
+            RefreshAvatarPresets();
             if (_slotAImage == null || _slotBImage == null)
             {
                 return;
@@ -1103,6 +1334,77 @@ namespace CrazyChat.Overlay
                     : "需设置两张图后才会启用";
                 _avatarSetupStatus.color = OverlaySkin.TextMuted;
             }
+        }
+
+        void UseAvatarPreset(int index, bool put)
+        {
+            if (_view == null || _view.Settings == null) return;
+            var success = put ? _view.Settings.TryPutAvatarPreset(index) : _view.Settings.TryTakeAvatarPreset(index);
+            if (success && !put)
+            {
+                _view.ApplyUserSettings();
+                _view.NotifyAvatarPresenceChanged();
+            }
+            RefreshAvatarSlots();
+            RefreshLabels();
+            if (!success && _avatarSetupStatus != null)
+                _avatarSetupStatus.text = put
+                    ? "存入失败，请先设置完整 A/B 图"
+                    : "应用失败，这一格的图片无法读取";
+        }
+
+        void RefreshAvatarPresets()
+        {
+            if (_view == null || _view.Settings == null) return;
+            for (var i = 0; i < _presetImages.Length; i++)
+            {
+                var image = _presetImages[i];
+                if (image == null) continue;
+                var preset = _view.Settings.GetAvatarPreset(i);
+                SetPresetPhoto(image, preset?.imageA);
+                SetPresetPhoto(_presetDynamicImages[i], preset?.imageB);
+                var ready = image.enabled && _presetDynamicImages[i].enabled;
+                var hit = _presetHits[i];
+                image.transform.parent.gameObject.SetActive(ready);
+                _presetDynamicImages[i].transform.parent.gameObject.SetActive(ready);
+                hit.transform.parent.Find("Empty").gameObject.SetActive(!ready);
+                hit.color = WithAlpha(ThemeAccent, 0.06f);
+                // 保存：当前 A/B 完整时可用；√ 和红叉：这一格有图才出现。
+                var hasPreset = preset != null &&
+                    (!string.IsNullOrEmpty(preset.imageA) || !string.IsNullOrEmpty(preset.imageB));
+                if (_presetPutButtons[i] != null)
+                {
+                    _presetPutButtons[i].gameObject.SetActive(true);
+                    _presetPutButtons[i].interactable = _view.Settings.AvatarEnabled;
+                }
+                if (_presetTakeButtons[i] != null)
+                    _presetTakeButtons[i].gameObject.SetActive(ready);
+                if (_presetDeleteButtons[i] != null)
+                    _presetDeleteButtons[i].gameObject.SetActive(hasPreset);
+            }
+        }
+
+        static void SetPresetPhoto(Image image, string encoded)
+        {
+            if (image == null) return;
+            ReleaseRuntimeSlotSprite(image);
+            Sprite sprite = null;
+            if (!string.IsNullOrEmpty(encoded))
+            {
+                try { sprite = OverlayAvatarCodec.LoadSprite(System.Convert.FromBase64String(encoded)); }
+                catch (System.Exception) { /* Corrupt slots remain replaceable/deletable. */ }
+            }
+            image.sprite = sprite;
+            image.color = Color.white;
+            image.enabled = sprite != null;
+        }
+
+        void OnDestroy()
+        {
+            ReleaseRuntimeSlotSprite(_slotAImage);
+            ReleaseRuntimeSlotSprite(_slotBImage);
+            foreach (var image in _presetImages) ReleaseRuntimeSlotSprite(image);
+            foreach (var image in _presetDynamicImages) ReleaseRuntimeSlotSprite(image);
         }
 
         static void SetSlotPreview(Image target, string path)
@@ -1574,22 +1876,49 @@ namespace CrazyChat.Overlay
         {
             _settingsIcon = Resources.Load<Sprite>(SettingsIconResource);
             _closeIcon = Resources.Load<Sprite>(CloseIconResource);
+            _checkBoldIcon = Resources.Load<Sprite>(CheckBoldIconResource);
+            _closeBoldIcon = Resources.Load<Sprite>(CloseBoldIconResource);
+            _saveIcon = Resources.Load<Sprite>(SaveIconResource);
 
             ApplyIcon(EnsureIcon(_buttonRt, SettingsIconSize), _settingsIcon);
             ApplyIcon(EnsureIcon(FindNode(_cardRt, "Header/Close"), 16f), _closeIcon);
+
+            // 收藏格：左上√、右上红叉用小圆底，保存用下方大图标。
+            for (var i = 0; i < OverlayUserSettings.AvatarPresetCount; i++)
+            {
+                if (_presetTakeButtons[i] != null)
+                {
+                    ApplyIcon(
+                        EnsureIcon(_presetTakeButtons[i].transform, PresetCornerIcon, "TakeIcon"),
+                        _checkBoldIcon);
+                }
+                if (_presetDeleteButtons[i] != null)
+                {
+                    ApplyIcon(
+                        EnsureIcon(_presetDeleteButtons[i].transform, PresetCornerIcon, "DeleteIcon"),
+                        _closeBoldIcon);
+                }
+                if (_presetPutButtons[i] != null)
+                {
+                    ApplyIcon(
+                        EnsureIcon(_presetPutButtons[i].transform, PresetBadgeIcon, "PutIcon"),
+                        _saveIcon);
+                }
+            }
         }
 
-        static Image EnsureIcon(Transform parent, float size)
+        static Image EnsureIcon(Transform parent, float size, string name = "Icon")
         {
             if (parent == null)
             {
                 return null;
             }
 
-            var icon = parent.Find("Icon")?.GetComponent<Image>();
+            var icon = parent.Find(name)?.GetComponent<Image>();
             if (icon == null)
             {
                 icon = CreateIconPlaceholder(parent, size);
+                icon.gameObject.name = name;
             }
 
             icon.rectTransform.sizeDelta = new Vector2(size, size);
@@ -1714,15 +2043,35 @@ namespace CrazyChat.Overlay
                 }
 
                 var name = image.gameObject.name;
-                if (name == "Icon")
+                if (name == "Icon" || name == "PutIcon")
                 {
                     image.color = ThemeText;
                     continue;
                 }
 
-                if (name == "HueSwatch" || name == "HueHandle" || name == "IntensityHandle" ||
-                    name == "Preview" || name == "Handle" ||
-                    name == "Frame" || name == "Mask" || name == "TipBg")
+                // 红叉/√ 压在实心圆底上用对比色。
+                if (name == "DeleteIcon")
+                {
+                    image.color = OverlaySkin.ContrastText(OverlaySkin.ThemeDanger(ThemeId));
+                    continue;
+                }
+
+                if (name == "TakeIcon")
+                {
+                    image.color = OverlaySkin.ContrastText(OverlaySkin.ThemeSuccess(ThemeId));
+                    continue;
+                }
+
+                if (name == "Frame")
+                {
+                    // 裁剪台底板：只换皮肤色，圆角方形 sprite 保持构建时的。
+                    image.color = OverlaySkin.ThemeInputBackground(ThemeId);
+                    continue;
+                }
+
+                if (name == "PhotoBack" || name == "PhotoFront" || name == "PresetHit" ||
+                    name == "HueSwatch" || name == "HueHandle" || name == "IntensityHandle" ||
+                    name == "Preview" || name == "Handle" || name == "Mask")
                 {
                     continue;
                 }
@@ -1735,13 +2084,17 @@ namespace CrazyChat.Overlay
                     continue;
                 }
 
+                // 收藏格按钮：红叉/√ 用圆底，保存无底；事项页里的 Delete 行按钮不在此列。
+                var presetBadge = (name == "Delete" || name == "Put" || name == "Take") &&
+                                  image.transform.parent != null &&
+                                  image.transform.parent.name.StartsWith("Preset");
                 var circularButton =
-                    name == "Close" || name == "Minus" || name == "Plus";
+                    name == "Close" || name == "Minus" || name == "Plus" || presetBadge;
                 var roundedSurface =
                     name == "Background" || name == "Header" || name == "TabBar" ||
                     name == "ThemeCard" || name == "ColorCard" ||
                     name == "Template" || name == "DisplayDropdown" ||
-                    name == "ThemeDropdown" || name == "Toggle" ||
+                    name == "ThemeDropdown" || name == "Toggle" || name == "TipBg" ||
                     name.EndsWith("Tab");
                 image.sprite = circularButton
                     ? OverlaySprites.Circle
@@ -1751,19 +2104,7 @@ namespace CrazyChat.Overlay
                 image.type = circularButton ? Image.Type.Simple : Image.Type.Sliced;
                 image.preserveAspect = circularButton;
                 var selectedTab = name.EndsWith("Tab") && TabToPage(name) == _page;
-                if (name == "Background")
-                {
-                    image.color = ThemeBackground;
-                }
-                else if (name == "Header")
-                {
-                    image.color = ThemeBackground;
-                }
-                else if (name == "TabBar")
-                {
-                    image.color = ThemeBackground;
-                }
-                else if (name == "Template")
+                if (name == "Background" || name == "Header" || name == "TabBar" || name == "Template")
                 {
                     image.color = ThemeBackground;
                 }
@@ -1775,13 +2116,26 @@ namespace CrazyChat.Overlay
                 {
                     image.color = OverlaySkin.ThemeDivider(ThemeId);
                 }
+                else if (name == "TipBg")
+                {
+                    // A/B 图上的说明条：半透明主题底，文字在 LabelColor 里取对比色。
+                    image.color = WithAlpha(ThemeBackground, 0.72f);
+                }
                 else if (name == "Item")
                 {
                     image.color = Color.clear;
                 }
-                else if (name == "Close")
+                else if (name == "Close" || (presetBadge && name == "Put"))
                 {
                     image.color = Color.clear;
+                }
+                else if (presetBadge && name == "Delete")
+                {
+                    image.color = OverlaySkin.ThemeDanger(ThemeId);
+                }
+                else if (presetBadge && name == "Take")
+                {
+                    image.color = OverlaySkin.ThemeSuccess(ThemeId);
                 }
                 else if (name.EndsWith("Tab"))
                 {
@@ -1808,14 +2162,7 @@ namespace CrazyChat.Overlay
                 var label = _themeLabels[i];
                 if (label != null)
                 {
-                    label.color = label.gameObject.name == "Tip"
-                        ? Color.white
-                        : label.transform.parent.name == "QuitGameRow"
-                        ? OverlaySkin.ThemeDanger(ThemeId)
-                        : label.gameObject.name == "Muted" || label.gameObject.name == "Status" ||
-                          label.gameObject.name.EndsWith("Hint")
-                            ? ThemeMuted
-                            : ThemeText;
+                    label.color = LabelColor(label);
                 }
             }
 
@@ -1840,6 +2187,25 @@ namespace CrazyChat.Overlay
 
             RefreshAppearanceControls();
             _todosUi?.ApplyTheme();
+        }
+
+        Color LabelColor(Text label)
+        {
+            var name = label.gameObject.name;
+            if (name == "Tip")
+            {
+                // 压在半透明 TipBg 上，跟着皮肤深浅取黑白。
+                return OverlaySkin.ContrastText(ThemeBackground);
+            }
+
+            if (label.transform.parent != null && label.transform.parent.name == "QuitGameRow")
+            {
+                return OverlaySkin.ThemeDanger(ThemeId);
+            }
+
+            return name == "Muted" || name == "Status" || name == "Empty" || name.EndsWith("Hint")
+                ? ThemeMuted
+                : ThemeText;
         }
 
         void SetToggle(Text label, bool on)

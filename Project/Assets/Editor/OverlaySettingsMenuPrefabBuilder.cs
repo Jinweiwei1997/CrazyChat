@@ -74,7 +74,6 @@ public static class OverlaySettingsMenuPrefabBuilder
                 Debug.LogError("[Overlay] 设置 Prefab 中找不到 ThemeRow。");
                 return;
             }
-            ui.EditorEnsureColorRows();
             if (ui.EditorEnsureBackdrop() == null)
             {
                 Debug.LogError("[Overlay] 设置 Prefab 中无法加入 Backdrop。");

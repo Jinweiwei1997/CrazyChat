@@ -85,6 +85,12 @@ namespace CrazyChat.Overlay
             }
 
             var bytes = File.ReadAllBytes(path);
+            return LoadSprite(bytes);
+        }
+
+        public static Sprite LoadSprite(byte[] bytes)
+        {
+            if (bytes == null || bytes.Length == 0) return null;
             var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
             if (!tex.LoadImage(bytes))
             {

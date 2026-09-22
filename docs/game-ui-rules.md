@@ -274,6 +274,9 @@
 
 - 两个图槽：`闲置图 A`、`动态图 B`。两张图都有效才启用。
 - `清除`：删除 A/B 两张图，头像回 Steam 图。
+- 收藏格：三格排成一排，缩略图可压出格子边界，图片垫方形白底。√（`codicon_check_bold`）在缩略图左上角、红叉（`codicon_close_bold`）在右上角，都是 15px 圆底加 11px 图标；圆底分别用 `ThemeSuccess` 绿和 `ThemeDanger` 红，图标按底色取对比色。保存（`codicon_save` 染正文色、无底，30px 点击区加 22px 图标）单独放在格子下方。红叉只在有图时出现，√ 只在这一格有完整图时出现；保存把当前 A/B 图和缩放写入这一格，当前 A/B 不完整时不可点。三个图标统一按 64px 画布里 48px 内容框烘制；角标只有 11px，codicon 原笔画在这个尺寸下是发丝线，所以 √/× 用加粗版（笔画约 2.9/16），标题栏关闭键仍用常规 `codicon_close`。
+- 小尺寸图标防锯齿：图标 PNG 要开 mipmap（`enableMipMap: 1` + `mipMapsPreserveCoverage: 1`），程序化圆底 `OverlaySprites.Circle` 也带 mip 链。64px 或 128px 贴图缩到 11~22px 时没有 mip 链就会欠采样出锯齿。
+- A/B 图上的说明条底 `TipBg` 用半透明 `ThemeBackground`、文字取对比色；裁剪台底板 `Frame` 用 `ThemeInputBackground`；空槽位 `+` 用 `ThemeMuted`。整页不留硬编码黑白底。
 - 选图后本页切换到裁剪视图：拖动、滚轮或按住缩小/放大，取消回图槽，确认写入对应 A/B 槽。
 
 ### “系统”页

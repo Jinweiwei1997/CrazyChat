@@ -42,6 +42,9 @@ Use `OverlaySprites.RoundedRect` for cards and rounded surfaces, `OverlaySprites
 - Body/control text: approximately 13px.
 - Tool icon: 16px in an approximately 28px hit area.
 - Use existing Codicons as transparent PNG sprites and tint them with theme text or accent color.
+- Bake icons into a 64px canvas with a 48px content box so mixed icons read at the same weight.
+- Enable mipmaps (`enableMipMap: 1`, `mipMapsPreserveCoverage: 1`) on icon PNGs, and keep procedural sprites such as `OverlaySprites.Circle` on a mip chain. A 64-128px texture drawn at 11-22px aliases without one.
+- Below roughly 14px, a stock Codicon hairline stroke disappears. Bake a bolder variant (stroke around 2.9/16) for that size instead of scaling the standard icon, and leave the standard icon in place for normal 16px use.
 - Tool buttons rest transparent, show `ThemeHover` on hover, and do not add a permanent filled background.
 - Inputs use theme input background, themed caret/selection, and a subtle divider-colored boundary.
 - Selected/active state must be visible through accent color, not through unrelated hardcoded color.

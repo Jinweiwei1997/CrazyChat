@@ -189,7 +189,8 @@ namespace CrazyChat.Overlay
 
         static Sprite CreateCircle(int size)
         {
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            // 带 mip 链：圆底最小画到 15px，只靠双线性缩小 128px 贴图边缘会有锯齿。
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, true)
             {
                 filterMode = FilterMode.Bilinear,
                 wrapMode = TextureWrapMode.Clamp,
@@ -211,7 +212,7 @@ namespace CrazyChat.Overlay
             }
 
             tex.SetPixels(pixels);
-            tex.Apply(false, false);
+            tex.Apply(true, false);
             return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
         }
 
