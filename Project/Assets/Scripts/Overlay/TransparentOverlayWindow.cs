@@ -19,10 +19,14 @@ namespace CrazyChat.Overlay
         bool _wantClickThrough = true;
         float _nextStyleErrorLog;
         float _nextPointerLog;
+        float _nextHoverFocusAt;
         int _lastHeartbeatKey = int.MinValue;
         bool _primaryWasDown;
         bool _pointerHeld;
         float _pointerReleaseAfter;
+        bool _overUiWas;
+        bool _uiCaptureLatch;
+        const float HoverFocusMinInterval = 0.75f;
 #endif
         bool _applied;
         bool _alwaysOnTop = true;
@@ -89,6 +93,9 @@ namespace CrazyChat.Overlay
 
         [DllImport("user32.dll")]
         static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        static extern IntPtr SetFocus(IntPtr hWnd);
 
         [DllImport("user32.dll")]
         static extern short GetAsyncKeyState(int vKey);
@@ -259,15 +266,48 @@ namespace CrazyChat.Overlay
             }
         }
 
+        /// <summary>
+        /// Soft foreground request only. Never AttachThreadInput — that hangs against fullscreen apps.
+        /// Used when opening chat / settings, or on hover over interactive UI.
+        /// </summary>
         public void FocusForTextInput()
         {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-            if (!_applied || !EnsureWindowHandle()) return;
-            ApplyClickThrough(false);
-            // Never join another application's input queue or force its focus synchronously.
-            if (GetForegroundWindow() != _hwnd) SetForegroundWindow(_hwnd);
+            SoftRequestForeground(armPointer: true);
 #endif
         }
+
+        /// <summary>While true, keep hit-testing on so open chat/settings stay clickable.</summary>
+        public void SetUiCaptureLatch(bool on)
+        {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            _uiCaptureLatch = on;
+            if (on && _applied)
+                ApplyClickThrough(false);
+#endif
+        }
+
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+        void SoftRequestForeground(bool armPointer)
+        {
+            if (!_applied || !EnsureWindowHandle()) return;
+            if (armPointer && IsPrimaryPointerDown)
+            {
+                _pointerHeld = true;
+                _pointerReleaseAfter = Time.unscaledTime + 0.12f;
+            }
+
+            ApplyClickThrough(false);
+            if (GetForegroundWindow() == _hwnd)
+            {
+                SetFocus(_hwnd);
+                return;
+            }
+
+            SetForegroundWindow(_hwnd);
+            SetFocus(_hwnd);
+        }
+#endif
         IEnumerator Start()
         {
             Application.runInBackground = true;
@@ -322,7 +362,16 @@ namespace CrazyChat.Overlay
                 _pointerReleaseAfter = Time.unscaledTime + 0.12f;
             if (!primaryDown && Time.unscaledTime >= _pointerReleaseAfter)
                 _pointerHeld = false;
-            var wantCapture = _pointerHeld || (overUi && (!primaryDown || !_clickThrough));
+
+            // Soft-steal only on hover enter (rate-limited). Opening chat uses FocusForTextInput.
+            if (overUi && !_overUiWas && Time.unscaledTime >= _nextHoverFocusAt)
+            {
+                _nextHoverFocusAt = Time.unscaledTime + HoverFocusMinInterval;
+                SoftRequestForeground(armPointer: false);
+            }
+            _overUiWas = overUi;
+
+            var wantCapture = _uiCaptureLatch || _pointerHeld || (overUi && (!primaryDown || !_clickThrough));
             if (primaryDown && !_primaryWasDown) LogPointerPress(overUi);
             _primaryWasDown = primaryDown;
             ApplyClickThrough(!wantCapture);

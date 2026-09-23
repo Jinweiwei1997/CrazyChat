@@ -546,7 +546,7 @@ namespace CrazyChat.Overlay
 
         public void ClaimInteractionFocus()
         {
-            // Request foreground only for this explicit UI action.
+            // Soft only — mouse / explicit UI already engaged; never AttachThreadInput.
             GetComponent<TransparentOverlayWindow>()?.FocusForTextInput();
         }
 

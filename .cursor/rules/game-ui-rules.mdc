@@ -20,3 +20,4 @@ alwaysApply: true
 - A/B：两张齐才启用；按下 B、全松开 A；启用后停用弹跳/翻转。只在桌上，走通道 2。
 - 互动：悬停好友出四槽；番茄扣点击数读取 `OverlayConfig.tomatoTapCost`。Catalog + Fx + 通道 2。
 - 对方看到同步内容的前提：对方开着本游戏，并把发送者头像放在桌上。
+- 透明窗焦点/穿透：禁止 `AttachThreadInput` 与硬抢前台；硬约束见 `.cursor/rules/overlay-window-focus.mdc` 与 `docs/game-ui-rules.md`「窗口焦点与穿透」。

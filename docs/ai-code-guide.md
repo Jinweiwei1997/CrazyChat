@@ -1,6 +1,6 @@
 # CrazyChat 框架约定（给 AI）
 
-先扩展现有类，不要新开一层。目标是多个 AI 改同一套 Overlay 时，结构不膨胀、不重复。
+先扩展现有类，不要新开一层。改透明窗/聊天焦点前必读 [.cursor/rules/overlay-window-focus.mdc](../.cursor/rules/overlay-window-focus.mdc)。目标是多个 AI 改同一套 Overlay 时，结构不膨胀、不重复。
 
 现行界面、按钮功能和状态切换见 [game-ui-rules.md](game-ui-rules.md)，不要用 `桌面互动伙伴需求.md` 当现行需求。
 
@@ -39,6 +39,8 @@ OverlayBootstrap          自动拉起，只组装一次
   OverlayStealthController 右键长按隐身 / 取消隐身
 OverlaySprites            圆/圆角/字体，UI 共用
 ```
+
+- `TransparentOverlayWindow`：禁止 `AttachThreadInput` / 硬抢前台；只允许软抢与 latch，细则见 `.cursor/rules/overlay-window-focus.mdc`。
 
 策划常量 → `OverlayConfig`。用户能改的 → `OverlayUserSettings`。不要把开关同时写进两处。
 

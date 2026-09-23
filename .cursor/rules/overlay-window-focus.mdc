@@ -1,0 +1,37 @@
+---
+description: 透明窗焦点/穿透硬约束，防全屏 AppHang 与焦点回潮
+alwaysApply: true
+---
+
+# 透明窗焦点与点击穿透（硬约束）
+
+改 `TransparentOverlayWindow` / `OverlayChatUi` / 任何 `FocusForTextInput` 调用前必读。
+
+历史故障：`AttachThreadInput` + 全屏应用 → Windows AppHang；去掉硬抢后又出现「开聊不能输入」与「失焦聊天不关」来回补丁。
+
+## 禁止
+
+- 禁止 `AttachThreadInput`，禁止为抢前台去 Join 其他进程输入队列。
+- 禁止在悬停循环 / `Update` 里高频 `SetForegroundWindow`（限频；悬停进入时软抢一次即可）。
+- 禁止为「键盘开聊一定能输入」重新引入 hardSteal / forceSteal 路径。
+
+## 只允许软抢前台的时机
+
+仅以下情况可调用软抢（`SetForegroundWindow` + `SetFocus`，不 Attach）：
+
+1. 打开聊天（或其它明确需要键盘的面板打开）
+2. 鼠标悬停进入可交互 UI（限频，例如至少 0.75s）
+
+其它路径（发送后重聚焦、`ClaimInteractionFocus` 等）同样只能软抢，不得硬抢。
+
+## 聊天与焦点
+
+- 聊天打开期间用 `SetUiCaptureLatch(true)`（或等价）保持可点，关闭时清掉。
+- 前台切到其它应用（曾获得过键盘前台后失焦，或 Unity `OnApplicationFocus(false)` 且开聊已 settle）→ 自动关闭聊天；不要只 `ReleaseInputFocus` 却留着窗。
+- 输入框：打开后软抢 + `ActivateInputField`；软抢失败时仍可点选输入框（靠 latch），不要为失败再 AttachThreadInput。
+
+## 涉及文件
+
+- `TransparentOverlayWindow.cs`：穿透、软抢、悬停限频、`SetUiCaptureLatch`
+- `OverlayChatUi.cs`：开/关 latch、失焦自动 `Hide`
+- `FriendOverlayView.ClaimInteractionFocus`：只软抢

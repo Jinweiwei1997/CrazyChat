@@ -357,7 +357,7 @@ namespace CrazyChat.Overlay
             Open(friendId, focusInput: true);
         }
 
-        /// <summary>Keyboard targeting Enter uses the same focus request as a mouse open.</summary>
+        /// <summary>Keyboard targeting Enter — soft focus only (no AttachThreadInput).</summary>
         public void OpenFromKeyboard(ulong friendId)
         {
             Open(friendId, focusInput: true);
@@ -383,6 +383,12 @@ namespace CrazyChat.Overlay
             transform.SetAsLastSibling();
             _chat.Store.MarkRead(friendId);
             Refresh();
+
+            _sawKeyboardFocus = false;
+            _openedAt = Time.unscaledTime;
+            var window = _view != null ? _view.GetComponent<TransparentOverlayWindow>() : null;
+            window?.SetUiCaptureLatch(true);
+
             if (_input != null)
             {
                 _input.text = string.Empty;
@@ -419,6 +425,11 @@ namespace CrazyChat.Overlay
             _compactStartIndex = 0;
             _compactMessageCount = 0;
             _compactLastMessage = null;
+            _sawKeyboardFocus = false;
+            _openedAt = -1f;
+            var window = _view != null ? _view.GetComponent<TransparentOverlayWindow>() : null;
+            window?.SetUiCaptureLatch(false);
+
             if (_card != null)
             {
                 _card.SetActive(false);
@@ -793,6 +804,8 @@ namespace CrazyChat.Overlay
         }
 
         bool _releasingInputFocus;
+        bool _sawKeyboardFocus;
+        float _openedAt = -1f;
 
         bool HasKeyboardFocus
         {
@@ -808,7 +821,7 @@ namespace CrazyChat.Overlay
             if (!IsOpen || !isActiveAndEnabled) return;
             if (_refocusRoutine != null) StopCoroutine(_refocusRoutine);
 
-            // Request only during the explicit open action, never from delayed refocusing.
+            // Soft only — never AttachThreadInput (fullscreen AppHang).
             if (requestWindowFocus)
                 _view?.GetComponent<TransparentOverlayWindow>()?.FocusForTextInput();
 
@@ -818,10 +831,13 @@ namespace CrazyChat.Overlay
         IEnumerator RefocusInputNextFrame()
         {
             yield return null;
+            if (!HasKeyboardFocus)
+                yield return null;
             _refocusRoutine = null;
-            if (!IsOpen || !HasKeyboardFocus || _input == null || !_input.gameObject.activeInHierarchy)
+            if (!IsOpen || _input == null || !_input.gameObject.activeInHierarchy)
                 yield break;
 
+            // Activate even if soft foreground failed — latch keeps the field clickable.
             EventSystem.current?.SetSelectedGameObject(_input.gameObject);
             _input.ActivateInputField();
             _input.Select();
@@ -850,17 +866,33 @@ namespace CrazyChat.Overlay
 
         void OnApplicationFocus(bool focused)
         {
-            if (!focused) ReleaseInputFocus();
+            if (!IsOpen) return;
+            if (focused)
+            {
+                _sawKeyboardFocus = true;
+                return;
+            }
+
+            // Another app took focus — close chat (after we had focus, or after a short settle).
+            if (_sawKeyboardFocus || (_openedAt > 0f && Time.unscaledTime - _openedAt > 0.25f))
+                Hide();
+            else
+                ReleaseInputFocus();
         }
 
         void Update()
         {
             if (!IsOpen) return;
-            if (!HasKeyboardFocus)
+
+            if (HasKeyboardFocus)
+                _sawKeyboardFocus = true;
+            else if (_sawKeyboardFocus)
             {
-                ReleaseInputFocus();
+                // Foreground left us for another app.
+                Hide();
                 return;
             }
+
             if (Input.GetKeyDown(KeyCode.Escape)) Hide();
         }
         void LateUpdate()
