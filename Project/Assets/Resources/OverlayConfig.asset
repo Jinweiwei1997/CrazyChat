@@ -17,6 +17,7 @@ MonoBehaviour:
   chipSize: 128
   stealthHoldSeconds: 2
   maxMessagesPerFriend: 200
+  maxStoredChatMessages: 12800
   maxCompactChatMessages: 10
   unreadCap: 99
   bubbleRotateSeconds: 5

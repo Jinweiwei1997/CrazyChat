@@ -79,6 +79,13 @@ public class SteamManager : MonoBehaviour {
 		// We want our SteamManager Instance to persist across scenes.
 		DontDestroyOnLoad(gameObject);
 
+#if UNITY_EDITOR
+		// Editor Play must not call SteamAPI.Init. That registers Unity as an app
+		// launch, and Shutdown on stop marks Steam Cloud out of date.
+		Debug.Log("[BOOT] SteamManager skip Init in editor");
+		return;
+#endif
+
 		if (!Packsize.Test()) {
 			Debug.LogError("[Steamworks.NET] Packsize Test returned false, the wrong version of Steamworks.NET is being run in this platform.", this);
 		}
@@ -139,7 +146,7 @@ public class SteamManager : MonoBehaviour {
 	}
 
 	static AppId_t ResolveAppId() {
-		const uint fallback = 480u;
+		const uint fallback = 5380420u;
 		try {
 			var root = Path.GetDirectoryName(Application.dataPath);
 			if (!string.IsNullOrEmpty(root)) {

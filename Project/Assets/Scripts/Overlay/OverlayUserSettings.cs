@@ -25,6 +25,10 @@ namespace CrazyChat.Overlay
         public bool AutoStart { get; private set; }
         public bool ShowInputIcons { get; private set; }
         public bool TestMode { get; private set; }
+
+        // Editor Play starts with test friends on. That default is not written
+        // back, so a packaged build keeps the saved switch (default off).
+        bool _savedTestMode;
         public bool ShowCheckin { get; private set; } = true;
         public int SettingsTheme { get; private set; } = MinSettingsTheme;
         public float ThemeHue { get; private set; } = DefaultThemeHue;
@@ -202,6 +206,10 @@ namespace CrazyChat.Overlay
         public void Load()
         {
             EnsureCheckin();
+            TestMode = Application.isEditor;
+            _savedTestMode = false;
+            OverlayCloudFiles.SyncFromCloud(OverlayAvatarCodec.FileA, OverlayAvatarCodec.LocalPathA);
+            OverlayCloudFiles.SyncFromCloud(OverlayAvatarCodec.FileB, OverlayAvatarCodec.LocalPathB);
             var json = ReadLocal();
 
             if (string.IsNullOrEmpty(json))
@@ -226,7 +234,11 @@ namespace CrazyChat.Overlay
                 FlipHorizontal = data.flipHorizontal;
                 AutoStart = data.autoStart;
                 ShowInputIcons = data.showInputIcons;
-                TestMode = data.testMode;
+                _savedTestMode = data.testMode;
+                if (!Application.isEditor)
+                {
+                    TestMode = data.testMode;
+                }
                 // Missing field in old prefs → default true (JsonUtility bool defaults false).
                 ShowCheckin = !HasPrefsKey(json, "showCheckin") || data.showCheckin;
                 SettingsTheme = data.settingsTheme == MaxPresetTheme
@@ -272,7 +284,7 @@ namespace CrazyChat.Overlay
                 flipHorizontal = FlipHorizontal,
                 autoStart = AutoStart,
                 showInputIcons = ShowInputIcons,
-                testMode = TestMode,
+                testMode = _savedTestMode,
                 showCheckin = ShowCheckin,
                 settingsTheme = SettingsTheme,
                 themeHue = ThemeHue,
@@ -309,7 +321,11 @@ namespace CrazyChat.Overlay
 
         public void SetShowInputIcons(bool value) => ShowInputIcons = value;
 
-        public void SetTestMode(bool value) => TestMode = value;
+        public void SetTestMode(bool value)
+        {
+            TestMode = value;
+            _savedTestMode = value;
+        }
         public void SetShowCheckin(bool value) => ShowCheckin = value;
 
         public void SetTargetDisplayIndex(int value) => TargetDisplayIndex = Mathf.Max(0, value);
@@ -380,8 +396,7 @@ namespace CrazyChat.Overlay
         {
             try
             {
-                var path = Path.Combine(Application.persistentDataPath, FileName);
-                return File.Exists(path) ? File.ReadAllText(path, Encoding.UTF8) : null;
+                return OverlayCloudFiles.ReadText(FileName);
             }
             catch
             {
@@ -393,8 +408,7 @@ namespace CrazyChat.Overlay
         {
             try
             {
-                Directory.CreateDirectory(Application.persistentDataPath);
-                File.WriteAllText(Path.Combine(Application.persistentDataPath, FileName), json, Encoding.UTF8);
+                OverlayCloudFiles.WriteText(FileName, json);
             }
             catch (Exception e)
             {

@@ -117,6 +117,11 @@ namespace CrazyChat.Overlay
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(path) ?? Application.persistentDataPath);
                 File.WriteAllBytes(path, png);
+                if (IsPresenceFile(path))
+                {
+                    OverlayCloudFiles.Push(Path.GetFileName(path), png);
+                }
+
                 return true;
             }
             catch (Exception e)
@@ -134,10 +139,22 @@ namespace CrazyChat.Overlay
                 {
                     File.Delete(path);
                 }
+
+                if (IsPresenceFile(path))
+                {
+                    OverlayCloudFiles.Delete(Path.GetFileName(path));
+                }
             }
             catch (Exception)
             {
             }
+        }
+
+        static bool IsPresenceFile(string path)
+        {
+            var name = Path.GetFileName(path);
+            return string.Equals(name, FileA, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, FileB, StringComparison.OrdinalIgnoreCase);
         }
 
         static Texture2D Resize(Texture2D source, int w, int h)

@@ -130,6 +130,7 @@ namespace CrazyChat.Overlay
 
             _chatStore = new OverlayChatStore();
             _chatStore.SetMaxPerFriend(Config.maxMessagesPerFriend);
+            _chatStore.SetMaxStored(Config.maxStoredChatMessages);
             _chatStore.Load();
             _chatStore.Changed += RefreshChatPreviews;
             _chat = gameObject.AddComponent<OverlayChatService>();

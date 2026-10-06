@@ -25,6 +25,7 @@ namespace CrazyChat.Overlay
         public OverlayChatStore Store { get; private set; }
 
         readonly IntPtr[] _receiveBuffer = new IntPtr[16];
+        int _nextMessageId = 1;
 
 #if !DISABLESTEAMWORKS
         Callback<SteamNetworkingMessagesSessionRequest_t> _sessionCallback;
@@ -63,8 +64,13 @@ namespace CrazyChat.Overlay
 
         public bool Send(ulong friendId, string text)
         {
+            return Send(friendId, text, null, null);
+        }
+
+        public bool Send(ulong friendId, string text, string replyTo, string replyText)
+        {
             text = (text ?? string.Empty).Trim();
-            if (text.Length == 0 || Store == null || Encoding.UTF8.GetByteCount(text) > MaxPayloadBytes - Prefix.Length)
+            if (text.Length == 0 || Store == null)
             {
                 return false;
             }
@@ -76,15 +82,92 @@ namespace CrazyChat.Overlay
                 localId = SteamUser.GetSteamID().m_SteamID;
             }
 #endif
-            Store.Add(friendId, text, true, localId);
+            replyTo = SingleLine(replyTo);
+            replyText = Clip(SingleLine(replyText), 36);
+            var id = NextId(localId);
+            var body = EncodeBody(id, replyTo, replyText, text);
+            if (Encoding.UTF8.GetByteCount(body) > MaxPayloadBytes - Prefix.Length)
+            {
+                replyText = string.Empty;
+                body = EncodeBody(id, replyTo, replyText, text);
+                if (Encoding.UTF8.GetByteCount(body) > MaxPayloadBytes - Prefix.Length)
+                {
+                    return false;
+                }
+            }
+
+            Store.Add(friendId, text, true, localId, id, replyTo, replyText);
 
 #if !DISABLESTEAMWORKS
             if (SteamManager.Initialized && !PlayingFriendsService.IsTestFriend(friendId))
             {
-                SendP2P(friendId, text);
+                SendP2P(friendId, body);
             }
 #endif
             return true;
+        }
+
+        string NextId(ulong steamId)
+        {
+            var seq = _nextMessageId++;
+            if (_nextMessageId > 0xFFFF)
+            {
+                _nextMessageId = 1;
+            }
+
+            return ((ushort)steamId).ToString("x4") +
+                   DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString("x") +
+                   seq.ToString("x");
+        }
+
+        static string EncodeBody(string id, string replyTo, string replyText, string text)
+        {
+            return "m\n" + SingleLine(id) + "\n" + SingleLine(replyTo) + "\n" +
+                   SingleLine(replyText) + "\n" + SingleLine(text);
+        }
+
+        static bool TryReadEnvelope(string body, out string id, out string replyTo, out string replyText, out string text)
+        {
+            id = null;
+            replyTo = null;
+            replyText = null;
+            text = null;
+            if (string.IsNullOrEmpty(body) || !body.StartsWith("m\n", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var parts = body.Substring(2).Split(new[] { '\n' }, 4);
+            if (parts.Length < 4 || string.IsNullOrEmpty(parts[0]))
+            {
+                return false;
+            }
+
+            id = parts[0];
+            replyTo = parts[1];
+            replyText = parts[2];
+            text = (parts[3] ?? string.Empty).Trim();
+            return text.Length > 0;
+        }
+
+        static string SingleLine(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return string.Empty;
+            }
+
+            return value.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        }
+
+        static string Clip(string value, int max)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length <= max)
+            {
+                return value ?? string.Empty;
+            }
+
+            return value.Substring(0, max) + "…";
         }
 
 #if !DISABLESTEAMWORKS
@@ -130,11 +213,19 @@ namespace CrazyChat.Overlay
                     {
                         continue;
                     }
-                    var text = DecodePayload(message.m_pData, message.m_cbSize);
-
-                    if (Store != null && !string.IsNullOrEmpty(text))
+                    var body = DecodePayload(message.m_pData, message.m_cbSize);
+                    if (Store == null || string.IsNullOrEmpty(body))
                     {
-                        Store.Add(friendId, text, false, friendId);
+                        continue;
+                    }
+
+                    if (TryReadEnvelope(body, out var id, out var replyTo, out var replyText, out var text))
+                    {
+                        Store.Add(friendId, text, false, friendId, id, replyTo, replyText);
+                    }
+                    else
+                    {
+                        Store.Add(friendId, body, false, friendId);
                     }
                 }
                 finally

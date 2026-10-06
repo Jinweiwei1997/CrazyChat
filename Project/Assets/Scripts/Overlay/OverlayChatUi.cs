@@ -33,6 +33,8 @@ namespace CrazyChat.Overlay
         const float HistoryButtonWidth = ToolbarButtonSize;
         const float ComposerGap = 6f;
         const float WindowInset = 8f;
+        const float ReplyBarHeight = 26f;
+        const float QuoteLine = 16f;
 
         FriendOverlayView _view;
         OverlayChatService _chat;
@@ -54,6 +56,9 @@ namespace CrazyChat.Overlay
         Coroutine _refocusRoutine;
         readonly List<ChatRow> _rows = new List<ChatRow>();
         readonly List<OverlayChatMessage> _visibleMessages = new List<OverlayChatMessage>();
+        OverlayChatMessage _replyTarget;
+        RectTransform _replyBar;
+        Text _replyQuote;
         Sprite _themeSprite;
         Sprite _controlSprite;
 
@@ -133,6 +138,7 @@ namespace CrazyChat.Overlay
             BindToolbarHover(FindNode(_cardRt, "Header/Close")?.GetComponent<Image>());
             BindToolbarHover(FindNode(_cardRt, "Send")?.GetComponent<Image>());
             BindToolbarHover(FindNode(_cardRt, "History")?.GetComponent<Image>());
+            EnsureReplyBar();
             if (_input != null)
             {
                 _input.transition = Selectable.Transition.None;
@@ -271,10 +277,10 @@ namespace CrazyChat.Overlay
                     continue;
                 }
 
-                var toolbarButton = name == "Send" || name == "History" || name == "Close";
+                var toolbarButton = name == "Send" || name == "History" || name == "Close" || name == "ReplyCancel";
                 var roundedSurface =
                     name == "ChatCard" || name == "Header" || name == "Body" ||
-                    name == "Input" || name == "Bubble";
+                    name == "Input" || name == "Bubble" || name == "ReplyBar";
                 image.sprite = toolbarButton
                     ? OverlaySprites.Circle
                     : roundedSurface
@@ -288,9 +294,9 @@ namespace CrazyChat.Overlay
                         ? OverlaySkin.ThemeBackground(theme)
                         : name == "Body"
                             ? OverlaySkin.ThemeBackground(theme)
-                            : name == "Input"
+                            : name == "Input" || name == "ReplyBar"
                                 ? OverlaySkin.ThemeInputBackground(theme)
-                                : name == "Send" || name == "History" || name == "Close"
+                                : name == "Send" || name == "History" || name == "Close" || name == "ReplyCancel"
                                     ? Color.clear
                                     : OverlaySkin.ThemeControl(theme);
             }
@@ -299,7 +305,8 @@ namespace CrazyChat.Overlay
             for (var i = 0; i < labels.Length; i++)
             {
                 var name = labels[i].gameObject.name;
-                labels[i].color = name == "Status" || name == "Empty" || name == "Placeholder"
+                labels[i].color = name == "Status" || name == "Empty" || name == "Placeholder" ||
+                                  name == "Quote" || name == "ReplyQuote"
                     ? OverlaySkin.ThemeMuted(theme)
                     : OverlaySkin.SettingsThemeText(theme);
             }
@@ -371,6 +378,7 @@ namespace CrazyChat.Overlay
             }
 
             _friendId = friendId;
+            _replyTarget = null;
             _mode = ChatMode.Compact;
             var messages = _chat.Store.GetMessages(friendId);
             _compactStartIndex = ResolveCompactStartIndex(messages, friendId);
@@ -422,6 +430,7 @@ namespace CrazyChat.Overlay
 
             _mode = ChatMode.Closed;
             _friendId = 0;
+            _replyTarget = null;
             _compactStartIndex = 0;
             _compactMessageCount = 0;
             _compactLastMessage = null;
@@ -695,7 +704,7 @@ namespace CrazyChat.Overlay
             {
                 // Always start from min; FitCompactHeight grows with content after Refresh.
                 var minH = OverlayCompactChatLayout.CardHeight(
-                    OverlayCompactChatLayout.FixedChromeHeight(HeaderHeight, StatusHeight, ComposerHeight),
+                    OverlayCompactChatLayout.FixedChromeHeight(HeaderHeight, StatusHeight, ComposerChrome),
                     CompactMinBodyHeight);
                 _cardRt.sizeDelta = new Vector2(ChatWidth, minH);
                 return;
@@ -718,7 +727,7 @@ namespace CrazyChat.Overlay
                 body.anchorMin = Vector2.zero;
                 body.anchorMax = Vector2.one;
                 body.pivot = new Vector2(0.5f, 0.5f);
-                body.offsetMin = new Vector2(WindowInset, ComposerHeight + StatusHeight);
+                body.offsetMin = new Vector2(WindowInset, ComposerChrome + StatusHeight);
                 body.offsetMax = new Vector2(-WindowInset, -HeaderHeight - 1f);
             }
 
@@ -757,7 +766,11 @@ namespace CrazyChat.Overlay
                 history.gameObject.SetActive(_mode != ChatMode.Closed);
                 _historyButton = history.gameObject;
             }
+
+            PlaceReplyBar();
         }
+
+        float ComposerChrome => ComposerHeight + (_replyTarget != null ? ReplyBarHeight : 0f);
 
         void ToggleHistory()
         {
@@ -796,10 +809,33 @@ namespace CrazyChat.Overlay
             }
 
             var text = _input.text;
-            if (_chat.Send(_friendId, text))
+            var target = _replyTarget;
+            var sent = _chat.Send(
+                _friendId,
+                text,
+                target != null ? target.id : null,
+                target != null ? target.text : null);
+            if (!sent)
+            {
+                return;
+            }
+
+            if (_input != null)
             {
                 _input.text = string.Empty;
             }
+
+            // 发出去之后只保留气泡上的摘要，输入框上的「回复 xx」取消。
+            _replyTarget = null;
+            if (_mode == ChatMode.Compact)
+            {
+                Refresh();
+            }
+            else
+            {
+                ApplyComposerLayout();
+            }
+
             KeepInputFocused();
         }
 
@@ -925,6 +961,7 @@ namespace CrazyChat.Overlay
             }
 
             RebuildMessages(_chat.Store.GetMessages(_friendId));
+            ApplyComposerLayout();
         }
 
         void RebuildMessages(IReadOnlyList<OverlayChatMessage> messages)
@@ -1001,7 +1038,7 @@ namespace CrazyChat.Overlay
             }
 
             var fixedHeight = OverlayCompactChatLayout.FixedChromeHeight(
-                HeaderHeight, StatusHeight, ComposerHeight);
+                HeaderHeight, StatusHeight, ComposerChrome);
             var maxBodyHeight = OverlayCompactChatLayout.MaxBodyHeight(
                 ChatHeight, fixedHeight, CompactMinBodyHeight);
             var bodyHeight = OverlayCompactChatLayout.ClampBodyHeight(
@@ -1053,7 +1090,7 @@ namespace CrazyChat.Overlay
             // Prefer explicit Compact body sizeDelta (set by Fit); fall back to rect/max.
             var body = FindNode(_cardRt, "Body") as RectTransform;
             var fixedHeight = OverlayCompactChatLayout.FixedChromeHeight(
-                HeaderHeight, StatusHeight, ComposerHeight);
+                HeaderHeight, StatusHeight, ComposerChrome);
             var maxBodyHeight = OverlayCompactChatLayout.MaxBodyHeight(
                 ChatHeight, fixedHeight, CompactMinBodyHeight);
             float viewportBodyHeight;
@@ -1112,6 +1149,18 @@ namespace CrazyChat.Overlay
             bubbleRt.anchorMin = bubbleRt.anchorMax = new Vector2(0f, 1f);
             bubbleRt.pivot = new Vector2(0f, 1f);
 
+            var quote = PlaceAnchoredLabel(bubbleRt, "", 11, Color.white, TextAnchor.MiddleLeft);
+            quote.gameObject.name = "Quote";
+            quote.horizontalOverflow = HorizontalWrapMode.Overflow;
+            quote.verticalOverflow = VerticalWrapMode.Truncate;
+            var quoteRt = quote.rectTransform;
+            quoteRt.anchorMin = new Vector2(0f, 1f);
+            quoteRt.anchorMax = new Vector2(1f, 1f);
+            quoteRt.pivot = new Vector2(0.5f, 1f);
+            quoteRt.offsetMin = new Vector2(8f, -(4f + QuoteLine));
+            quoteRt.offsetMax = new Vector2(-8f, -4f);
+            quote.gameObject.SetActive(false);
+
             var text = PlaceAnchoredLabel(bubbleRt, "", 13, Color.white, TextAnchor.UpperLeft);
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
             text.verticalOverflow = VerticalWrapMode.Overflow;
@@ -1135,6 +1184,7 @@ namespace CrazyChat.Overlay
                 Bubble = bubble,
                 BubbleRt = bubbleRt,
                 Text = text,
+                Quote = quote,
                 Time = time
             };
         }
@@ -1154,8 +1204,20 @@ namespace CrazyChat.Overlay
                 timeOffset = TimeHeight + TimeGap;
             }
 
+            var quote = ReplyPreview(msg);
+            var hasQuote = !string.IsNullOrEmpty(quote);
+            row.Quote.gameObject.SetActive(hasQuote);
+            if (hasQuote)
+            {
+                row.Quote.text = quote;
+                row.Quote.color = OverlaySkin.ThemeMuted(theme);
+            }
+
             row.Text.text = text;
             row.Text.alignment = TextAnchor.UpperLeft;
+            var quoteBlock = hasQuote ? QuoteLine + 2f : 0f;
+            row.Text.rectTransform.offsetMin = new Vector2(8f, 6f);
+            row.Text.rectTransform.offsetMax = new Vector2(-8f, -(6f + quoteBlock));
             row.Bubble.sprite = OverlaySprites.RoundedRect;
             row.Bubble.type = Image.Type.Sliced;
             row.Bubble.color = mine
@@ -1168,7 +1230,10 @@ namespace CrazyChat.Overlay
 
             var windowWidth = _mode == ChatMode.History ? HistoryWidth : ChatWidth;
             var maxWidth = Mathf.Min(BubbleMaxWidth, windowWidth - 24f);
-            var bubbleW = Mathf.Clamp(row.Text.preferredWidth + 16f, 36f, maxWidth);
+            var quoteWidth = hasQuote ? row.Quote.preferredWidth + 16f : 0f;
+            var bubbleW = Mathf.Clamp(Mathf.Max(row.Text.preferredWidth + 16f, quoteWidth), 36f, maxWidth);
+            row.Bubble.raycastTarget = true;
+            BindClick(row.Bubble, () => SetReplyTarget(msg));
             row.BubbleRt.anchorMin = row.BubbleRt.anchorMax = mine ? new Vector2(1f, 1f) : new Vector2(0f, 1f);
             row.BubbleRt.pivot = mine ? new Vector2(1f, 1f) : new Vector2(0f, 1f);
             row.BubbleRt.anchoredPosition = new Vector2(mine ? -10f : 10f, -timeOffset);
@@ -1182,9 +1247,103 @@ namespace CrazyChat.Overlay
                 16f,
                 row.Text.cachedTextGeneratorForLayout.GetPreferredHeight(text, genSettings) /
                 Mathf.Max(0.01f, row.Text.pixelsPerUnit));
-            var bubbleH = textH + 12f;
+            var bubbleH = textH + 12f + quoteBlock;
             row.BubbleRt.sizeDelta = new Vector2(bubbleW, bubbleH);
             return bubbleH + timeOffset;
+        }
+
+        static string ReplyPreview(OverlayChatMessage msg)
+        {
+            if (msg == null || string.IsNullOrEmpty(msg.replyText))
+            {
+                return null;
+            }
+
+            return Ellipsize(SingleLine(msg.replyText), 18);
+        }
+
+        void SetReplyTarget(OverlayChatMessage msg)
+        {
+            if (!IsOpen || msg == null || string.IsNullOrEmpty(msg.text))
+            {
+                return;
+            }
+
+            _replyTarget = ReferenceEquals(_replyTarget, msg) ? null : msg;
+            ApplyComposerLayout();
+            Refresh();
+            KeepInputFocused();
+        }
+
+        void EnsureReplyBar()
+        {
+            if (_replyBar != null || _cardRt == null)
+            {
+                return;
+            }
+
+            var bar = CreateImage("ReplyBar", _cardRt, OverlaySkin.ThemeInputBackground(1), OverlaySprites.RoundedRect);
+            bar.raycastTarget = true;
+            _replyBar = bar.rectTransform;
+            _replyQuote = PlaceAnchoredLabel(_replyBar, "", 11, OverlaySkin.ThemeMuted(1), TextAnchor.MiddleLeft);
+            _replyQuote.gameObject.name = "ReplyQuote";
+            _replyQuote.horizontalOverflow = HorizontalWrapMode.Overflow;
+            _replyQuote.verticalOverflow = VerticalWrapMode.Truncate;
+            var quoteRt = _replyQuote.rectTransform;
+            quoteRt.anchorMin = Vector2.zero;
+            quoteRt.anchorMax = Vector2.one;
+            quoteRt.offsetMin = new Vector2(8f, 0f);
+            quoteRt.offsetMax = new Vector2(-24f, 0f);
+
+            var cancel = CreateImage("ReplyCancel", _replyBar, Color.clear, OverlaySprites.Circle);
+            cancel.raycastTarget = true;
+            var cancelRt = cancel.rectTransform;
+            cancelRt.anchorMin = cancelRt.anchorMax = new Vector2(1f, 0.5f);
+            cancelRt.pivot = new Vector2(1f, 0.5f);
+            cancelRt.anchoredPosition = new Vector2(-2f, 0f);
+            cancelRt.sizeDelta = new Vector2(20f, 20f);
+            var icon = CreateIconPlaceholder(cancelRt, 12f);
+            icon.sprite = Resources.Load<Sprite>(CloseIconResource);
+            BindClick(cancel, () => SetReplyTarget(_replyTarget));
+            BindToolbarHover(cancel);
+            _replyBar.gameObject.SetActive(false);
+        }
+
+        void PlaceReplyBar()
+        {
+            if (_replyBar == null)
+            {
+                return;
+            }
+
+            var visible = _replyTarget != null && IsOpen;
+            _replyBar.gameObject.SetActive(visible);
+            if (!visible)
+            {
+                return;
+            }
+
+            _replyBar.anchorMin = new Vector2(0f, 0f);
+            _replyBar.anchorMax = new Vector2(1f, 0f);
+            _replyBar.pivot = new Vector2(0f, 0f);
+            _replyBar.anchoredPosition = new Vector2(WindowInset, WindowInset + 28f + 4f);
+            _replyBar.sizeDelta = new Vector2(-WindowInset * 2f, 22f);
+            _replyBar.SetAsLastSibling();
+            if (_replyQuote != null)
+            {
+                _replyQuote.text = "回复 " + Ellipsize(SingleLine(_replyTarget.text), 18);
+                _replyQuote.color = OverlaySkin.ThemeMuted(CurrentTheme);
+            }
+        }
+
+        static string SingleLine(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return string.Empty;
+            }
+
+            return text.Replace('\r', ' ').Replace('\n', ' ').Trim();
         }
 
         /// <summary>微信式：首条以及与上一条间隔超过 5 分钟时，才在气泡上方插一行居中时间。</summary>
@@ -1351,6 +1510,7 @@ namespace CrazyChat.Overlay
             public Image Bubble;
             public RectTransform BubbleRt;
             public Text Text;
+            public Text Quote;
             public Text Time;
         }
     }

@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Text;
 using UnityEngine;
 
 namespace CrazyChat.Overlay
@@ -9,10 +7,13 @@ namespace CrazyChat.Overlay
     [Serializable]
     public sealed class OverlayChatMessage
     {
+        public string id;
         public string from;
         public string text;
         public long time;
         public bool mine;
+        public string replyTo;
+        public string replyText;
     }
 
     public sealed class OverlayChatStore
@@ -20,6 +21,7 @@ namespace CrazyChat.Overlay
         const string FileName = "overlay_chat.json";
 
         int _maxPerFriend = 200;
+        int _maxStored = 12800;
 
         readonly Dictionary<ulong, List<OverlayChatMessage>> _threads = new Dictionary<ulong, List<OverlayChatMessage>>();
         readonly Dictionary<ulong, int> _unread = new Dictionary<ulong, int>();
@@ -29,6 +31,11 @@ namespace CrazyChat.Overlay
         public void SetMaxPerFriend(int max)
         {
             _maxPerFriend = Mathf.Max(1, max);
+        }
+
+        public void SetMaxStored(int max)
+        {
+            _maxStored = Mathf.Max(1, max);
         }
 
         public void Load()
@@ -59,6 +66,11 @@ namespace CrazyChat.Overlay
 
                     _threads[id] = thread.messages;
                     _unread[id] = Mathf.Max(0, thread.unread);
+                }
+
+                if (TrimStored())
+                {
+                    Save();
                 }
             }
             catch (Exception e)
@@ -161,6 +173,11 @@ namespace CrazyChat.Overlay
 
         public void Add(ulong friendId, string text, bool mine, ulong fromId)
         {
+            Add(friendId, text, mine, fromId, null, null, null);
+        }
+
+        public void Add(ulong friendId, string text, bool mine, ulong fromId, string id, string replyTo, string replyText)
+        {
             text = (text ?? string.Empty).Trim();
             if (text.Length == 0)
             {
@@ -173,12 +190,20 @@ namespace CrazyChat.Overlay
                 _threads[friendId] = list;
             }
 
+            if (string.IsNullOrEmpty(id))
+            {
+                id = "l" + DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString("x") + list.Count.ToString("x");
+            }
+
             list.Add(new OverlayChatMessage
             {
+                id = id,
                 from = fromId.ToString(),
                 text = text,
                 time = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                mine = mine
+                mine = mine,
+                replyTo = replyTo ?? string.Empty,
+                replyText = replyText ?? string.Empty
             });
 
             while (list.Count > _maxPerFriend)
@@ -190,6 +215,9 @@ namespace CrazyChat.Overlay
             {
                 _unread[friendId] = GetUnread(friendId) + 1;
             }
+
+            TrimStored();
+            ClampUnread(friendId);
 
             Save();
             Changed?.Invoke();
@@ -211,8 +239,7 @@ namespace CrazyChat.Overlay
         {
             try
             {
-                var path = Path.Combine(Application.persistentDataPath, FileName);
-                return File.Exists(path) ? File.ReadAllText(path, Encoding.UTF8) : null;
+                return OverlayCloudFiles.ReadText(FileName);
             }
             catch
             {
@@ -224,13 +251,125 @@ namespace CrazyChat.Overlay
         {
             try
             {
-                Directory.CreateDirectory(Application.persistentDataPath);
-                File.WriteAllText(Path.Combine(Application.persistentDataPath, FileName), json, Encoding.UTF8);
+                OverlayCloudFiles.WriteText(FileName, json);
             }
             catch (Exception e)
             {
                 Debug.LogWarning("[Overlay] 写入聊天记录失败: " + e.Message);
             }
+        }
+
+        bool TrimStored()
+        {
+            var changed = false;
+            var perFriend = Mathf.Max(1, _maxPerFriend);
+            var names = new List<ulong>(_threads.Keys);
+            for (var i = 0; i < names.Count; i++)
+            {
+                if (!_threads.TryGetValue(names[i], out var list))
+                {
+                    continue;
+                }
+
+                while (list.Count > perFriend)
+                {
+                    list.RemoveAt(0);
+                    changed = true;
+                }
+            }
+
+            var cap = Mathf.Max(1, _maxStored);
+            while (CountMessages() > cap)
+            {
+                if (!TryDropOldest())
+                {
+                    break;
+                }
+
+                changed = true;
+            }
+
+            if (!changed)
+            {
+                return false;
+            }
+
+            names = new List<ulong>(_threads.Keys);
+            for (var i = 0; i < names.Count; i++)
+            {
+                ClampUnread(names[i]);
+            }
+
+            return true;
+        }
+
+        int CountMessages()
+        {
+            var count = 0;
+            foreach (var pair in _threads)
+            {
+                count += pair.Value.Count;
+            }
+
+            return count;
+        }
+
+        bool TryDropOldest()
+        {
+            ulong oldestId = 0;
+            var oldestTime = long.MaxValue;
+            var found = false;
+            foreach (var pair in _threads)
+            {
+                if (pair.Value.Count == 0)
+                {
+                    continue;
+                }
+
+                var time = pair.Value[0] != null ? pair.Value[0].time : 0;
+                if (!found || time < oldestTime)
+                {
+                    found = true;
+                    oldestTime = time;
+                    oldestId = pair.Key;
+                }
+            }
+
+            if (!found || !_threads.TryGetValue(oldestId, out var list) || list.Count == 0)
+            {
+                return false;
+            }
+
+            list.RemoveAt(0);
+            if (list.Count == 0)
+            {
+                _threads.Remove(oldestId);
+                _unread.Remove(oldestId);
+            }
+
+            return true;
+        }
+
+        void ClampUnread(ulong friendId)
+        {
+            if (!_unread.TryGetValue(friendId, out var unread) || unread <= 0)
+            {
+                return;
+            }
+
+            var peers = 0;
+            if (_threads.TryGetValue(friendId, out var list))
+            {
+                for (var i = 0; i < list.Count; i++)
+                {
+                    if (list[i] != null && !list[i].mine)
+                    {
+                        peers++;
+                    }
+                }
+            }
+
+            _unread[friendId] = Mathf.Min(unread, peers);
         }
 
         [Serializable]

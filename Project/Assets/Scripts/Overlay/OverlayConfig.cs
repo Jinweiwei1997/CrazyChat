@@ -166,6 +166,10 @@ namespace CrazyChat.Overlay
         [Min(1)]
         public int maxMessagesPerFriend = 200;
 
+        [Tooltip("全部聊天合计最多存几条，超出后删掉最旧的")]
+        [Min(1)]
+        public int maxStoredChatMessages = 12800;
+
         [Tooltip("简易聊天最多显示几条")]
         [Min(1)]
         public int maxCompactChatMessages = 10;

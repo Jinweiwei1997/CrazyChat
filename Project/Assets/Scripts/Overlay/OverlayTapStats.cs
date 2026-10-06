@@ -1,6 +1,4 @@
 using System;
-using System.IO;
-using System.Text;
 using UnityEngine;
 
 namespace CrazyChat.Overlay
@@ -74,8 +72,7 @@ namespace CrazyChat.Overlay
         {
             try
             {
-                var path = Path.Combine(Application.persistentDataPath, FileName);
-                return File.Exists(path) ? File.ReadAllText(path, Encoding.UTF8) : null;
+                return OverlayCloudFiles.ReadText(FileName);
             }
             catch
             {
@@ -87,8 +84,7 @@ namespace CrazyChat.Overlay
         {
             try
             {
-                Directory.CreateDirectory(Application.persistentDataPath);
-                File.WriteAllText(Path.Combine(Application.persistentDataPath, FileName), json, Encoding.UTF8);
+                OverlayCloudFiles.WriteText(FileName, json);
             }
             catch (Exception e)
             {

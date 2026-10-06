@@ -4,7 +4,7 @@
 
 现行界面、按钮功能和状态切换见 [game-ui-rules.md](game-ui-rules.md)，不要用 `桌面互动伙伴需求.md` 当现行需求。
 
-业务代码只在 `Project/Assets/Scripts/Overlay/`。不要改 `Steamworks.NET/SteamManager.cs` 和 `com.rlabrecque.steamworks.net/`。
+业务代码只在 `Project/Assets/Scripts/Overlay/`。不要改 `com.rlabrecque.steamworks.net/`。`SteamManager` 的正式包 `Init` / `RestartAppIfNecessary` 不要改；编辑器必须在 `SteamAPI.Init` 之前返回，避免 Play 退出把 Steam 云标成过期。
 
 ---
 
@@ -105,5 +105,6 @@ Canvas 已有层，按类型挂，不要新建 Canvas：
 
 - 无房间。好友来自 Steam 在线列表。
 - 麻袋保留现有头像、名字、最后消息摘要、未读角标、点击聊天及拖进拖出；互动、A/B、按键反应和桌面轮播气泡只做**已经拿出来的桌上头像**。其他麻袋玩法没点名就不增加。
-- 对方能看到互动/聊天的前提：对方开着本游戏。不要做离线队列、房间、匹配、云端聊天。
+- 对方能看到互动/聊天的前提：对方开着本游戏。不要做离线队列、房间、匹配或云端转发聊天。
+- 点击次数、自己的 A/B 图、设置和聊天记录在从 Steam 启动时走 Steam 云（`OverlayCloudFiles`）。好友头像缓存和桌上布局不进云。编辑器只写本地。自动云路径保持空白。
 - 数字（头像边长、桌上人数、冷却）读 `OverlayConfig`，不要在新代码里再写一套。
