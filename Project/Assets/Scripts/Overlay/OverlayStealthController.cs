@@ -120,10 +120,16 @@ namespace CrazyChat.Overlay
             else if (_holding)
             {
                 _holding = false;
-                if (_phase == Phase.Hiding || _phase == Phase.Showing)
+                if (_phase == Phase.Hiding)
                 {
                     SetPhase(Phase.Visible);
                     ApplyAlpha(1f, interactive: true);
+                    SetHud(false, 0f, null);
+                }
+                else if (_phase == Phase.Showing)
+                {
+                    SetPhase(Phase.Hidden);
+                    ApplyAlpha(0f, interactive: false);
                     SetHud(false, 0f, null);
                 }
 
