@@ -10,6 +10,7 @@ namespace CrazyChat.Overlay
     public sealed class OverlayUserSettings
     {
         const string FileName = "overlay_prefs.json";
+        const string TestModeFileName = "overlay_test_mode.txt";
         const float MinScale = 0.5f;
         const float MaxScale = 2.5f;
         const int MinSettingsTheme = 1;
@@ -44,7 +45,6 @@ namespace CrazyChat.Overlay
         {
             public string imageA;
             public string imageB;
-            public float scale = 1f;
         }
 
         public AvatarPreset GetAvatarPreset(int index) =>
@@ -65,8 +65,7 @@ namespace CrazyChat.Overlay
                 var preset = new AvatarPreset
                 {
                     imageA = Convert.ToBase64String(File.ReadAllBytes(OverlayAvatarCodec.LocalPathA)),
-                    imageB = Convert.ToBase64String(File.ReadAllBytes(OverlayAvatarCodec.LocalPathB)),
-                    scale = Scale
+                    imageB = Convert.ToBase64String(File.ReadAllBytes(OverlayAvatarCodec.LocalPathB))
                 };
                 _avatarPresets[index] = preset;
                 Save();
@@ -101,7 +100,6 @@ namespace CrazyChat.Overlay
                     else OverlayAvatarCodec.DeleteQuiet(pathB);
                     return false;
                 }
-                Scale = Mathf.Clamp(preset.scale, MinScale, MaxScale);
                 AvatarVersion = Mathf.Max(1, AvatarVersion + 1);
                 Save();
                 return true;
@@ -206,8 +204,8 @@ namespace CrazyChat.Overlay
         public void Load()
         {
             EnsureCheckin();
-            TestMode = Application.isEditor;
-            _savedTestMode = false;
+            _savedTestMode = ReadSavedTestMode();
+            TestMode = Application.isEditor || _savedTestMode;
             OverlayCloudFiles.SyncFromCloud(OverlayAvatarCodec.FileA, OverlayAvatarCodec.LocalPathA);
             OverlayCloudFiles.SyncFromCloud(OverlayAvatarCodec.FileB, OverlayAvatarCodec.LocalPathB);
             var json = ReadLocal();
@@ -234,11 +232,6 @@ namespace CrazyChat.Overlay
                 FlipHorizontal = data.flipHorizontal;
                 AutoStart = data.autoStart;
                 ShowInputIcons = data.showInputIcons;
-                _savedTestMode = data.testMode;
-                if (!Application.isEditor)
-                {
-                    TestMode = data.testMode;
-                }
                 // Missing field in old prefs → default true (JsonUtility bool defaults false).
                 ShowCheckin = !HasPrefsKey(json, "showCheckin") || data.showCheckin;
                 SettingsTheme = data.settingsTheme == MaxPresetTheme
@@ -284,7 +277,6 @@ namespace CrazyChat.Overlay
                 flipHorizontal = FlipHorizontal,
                 autoStart = AutoStart,
                 showInputIcons = ShowInputIcons,
-                testMode = _savedTestMode,
                 showCheckin = ShowCheckin,
                 settingsTheme = SettingsTheme,
                 themeHue = ThemeHue,
@@ -325,6 +317,7 @@ namespace CrazyChat.Overlay
         {
             TestMode = value;
             _savedTestMode = value;
+            WriteSavedTestMode(value);
         }
         public void SetShowCheckin(bool value) => ShowCheckin = value;
 
@@ -392,6 +385,39 @@ namespace CrazyChat.Overlay
             OverlayAutoStart.Apply(value);
         }
 
+        static bool ReadSavedTestMode()
+        {
+            try
+            {
+                var path = Path.Combine(Application.persistentDataPath, TestModeFileName);
+                if (!File.Exists(path))
+                {
+                    return false;
+                }
+
+                var text = File.ReadAllText(path).Trim();
+                return text == "1";
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[Overlay] 读取测试模式失败: " + e.Message);
+                return false;
+            }
+        }
+
+        static void WriteSavedTestMode(bool value)
+        {
+            try
+            {
+                Directory.CreateDirectory(Application.persistentDataPath);
+                File.WriteAllText(Path.Combine(Application.persistentDataPath, TestModeFileName), value ? "1" : "0");
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[Overlay] 写入测试模式失败: " + e.Message);
+            }
+        }
+
         static string ReadLocal()
         {
             try
@@ -432,7 +458,6 @@ namespace CrazyChat.Overlay
             public bool flipHorizontal;
             public bool autoStart;
             public bool showInputIcons;
-            public bool testMode;
             public bool showCheckin = true;
             public int settingsTheme = MinSettingsTheme;
             public float themeHue = DefaultThemeHue;

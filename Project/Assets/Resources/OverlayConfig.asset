@@ -15,7 +15,7 @@ MonoBehaviour:
   maxDesktopFriends: 30
   maxCollectFriends: 64
   chipSize: 128
-  stealthHoldSeconds: 2
+  stealthHoldSeconds: 1
   maxMessagesPerFriend: 200
   maxStoredChatMessages: 12800
   maxCompactChatMessages: 10
@@ -27,3 +27,44 @@ MonoBehaviour:
   tomatoTapCost: 100
   fireworkBurstRadius: 2.4
   fireworkShellSize: 0.11
+  fishingBiteMinSeconds: 300
+  fishingBiteMaxSeconds: 600
+  fishingTestBiteMinSeconds: 8
+  fishingTestBiteMaxSeconds: 20
+  fishingHighTierChance: 0.2
+  fishingBubbleSeconds: 10
+  fishingQteSeconds: 5
+  fishingLowFadeSeconds: 1.2
+  fishingRewardSeconds: 1.5
+  fishingReelSeconds: 0.6
+  fishingFish:
+  - id: lo_small
+    displayName: "\u5C0F\u9C7C"
+    highTier: 0
+    points: 50
+    weight: 60
+    spriteResource: Art/Generated/Fishing/fish_lo_blue
+  - id: lo_carp
+    displayName: "\u9CA4\u9C7C"
+    highTier: 0
+    points: 80
+    weight: 30
+    spriteResource: Art/Generated/Fishing/fish_lo_green
+  - id: lo_trash
+    displayName: "\u7834\u978B"
+    highTier: 0
+    points: 10
+    weight: 10
+    spriteResource: Art/Generated/Fishing/catch_8
+  - id: hi_gold
+    displayName: "\u91D1\u9C7C"
+    highTier: 1
+    points: 200
+    weight: 70
+    spriteResource: Art/Generated/Fishing/fish_hi_orange
+  - id: hi_dragon
+    displayName: "\u9F99\u9C7C"
+    highTier: 1
+    points: 500
+    weight: 30
+    spriteResource: Art/Generated/Fishing/fish_hi_red
