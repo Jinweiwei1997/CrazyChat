@@ -39,6 +39,8 @@ namespace CrazyChat.Overlay.Fishing
         struct RodPair
         {
             public RectTransform root;
+            public RectTransform foreground;
+            public RectTransform boat;
             public Image rod;
             public Image water;
             public Vector2 rodRestPos;
@@ -84,6 +86,14 @@ namespace CrazyChat.Overlay.Fishing
             FollowRemotes();
             SyncRodForeground(_local);
             foreach (var pair in _remote.Values) SyncRodForeground(pair);
+            if (_local.root != null && _local.root.gameObject.activeSelf && _view != null && _view.LocalChip != null)
+                ApplyBoatPose(_local, _view.LocalChip);
+            foreach (var pair in _remote)
+            {
+                if (pair.Value.root == null || !pair.Value.root.gameObject.activeInHierarchy) continue;
+                if (_view == null || !_view.TryGetChip(pair.Key, out var chip) || chip == null) continue;
+                ApplyBoatPose(pair.Value, chip);
+            }
             TickWaterAnim();
             if (_bubble != null && _bubble.gameObject.activeSelf && _bubbleEnd > 0f)
             {
@@ -253,7 +263,14 @@ namespace CrazyChat.Overlay.Fishing
             foreground.anchorMin = foreground.anchorMax = Vector2.zero;
             foreground.sizeDelta = Vector2.zero;
             foreground.gameObject.SetActive(false);
-            var rod = CreateImage("Rod", foreground, Color.white, OverlayFishingArt.Rod());
+            // Same pivot as the avatar body so rod and portrait rock as one hull.
+            var boat = new GameObject("Boat", typeof(RectTransform)).GetComponent<RectTransform>();
+            boat.SetParent(foreground, false);
+            boat.anchorMin = boat.anchorMax = new Vector2(0.5f, 0.5f);
+            boat.pivot = new Vector2(0.5f, 0.5f);
+            boat.sizeDelta = Vector2.zero;
+            boat.anchoredPosition = Vector2.zero;
+            var rod = CreateImage("Rod", boat, Color.white, OverlayFishingArt.Rod());
             rod.raycastTarget = false;
             rod.preserveAspect = true;
             rod.rectTransform.sizeDelta = new Vector2(RodSize, RodSize);
@@ -265,6 +282,8 @@ namespace CrazyChat.Overlay.Fishing
             return new RodPair
             {
                 root = root,
+                foreground = foreground,
+                boat = boat,
                 rod = rod,
                 water = water,
                 rodRestPos = rodPos,
@@ -274,11 +293,10 @@ namespace CrazyChat.Overlay.Fishing
 
         static void SyncRodForeground(RodPair pair)
         {
-            if (pair.root == null || pair.rod == null) return;
-            var foreground = (RectTransform)pair.rod.transform.parent;
-            foreground.gameObject.SetActive(pair.root.gameObject.activeInHierarchy);
-            foreground.position = pair.root.position;
-            foreground.localScale = pair.root.localScale;
+            if (pair.root == null || pair.foreground == null) return;
+            pair.foreground.gameObject.SetActive(pair.root.gameObject.activeInHierarchy);
+            pair.foreground.position = pair.root.position;
+            pair.foreground.localScale = pair.root.localScale;
         }
 
         void EnsureBubble()
@@ -341,6 +359,22 @@ namespace CrazyChat.Overlay.Fishing
                 }
                 PlaceAt(pair.Value.root, chip);
             }
+        }
+
+        void ApplyBoatPose(RodPair pair, FriendAvatarChip chip)
+        {
+            if (pair.boat == null || chip == null) return;
+            if (chip.IsDragging)
+            {
+                pair.boat.anchoredPosition = Vector2.zero;
+                pair.boat.localEulerAngles = Vector3.zero;
+                return;
+            }
+
+            var width = FriendOverlayView.OverlayPixelSize.x;
+            var pose = OverlayFishingBob.SampleAt(Time.unscaledTime, chip.FollowPosition.x, width);
+            pair.boat.anchoredPosition = pose.Offset;
+            pair.boat.localEulerAngles = new Vector3(0f, 0f, pose.RollDegrees);
         }
 
         void TickWaterAnim()

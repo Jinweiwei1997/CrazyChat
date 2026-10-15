@@ -1,3 +1,4 @@
+using CrazyChat.Overlay;
 using CrazyChat.Overlay.Fishing;
 using UnityEngine;
 using UnityEngine.UI;
@@ -122,21 +123,39 @@ namespace CrazyChat.Overlay.Interact
 
             var actions = OverlayInteractCatalog.All;
             var theme = _view != null && _view.Settings != null ? _view.Settings.SettingsTheme : 1;
-            var count = Mathf.Min(actions.Count, SlotCount);
+            var testFish = ShowTestFriendFish && actions.Count < SlotCount;
+            var actionCount = Mathf.Min(actions.Count, testFish ? SlotCount - 1 : SlotCount);
+            var count = actionCount + (testFish ? 1 : 0);
             for (var i = 0; i < SlotCount; i++)
             {
-                _slotActions[i] = i < count ? actions[i] : null;
-                if (i < count)
+                if (i < actionCount)
                 {
+                    _slotActions[i] = actions[i];
                     PlaceSlot(i, count);
                     ApplySlotVisual(i, true, ShortSlotLabel(actions[i].Label), selected: false, theme);
                 }
+                else if (testFish && i == actionCount)
+                {
+                    _slotActions[i] = null;
+                    PlaceSlot(i, count);
+                    var fishingOn = _fishing != null && _fishing.IsAvatarFishing(_openFor);
+                    ApplySlotVisual(i, true, "钓鱼", fishingOn, theme);
+                }
                 else
                 {
+                    _slotActions[i] = null;
                     HideSlot(i);
                 }
             }
         }
+
+        bool ShowTestFriendFish =>
+            !_selfMode
+            && _openFor != 0
+            && _view != null
+            && _view.Settings != null
+            && _view.Settings.TestMode
+            && PlayingFriendsService.IsTestFriend(_openFor);
 
         void RefreshSelfSlots()
         {
@@ -367,7 +386,29 @@ namespace CrazyChat.Overlay.Interact
                 return;
             }
 
+            if (IsTestFriendFishSlot(index))
+            {
+                UseTestFriendFish();
+                return;
+            }
+
             Use(_slotActions[index]);
+        }
+
+        bool IsTestFriendFishSlot(int index)
+        {
+            if (!ShowTestFriendFish) return false;
+            var actionCount = Mathf.Min(OverlayInteractCatalog.All.Count, SlotCount - 1);
+            return index == actionCount;
+        }
+
+        void UseTestFriendFish()
+        {
+            if (_fishing == null || _view == null || Time.unscaledTime < _nextUse) return;
+            var cooldown = _view.Config != null ? Mathf.Max(0f, _view.Config.interactCooldown) : 0.1f;
+            _nextUse = Time.unscaledTime + cooldown;
+            _fishing.ToggleTestFriend(_openFor);
+            RefreshSlots();
         }
 
         void UseSelfSlot(int index)

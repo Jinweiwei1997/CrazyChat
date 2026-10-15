@@ -2244,7 +2244,7 @@ namespace CrazyChat.Overlay
             var half = GearSize * 0.5f;
             var buttonOffset = new Vector2(
                 (chipSize * 0.5f - half) * scale,
-                -(chipSize * 0.5f + 22f) * scale);
+                -(chipSize * 0.5f + FriendAvatarChip.TapCountRowDrop) * scale);
 
             _buttonRt.localScale = new Vector3(scale, scale, 1f);
             _buttonRt.anchoredPosition = pos + buttonOffset;

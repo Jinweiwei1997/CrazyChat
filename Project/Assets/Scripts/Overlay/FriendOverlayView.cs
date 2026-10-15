@@ -525,6 +525,11 @@ namespace CrazyChat.Overlay
             _chatStore.Add(friendId, text, false, friendId);
         }
 
+        public bool IsAvatarFishing(ulong steamId)
+        {
+            return _fishing != null && _fishing.IsAvatarFishing(steamId);
+        }
+
         /// <summary>测试：直接弹出钓鱼高级鱼 QTE（未钓鱼时先进入）。</summary>
         public void SimulateFishingQte()
         {

@@ -35,6 +35,14 @@ namespace CrazyChat.Overlay.Fishing
 
         public bool IsFishing => _fishing;
 
+        public bool IsAvatarFishing(ulong steamId)
+        {
+            if (steamId == 0 || _view == null) return false;
+            var local = _view.LocalChip;
+            if (local != null && local.SteamId == steamId) return _fishing;
+            return _remoteFishing.Contains(steamId);
+        }
+
         public static OverlayFishingController Create(
             FriendOverlayView view,
             OverlayInteractService service,
@@ -135,7 +143,25 @@ namespace CrazyChat.Overlay.Fishing
                 live.Add(id);
                 Ask(id);
             });
+            RetainTestFriends(live);
             PruneGone(live);
+        }
+
+        public void ToggleTestFriend(ulong friendId)
+        {
+            if (!PlayingFriendsService.IsTestFriend(friendId)) return;
+            if (_view == null || _view.Settings == null || !_view.Settings.TestMode) return;
+            ApplyRemoteState(friendId, !_remoteFishing.Contains(friendId));
+        }
+
+        void RetainTestFriends(HashSet<ulong> live)
+        {
+            if (_view.Settings == null || !_view.Settings.TestMode) return;
+            foreach (var id in _remoteFishing)
+            {
+                if (PlayingFriendsService.IsTestFriend(id))
+                    live.Add(id);
+            }
         }
 
         public void OnAdvancedBubbleClicked()

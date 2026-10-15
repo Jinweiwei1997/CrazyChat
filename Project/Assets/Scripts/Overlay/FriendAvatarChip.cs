@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CrazyChat.Overlay.Fishing;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -9,6 +10,8 @@ namespace CrazyChat.Overlay
     {
         const float BubbleVisualScale = 1f;
         const float AvatarInset = 4f;
+        // Shared vertical center of the tap count, check-in mark, and settings gear, measured below the avatar bottom.
+        public const float TapCountRowDrop = 22f;
         const float BubbleHeight = 26f * BubbleVisualScale;
         const float BubbleOffsetY = 0f;
         const int BubbleFontSize = 16;
@@ -77,6 +80,8 @@ namespace CrazyChat.Overlay
         internal bool IsPresenceActive => _presenceMode && _presenceActive;
 
         public Vector2 FollowPosition => _layoutPos;
+
+        public bool IsDragging => _dragging;
 
         public void Bind(PlayingFriendsService service, FriendOverlayView view, PlayingFriend friend, int index)
         {
@@ -211,8 +216,8 @@ namespace CrazyChat.Overlay
             var countRt = (RectTransform)countGo.transform;
             countRt.anchorMin = new Vector2(0.5f, 0f);
             countRt.anchorMax = new Vector2(0.5f, 0f);
-            countRt.pivot = new Vector2(0.5f, 1f);
-            countRt.anchoredPosition = new Vector2(0f, -2f);
+            countRt.pivot = new Vector2(0.5f, 0.5f);
+            countRt.anchoredPosition = new Vector2(0f, -TapCountRowDrop);
             countRt.sizeDelta = new Vector2(Mathf.Max(40f, _size - 72f), 40f);
             countGo.SetActive(false);
 
@@ -644,6 +649,7 @@ namespace CrazyChat.Overlay
                 if (_body != null)
                 {
                     _body.anchoredPosition = Vector2.zero;
+                    _body.localRotation = Quaternion.identity;
                     _body.localScale = Vector3.one;
                 }
 
@@ -652,7 +658,18 @@ namespace CrazyChat.Overlay
 
             var hover = _hover ? 1.06f : 1f;
             var baseFlip = IsLocal && _view != null && _view.Settings != null && _view.Settings.FlipHorizontal ? -1f : 1f;
-            _body.anchoredPosition = Vector2.zero;
+            var bob = Vector2.zero;
+            var roll = 0f;
+            if (_view != null && _view.IsAvatarFishing(SteamId))
+            {
+                var width = FriendOverlayView.OverlayPixelSize.x;
+                var pose = OverlayFishingBob.SampleAt(Time.unscaledTime, _layoutPos.x, width);
+                bob = pose.Offset;
+                roll = pose.RollDegrees * baseFlip;
+            }
+
+            _body.anchoredPosition = bob;
+            _body.localEulerAngles = new Vector3(0f, 0f, roll);
             _body.localScale = new Vector3(hover * baseFlip, hover, 1f);
             UpdateBubbleSlide();
 

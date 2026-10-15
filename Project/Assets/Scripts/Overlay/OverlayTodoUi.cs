@@ -15,9 +15,11 @@ namespace CrazyChat.Overlay
         const string ThemeSpriteResource = "Overlay/UI/square_rect";
         const string ControlSpriteResource = "Overlay/UI/control_rect";
         const string CloseIconResource = "Overlay/UI/codicon_close";
+        const string EditIconResource = "Overlay/UI/codicon_edit";
         const string CheckinSuccessSheetResource = "Overlay/UI/checkin_success_sheet";
-        // Shared so the drag mapping matches the knob's on-screen travel.
         internal const float CheckinKnob = 25.9f;
+        const float CheckinRestVisual = 16f;
+        const float CheckinRestHit = 28f;
         const int CheckinSuccessColumns = 10;
         const int CheckinSuccessRows = 9;
         const int CheckinSuccessFrames = 90;
@@ -59,6 +61,16 @@ namespace CrazyChat.Overlay
         bool _checkHover;
         RawImage _checkSuccess;
         float _checkSuccessStarted = float.NegativeInfinity;
+        RectTransform _checkRest;
+        Image _checkRing;
+        Image _checkTickShort;
+        Image _checkTickLong;
+        CanvasGroup _checkTrackGroup;
+        CanvasGroup _checkRestGroup;
+        RectTransform _checkEditRt;
+        float _checkExpand;
+        float _checkExpandVelocity;
+        static Sprite _checkRingSprite;
 
         public bool IsEditingCheckin => _checkEditor != null && _checkEditor.gameObject.activeSelf;
         public bool IsOpen => _card != null && _card.gameObject.activeSelf;
@@ -315,8 +327,11 @@ namespace CrazyChat.Overlay
 
             _checkBar = Rect("CheckinBar", chrome);
             _checkBar.anchorMin = _checkBar.anchorMax = Vector2.zero;
-            // Whole strip ≤ avatar width (track + edit).
-            _checkBar.sizeDelta = new Vector2(chipW, Mathf.Max(trackH, editHit));
+            _checkBar.sizeDelta = new Vector2(CheckinRestHit, CheckinRestHit);
+
+            var hit = ButtonRect("Hit", _checkBar, "");
+            Stretch((RectTransform)hit.transform);
+            hit.onClick.AddListener(CompleteCheckin);
 
             var toggle = ButtonRect("CheckinSwitch", _checkBar, "");
             toggle.onClick.RemoveAllListeners();
@@ -338,14 +353,14 @@ namespace CrazyChat.Overlay
             rim.rectTransform.anchorMax = Vector2.one;
             rim.rectTransform.offsetMin = new Vector2(2f, 2f);
             rim.rectTransform.offsetMax = new Vector2(-2f, -2f);
+            _checkTrack.enabled = false;
+            rim.enabled = false;
 
-            // Tintable badge: the knob tracks the same color ramp as the track while sliding.
             _checkKnob = ImageRect("Knob", _checkTrack.transform, Color.white, OverlaySprites.ScallopBadge);
             _checkKnob.type = Image.Type.Simple;
             _checkKnob.raycastTarget = true;
             _checkKnob.rectTransform.sizeDelta = new Vector2(knob, knob);
             var successRoot = Rect("SuccessBadge", _checkTrack.transform);
-            // Sized so the baked badge renders at the knob diameter, no pop on success.
             successRoot.sizeDelta = new Vector2(knob * 1.3f, knob * 1.3f);
             _checkSuccess = successRoot.gameObject.AddComponent<RawImage>();
             _checkSuccess.texture = Resources.Load<Texture2D>(CheckinSuccessSheetResource);
@@ -355,26 +370,44 @@ namespace CrazyChat.Overlay
             SetCheckinSuccessFrame(0);
 
             toggle.onClick.AddListener(CompleteCheckin);
-            OverlayHoverRelay.Bind(toggle.gameObject, () => _checkHover = true, () => _checkHover = false);
-            OverlayHoverRelay.Bind(_checkKnob.gameObject, () => _checkHover = true, () => _checkHover = false);
+            _checkTrackGroup = toggle.gameObject.AddComponent<CanvasGroup>();
+            _checkTrackGroup.alpha = 0f;
+            _checkTrackGroup.interactable = false;
+            _checkTrackGroup.blocksRaycasts = false;
+
+            _checkRest = Rect("Rest", _checkBar);
+            _checkRest.anchorMin = _checkRest.anchorMax = new Vector2(0.5f, 0.5f);
+            _checkRest.pivot = new Vector2(0.5f, 0.5f);
+            _checkRest.sizeDelta = new Vector2(CheckinRestVisual, CheckinRestVisual);
+            _checkRing = ImageRect("Ring", _checkRest, Color.white, CheckinRingSprite());
+            _checkRing.type = Image.Type.Simple;
+            _checkRing.raycastTarget = false;
+            _checkRing.rectTransform.anchorMin = _checkRing.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            _checkRing.rectTransform.sizeDelta = new Vector2(CheckinRestVisual, CheckinRestVisual);
+            var tick = Rect("Tick", _checkRest);
+            tick.anchorMin = tick.anchorMax = new Vector2(0.5f, 0.5f);
+            tick.sizeDelta = new Vector2(CheckinRestVisual, CheckinRestVisual);
+            _checkTickShort = CheckinTickStroke(tick, new Vector2(2.2f, 6f), new Vector2(-1.9f, -0.7f), 40f);
+            _checkTickLong = CheckinTickStroke(tick, new Vector2(2.2f, 9f), new Vector2(3.3f, 0f), -48f);
+            _checkRestGroup = _checkRest.gameObject.AddComponent<CanvasGroup>();
+            _checkRestGroup.blocksRaycasts = false;
+            _checkRestGroup.interactable = false;
 
             var edit = ButtonRect("Edit", _checkBar, "");
-            var editRt = (RectTransform)edit.transform;
-            editRt.anchorMin = editRt.anchorMax = new Vector2(1f, 0.5f);
-            editRt.pivot = new Vector2(1f, 0.5f);
-            editRt.anchoredPosition = Vector2.zero;
-            editRt.sizeDelta = new Vector2(editHit, editHit);
-            var pencil = Rect("Pencil", edit.transform);
-            pencil.sizeDelta = new Vector2(14f, 14f);
-            pencil.localRotation = Quaternion.Euler(0f, 0f, -45f);
-            for (var i = 0; i < 4; i++)
-            {
-                var stroke = ImageRect("Stroke", pencil, Color.white);
-                stroke.raycastTarget = false;
-                stroke.rectTransform.sizeDelta = i < 2 ? new Vector2(1f, 10f) : new Vector2(4f, 1f);
-                stroke.rectTransform.anchoredPosition = i < 2 ? new Vector2(i == 0 ? -2f : 2f, 0f)
-                    : new Vector2(0f, i == 2 ? 4f : -4f);
-            }
+            _checkEditRt = (RectTransform)edit.transform;
+            _checkEditRt.anchorMin = _checkEditRt.anchorMax = new Vector2(1f, 0.5f);
+            _checkEditRt.pivot = new Vector2(1f, 0.5f);
+            _checkEditRt.anchoredPosition = Vector2.zero;
+            _checkEditRt.sizeDelta = new Vector2(editHit, editHit);
+            _checkEditRt.gameObject.SetActive(false);
+            var pencil = ImageRect("Pencil", edit.transform, Color.white, Resources.Load<Sprite>(EditIconResource));
+            pencil.type = Image.Type.Simple;
+            pencil.preserveAspect = true;
+            pencil.raycastTarget = false;
+            pencil.rectTransform.anchorMin = pencil.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            pencil.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            pencil.rectTransform.anchoredPosition = Vector2.zero;
+            pencil.rectTransform.sizeDelta = new Vector2(16f, 16f);
             edit.onClick.AddListener(OpenCheckinEdit);
             StyleButton(edit);
 
@@ -414,7 +447,10 @@ namespace CrazyChat.Overlay
             confirm.onClick.AddListener(SaveCheckinEdit);
             StyleButton(confirm);
             _checkEditor.gameObject.SetActive(false);
-            _checkSlide = _view.Settings.Checkin.IsComplete(DateTime.Now) ? 1f : 0f;
+            _checkSlide = 0f;
+            var already = !_view.Settings.TestMode && _view.Settings.Checkin.IsComplete(DateTime.Now);
+            _checkRing.gameObject.SetActive(!already);
+            _checkTickShort.transform.parent.gameObject.SetActive(already);
         }
 
         bool CanCompleteCheckin()
@@ -485,51 +521,83 @@ namespace CrazyChat.Overlay
                 return;
             }
 
-            var chipW = _view.Config != null ? _view.Config.chipSize : 128f;
-            const float trackH = 22f;
-            const float knob = CheckinKnob;
-            const float editHit = 24f;
-            const float gap = 2f;
-            var trackW = Mathf.Max(48f, chipW - editHit - gap);
-            _checkBar.sizeDelta = new Vector2(chipW, Mathf.Max(trackH, editHit));
+            var done = !_view.Settings.TestMode && _view.Settings.Checkin.IsComplete(DateTime.Now);
+            var successElapsed = Time.unscaledTime - _checkSuccessStarted;
+            var successFeedback = successElapsed < CheckinSuccessSeconds;
+            _checkHover = PointerOverCheckin(_checkBar) || PointerOverCheckin(_checkEditRt) ||
+                          PointerBetweenCheckin(_checkBar, _checkEditRt);
+            var showKnob = successFeedback || (_checkHover && !done);
+
+            _checkBar.sizeDelta = new Vector2(CheckinRestHit, CheckinRestHit);
             var switchRt = (RectTransform)_checkBar.Find("CheckinSwitch");
-            if (switchRt != null) switchRt.sizeDelta = new Vector2(trackW, trackH);
+            if (switchRt != null)
+            {
+                switchRt.anchorMin = Vector2.zero;
+                switchRt.anchorMax = Vector2.one;
+                switchRt.offsetMin = Vector2.zero;
+                switchRt.offsetMax = Vector2.zero;
+            }
+
+            var showPencil = _checkHover && !IsEditingCheckin && !successFeedback;
+            if (_checkEditRt != null)
+            {
+                _checkEditRt.gameObject.SetActive(showPencil);
+                _checkEditRt.anchorMin = _checkEditRt.anchorMax = new Vector2(1f, 0.5f);
+                _checkEditRt.pivot = new Vector2(0f, 0.5f);
+                _checkEditRt.anchoredPosition = new Vector2(10f, 0f);
+            }
 
             var scale = _view.Settings.Scale;
-            var pos = chip.FollowPosition + Vector2.up * (_view.Config.chipSize * 0.5f + _checkBar.sizeDelta.y * 0.5f + 6f) * scale;
+            var chipSize = _view.Config.chipSize;
+            var pos = chip.FollowPosition + Vector2.up * (chipSize * 0.5f + _checkBar.sizeDelta.y * 0.5f + 6f) * scale;
             var bounds = FriendOverlayView.OverlayPixelSize;
             var halfW = _checkBar.sizeDelta.x * 0.5f * scale;
-            pos.x = Mathf.Clamp(pos.x, halfW + 8f, bounds.x - halfW - 8f);
+            var editReach = showPencil && _checkEditRt != null
+                ? (_checkEditRt.anchoredPosition.x + _checkEditRt.rect.width) * scale
+                : 0f;
+            pos.x = Mathf.Clamp(pos.x, halfW + 8f, bounds.x - halfW - editReach - 8f);
             pos.y = Mathf.Clamp(pos.y, 16f * scale, bounds.y - 16f * scale);
             _checkBar.anchoredPosition = pos;
             _checkBar.localScale = Vector3.one * scale;
 
-            var done = !_view.Settings.TestMode && _view.Settings.Checkin.IsComplete(DateTime.Now);
-            var successElapsed = Time.unscaledTime - _checkSuccessStarted;
-            var successFeedback = successElapsed < CheckinSuccessSeconds;
-            var target = done || successFeedback ? 1f : 0f;
-            // Click completes; test mode returns to idle after the success animation.
+            var target = successFeedback ? 1f : 0f;
             _checkSlide = Mathf.SmoothDamp(_checkSlide, target, ref _checkSlideVelocity,
                 0.08f, Mathf.Infinity, Time.unscaledDeltaTime);
 
+            if (_checkTrackGroup != null)
+            {
+                _checkTrackGroup.alpha = showKnob ? 1f : 0f;
+                _checkTrackGroup.interactable = false;
+                _checkTrackGroup.blocksRaycasts = false;
+            }
+            if (_checkRestGroup != null) _checkRestGroup.alpha = showKnob ? 0f : 1f;
+            var muted = OverlaySkin.ThemeMuted(_view.Settings.SettingsTheme);
+            muted.a = done ? 0.78f : 0.62f;
+            if (_checkRing != null)
+            {
+                _checkRing.color = muted;
+                _checkRing.gameObject.SetActive(!done);
+            }
+            if (_checkTickShort != null)
+            {
+                _checkTickShort.color = muted;
+                _checkTickLong.color = muted;
+                _checkTickShort.transform.parent.gameObject.SetActive(done);
+            }
+
             Color green = new Color32(46, 168, 83, 255);
             Color amber = new Color32(240, 173, 78, 255);
-            // Untouched slider reads as an off switch, then warms up as it travels.
             Color off = new Color32(176, 176, 176, 255);
             var ramp = _checkSlide < 0.5f
                 ? Color.Lerp(off, amber, _checkSlide * 2f)
                 : Color.Lerp(amber, green, (_checkSlide - 0.5f) * 2f);
-            _checkTrack.color = ramp;
 
-            var travel = (trackW - knob) * 0.5f;
-            var knobPos = new Vector2(Mathf.Lerp(-travel, travel, _checkSlide), 0f);
+            var knobPos = Vector2.zero;
             const float punch = 1f;
-            // The baked sheet takes over once the tick plays; before that the knob is the handle.
-            var baked = successFeedback || done;
+            var baked = successFeedback;
             _checkKnob.rectTransform.anchoredPosition = knobPos;
             _checkKnob.rectTransform.localScale = Vector3.one * punch;
             _checkKnob.rectTransform.localEulerAngles = new Vector3(0f, 0f, -_checkSlide * 180f);
-            // Keeps the ramp's hue so it shifts with the track, but stays near white to read on it.
             _checkKnob.color = baked ? Color.clear : Color.Lerp(ramp, Color.white, 0.82f);
 
             _checkSuccess.gameObject.SetActive(baked);
@@ -689,6 +757,82 @@ namespace CrazyChat.Overlay
                     if (toggle.targetGraphic != null) toggle.targetGraphic.color = Color.white;
                 }
             }
+        }
+
+        bool PointerOverCheckin(RectTransform rect)
+        {
+            if (rect == null || !rect.gameObject.activeInHierarchy) return false;
+            Vector2 pointer;
+            var window = _view.GetComponent<TransparentOverlayWindow>();
+            if (window == null || !window.TryGetPointerPosition(out pointer))
+                pointer = Input.mousePosition;
+            return RectTransformUtility.RectangleContainsScreenPoint(rect, pointer);
+        }
+
+        bool PointerBetweenCheckin(RectTransform bar, RectTransform edit)
+        {
+            if (bar == null || edit == null || !edit.gameObject.activeInHierarchy) return false;
+            Vector2 pointer;
+            var window = _view.GetComponent<TransparentOverlayWindow>();
+            if (window == null || !window.TryGetPointerPosition(out pointer))
+                pointer = Input.mousePosition;
+            var barRect = CheckinScreenRect(bar);
+            var editRect = CheckinScreenRect(edit);
+            if (editRect.xMin <= barRect.xMax) return false;
+            var gap = UnityEngine.Rect.MinMaxRect(barRect.xMax, Mathf.Min(barRect.yMin, editRect.yMin),
+                editRect.xMin, Mathf.Max(barRect.yMax, editRect.yMax));
+            return gap.width > 0f && gap.height > 0f && gap.Contains(pointer);
+        }
+
+        static UnityEngine.Rect CheckinScreenRect(RectTransform rect)
+        {
+            var corners = new Vector3[4];
+            rect.GetWorldCorners(corners);
+            var bl = RectTransformUtility.WorldToScreenPoint(null, corners[0]);
+            var tr = RectTransformUtility.WorldToScreenPoint(null, corners[2]);
+            return UnityEngine.Rect.MinMaxRect(Mathf.Min(bl.x, tr.x), Mathf.Min(bl.y, tr.y),
+                Mathf.Max(bl.x, tr.x), Mathf.Max(bl.y, tr.y));
+        }
+
+        static Image CheckinTickStroke(RectTransform parent, Vector2 size, Vector2 position, float angle)
+        {
+            var stroke = ImageRect("Stroke", parent, Color.white);
+            stroke.raycastTarget = false;
+            stroke.rectTransform.anchorMin = stroke.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            stroke.rectTransform.sizeDelta = size;
+            stroke.rectTransform.anchoredPosition = position;
+            stroke.rectTransform.localEulerAngles = new Vector3(0f, 0f, angle);
+            return stroke;
+        }
+
+        static Sprite CheckinRingSprite()
+        {
+            if (_checkRingSprite != null) return _checkRingSprite;
+            const int size = 64;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, true)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                name = "CheckinRing"
+            };
+            var pixels = new Color[size * size];
+            var center = (size - 1) * 0.5f;
+            const float outer = 30.5f;
+            const float inner = 22.5f;
+            for (var y = 0; y < size; y++)
+            {
+                for (var x = 0; x < size; x++)
+                {
+                    var d = Vector2.Distance(new Vector2(x, y), new Vector2(center, center));
+                    var a = Mathf.Clamp01(Mathf.Min(outer - d, d - inner));
+                    pixels[y * size + x] = new Color(1f, 1f, 1f, a);
+                }
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply(true, false);
+            _checkRingSprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+            return _checkRingSprite;
         }
 
         void StyleButton(Button button)
